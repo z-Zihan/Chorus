@@ -974,6 +974,42 @@ class CLIAgentAdapter implements AgentAdapter {
 
 > CLI 适配器让任何本机 Agent 工具（Codex、Claude Code、Copilot CLI）都能接入 AgentLink。
 
+**CLI 结构化输出（重要）：**
+不要解析裸 stdout，应使用 CLI 的结构化输出模式：
+- Claude Code: `claude -p --output-format stream-json` → 直接拿到 text/tool_call 结构化事件
+- Codex: `codex exec --json` → 同上
+- 映射到 StreamChunk，让 CLI Agent 的操作也能进 A2A 调用链可视化
+
+```typescript
+// 改进版 CLI Adapter：使用结构化输出
+class StructuredCLIAgentAdapter implements AgentAdapter {
+  async *handleMessage(message: string, context: ConversationContext) {
+    const child = spawn(this.command, [
+      ...this.args,
+      "--output-format", "stream-json",  // 结构化输出
+      message,
+    ], { cwd: this.cwd, stdio: ["pipe", "pipe", "pipe"] });
+
+    for await (const chunk of child.stdout) {
+      const lines = chunk.toString().split("\n").filter(Boolean);
+      for (const line of lines) {
+        try {
+          const event = JSON.parse(line);
+          if (event.type === "text") yield { type: "text", content: event.content };
+          if (event.type === "tool_call") yield { type: "tool_call", content: event.tool_name, metadata: event };
+        } catch { /* 非 JSON 行，跳过 */ }
+      }
+    }
+    yield { type: "done", content: "" };
+  }
+}
+```
+
+**CLI 安全约束：**
+- `config.command` 本质是任意命令执行，配置层至少要白名单
+- 子进程继承整个用户权限，生产环境需 sandbox
+- CLI 会话不持久化，每次调用是无状态的（异步收件箱模式见 §13.10）
+
 ### 11.3 配置方式
 
 用户在 `agentlink.config.ts` 中声明要接入哪些 Agent：
@@ -1661,23 +1697,45 @@ interface AgentPermission {
 → @xiaoming-agent 开始执行
 ```
 
-### 13.7 共享上下文池
+### 13.7 三层上下文模型
 
-Agent 间协作时，上下文可以在好友/群聊内共享：
+> 灵感来源：EigenFlux 共享上下文 + Claude Code/Codex 评估建议
+> 不照抄 EigenFlux 的"全员共享一个大池子"——token 成本爆炸、隐私泄露、上下文污染。
+> 改为范围化 + 按需传递。
+
+```
+┌─────────────────────────────────────┐
+│  L1: 全局上下文 (Global Context)     │  ← 所有 Agent 可见的基础信息
+│  - 用户身份、项目信息（仓库、分支）    │
+│  - 团队规则和约束                     │
+├─────────────────────────────────────┤
+│  L2: 会话上下文 (Session Context)    │  ← 单次 A2A 调用的上下文
+│  - 调用原因、已有进展、期望产出        │
+│  - ttl: 过期自动清理                  │
+├─────────────────────────────────────┤
+│  L3: Agent 私有上下文 (Private)       │  ← Agent 自己的内部状态
+│  - 自己的历史对话、工具列表            │
+│  - 永不对外暴露                       │
+└─────────────────────────────────────┘
+```
 
 ```typescript
-interface SharedContext {
-  scope: "friendship" | "group";  // 共享范围
-  scopeId: string;                // 好友关系 ID 或群聊 ID
-  messages: Message[];            // 共享的消息历史
-  tasks: TaskTrackingCard[];      // 共享的任务状态
-  createdAt: number;
+interface ContextPacket {
+  scope: "friendship" | "group" | "a2a";
+  scopeId: string;
+  // 结构化任务包，不是原始消息流
+  taskSummary: string;           // 任务摘要
+  constraints?: string[];        // 约束条件
+  relatedFiles?: string[];       // 相关文件引用（fileId）
+  previousConclusions?: string;  // 此前结论的摘要
+  ttl: number;                   // 过期时间戳
 }
 ```
 
-- 好友间：A2A 调用时自动传递相关上下文
-- 群聊内：所有 Agent 可看到群消息历史
-- 私聊外：不泄露用户私聊内容
+**三条硬规则：**
+1. **推送的是任务包，不是历史**：A2A 调用携带结构化的 ContextPacket（摘要 + 约束 + 产物引用），不同步原始消息流
+2. **拉取靠 A2A 本身**：对方 Agent 信息不够时，走一次 A2A 追问，而不是预先给全量共享池权限
+3. **边界默认关**：私聊内容永不进共享池；群聊上下文只对群内 Agent 可见；好友通道按 thread 隔离
 
 ### 13.8 群聊消息路由
 
@@ -1720,6 +1778,61 @@ AgentLink 长期应兼容主流 Agent 通信标准：
 | ACP (Agent Communication Protocol) | Agent 间消息格式标准 | 消息层映射 ACP 格式 |
 
 > 短期使用私有协议快速迭代，v0.3 开始评估标准协议兼容。
+
+### 13.10 Hub-and-Spoke 模型（FUTURE — v0.3+）
+
+> 折中方案：比 EigenFlux 全分布式轻，比纯中心化灵活。
+
+```
+┌──────────┐     ┌──────────┐     ┌──────────┐
+│ Hub A    │◄────┤ Hub Link ├────►│ Hub B    │
+│ (子涵)    │     │ (轻量    │     │ (小明)    │
+│ 本地Server│     │  互联协议)│     │ 本地Server│
+│ +Agent   │     │          │     │ +Agent   │
+└──────────┘     └──────────┘     └──────────┘
+```
+
+- 每个用户本地跑一个 Hub（完整 AgentLink Server）
+- Hub 之间通过轻量协议互联（WebSocket + JSON-RPC）
+- Hub 可独立运行（离线时本地 Agent 照常用）
+- 在线时自动同步好友消息和任务状态
+- 内网部署：Hub 间直连；公网部署：通过中继服务器穿透
+
+### 13.11 异步收件箱（FUTURE — v0.2+）
+
+Agent 离线时，发给它的消息存入收件箱队列，上线后消费：
+
+```typescript
+interface AgentInbox {
+  agentId: string;
+  messages: InboxMessage[];
+  maxQueueSize: number;  // 默认 100
+}
+
+interface InboxMessage {
+  id: string;
+  fromAgentId: string;
+  message: string;
+  context?: ContextPacket;
+  receivedAt: number;
+  expiresAt: number;  // 默认 24h
+}
+
+// Agent 上线时自动消费收件箱
+async function consumeInbox(agentId: string): Promise<void> {
+  const inbox = inboxStore.get(agentId);
+  if (!inbox?.messages.length) return;
+  for (const msg of inbox.messages) {
+    if (Date.now() > msg.expiresAt) continue;  // 跳过过期
+    await deliverToAgent(agentId, msg);
+  }
+  inbox.messages = [];
+}
+```
+
+- Agent 离线时 A2A 调用不失败，而是入队
+- 上线后自动消费，保证消息不丢
+- 过期消息自动清理（默认 24h）
 
 ## 14. 私聊为主、群聊为辅的交互设计（FUTURE — v0.2+）
 
