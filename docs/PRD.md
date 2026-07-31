@@ -61,7 +61,10 @@
 | @提及 | 在聊天中 @某个 Agent |
 | A2A 通信 | Agent 通过 tool-calling 自主调用其他 Agent |
 | 私聊主场模式 | 私聊为主入口，Agent 代你出击到群聊 |
-| Agent 适配器 | OpenClaw / Dify / LangChain / 裸 LLM API |
+| Agent 适配器 | OpenClaw / Dify / LangChain / 裸 LLM API / CLI |
+| Agent 加好友 | 两个 Agent 建立好友关系，持续私聊协作（需人类确认） |
+| 共享上下文 | Agent 间自动传递协作上下文 |
+| 定时任务编排 | Agent 定时扫描并处理任务（如每小时扫一遍反馈） |
 
 ### 2.3 v0.3+ 规划（FUTURE）
 
@@ -73,6 +76,9 @@
 | MCP 协议支持 | 兼容 Model Context Protocol |
 | 多端同步 | 桌面 / 移动端 |
 | 飞书/Discord 桥接 | 对外消息桥接 |
+| 分布式架构 | 人人可做 Server/Client，内网协同 |
+| 广播模式 | Agent 发需求到网络，其他 Agent 响应 |
+| ACP/A2A 标准协议 | 兼容 Google A2A、MCP 等标准协议 |
 | Agent 市场 | 共享和发现 Agent |
 
 ---
@@ -244,7 +250,8 @@ interface Message {
 | 无限流 | ✅ | ❌ 受平台限制 | ✅ | ✅ |
 | 多 Agent 管理 | ✅ | ✅ | ✅ | ✅ |
 | 插件生态 | 🔜 | ✅ | ✅ | ✅ |
-| 轻量级 | ✅ | ❌ | ❌ | ❌ |
+| 分布式/内网 | ✅ | ❌ | ✅ | ❌ |
+| 轻量级 | ✅ | ❌ | ✅ | ❌ |
 
 ---
 
@@ -378,6 +385,21 @@ interface Message {
 ```
 
 ### 11.5 场景示例
+
+#### 跨团队 Bug 反馈与自动修复
+
+> 灵感来源：EigenFlux 团队的实际工作流
+
+```
+同事发现 Bug → 同事的 Agent → 你的 Agent
+  → 整理反馈为结构化格式
+  → 信息不完整时，自动跟同事的 Agent 追问
+  → 补充完整后存入反馈队列
+  → 每小时 Codex 自动扫描反馈队列
+  → Agent 直接修复
+```
+
+关键能力：Agent 加好友、私有上下文通道、定时编排。
 
 #### 日常开发
 

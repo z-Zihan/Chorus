@@ -260,6 +260,38 @@ interface A2ABus {
 }
 
 /**
+ * Agent 好友关系
+ * - 两个 Agent 加为好友后可持续私聊协作
+ * - 加好友需人类确认（安全约束）
+ * - 好友关系持久化，重启后保留
+ */
+interface AgentFriendship {
+  agentA: string;
+  agentB: string;
+  createdAt: number;
+  confirmedBy: string;  // 确认人的 userId
+}
+
+// 好友请求流程：
+// 1. Agent A 发起好友请求 → 通知 Agent B 的主人
+// 2. 人类确认后，建立好友关系
+// 3. 好友间 A2A 调用无需再次审批
+class FriendshipRegistry {
+  private friendships = new Map<string, Set<string>>();
+
+  isFriend(a: string, b: string): boolean {
+    return this.friendships.get(a)?.has(b) ?? false;
+  }
+
+  addFriend(a: string, b: string, confirmedBy: string): void {
+    if (!this.friendships.has(a)) this.friendships.set(a, new Set());
+    if (!this.friendships.has(b)) this.friendships.set(b, new Set());
+    this.friendships.get(a)!.add(b);
+    this.friendships.get(b)!.add(a);
+  }
+}
+
+/**
  * A2A Bus 防护机制
  */
 interface A2ABusOptions {
@@ -616,7 +648,7 @@ interface Config {
 interface AgentConfig {
   id: string;
   name: string;
-  type: "openai" | "openclaw" | "dify" | "mock" | "custom";
+  type: "openai" | "openclaw" | "dify" | "cli" | "mock" | "custom";
   config: {
     apiKey?: string;
     model?: string;
@@ -896,6 +928,52 @@ class LangChainAdapter implements AgentAdapter {
 }
 ```
 
+#### 类型六：CLI Agent（本机命令行工具）
+
+通过子进程调用本机 CLI 工具（Codex、Claude Code 等），包装为 Agent：
+
+```typescript
+import { spawn } from "node:child_process";
+
+class CLIAgentAdapter implements AgentAdapter {
+  private command: string;
+  private args: string[];
+  private cwd: string;
+
+  async init(config: Record<string, unknown>) {
+    this.command = config.command as string;
+    this.args = (config.args as string[]) ?? [];
+    this.cwd = (config.cwd as string) ?? process.cwd();
+  }
+
+  async *handleMessage(message: string, context: ConversationContext) {
+    yield { type: "thinking", content: "" };
+
+    const child = spawn(this.command, [...this.args, message], {
+      cwd: this.cwd,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+
+    let buffer = "";
+    for await (const chunk of child.stdout) {
+      buffer += chunk.toString();
+      // 按行输出，模拟流式
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        if (line.trim()) yield { type: "text", content: line + "\n" };
+      }
+    }
+
+    // 输出剩余内容
+    if (buffer.trim()) yield { type: "text", content: buffer };
+    yield { type: "done", content: "" };
+  }
+}
+```
+
+> CLI 适配器让任何本机 Agent 工具（Codex、Claude Code、Copilot CLI）都能接入 AgentLink。
+
 ### 11.3 配置方式
 
 用户在 `agentlink.config.ts` 中声明要接入哪些 Agent：
@@ -939,6 +1017,18 @@ export default {
       name: "Dify Bot",
       type: "dify",
       config: { apiKey: "app-xxx", endpoint: "https://api.dify.ai/v1" },
+    },
+    {
+      id: "claude-cli",
+      name: "Claude CLI",
+      type: "cli",
+      config: { command: "/Users/zzihan/.local/node/bin/claude", args: ["-p"], cwd: "/path/to/project" },
+    },
+    {
+      id: "codex-cli",
+      name: "Codex CLI",
+      type: "cli",
+      config: { command: "/Users/zzihan/.local/node/bin/codex", args: ["exec", "-s", "read-only"], cwd: "/path/to/project" },
     },
     {
       id: "my-agent",
@@ -1226,6 +1316,53 @@ Agent (gpt4) 推理过程:
 │ 根据安全建议，已修改...                  │
 └─────────────────────────────────────────┘
 ```
+
+## 12.5 广播模式（FUTURE — v0.3+）
+
+Agent 可以向网络广播需求，其他 Agent 看到后可响应：
+
+```typescript
+// 广播：Agent 发需求到网络
+interface BroadcastRequest {
+  fromAgentId: string;
+  message: string;           // "需要一个能做代码审查的 Agent"
+  capabilities?: string[];   // 期望的能力标签
+  deadline?: number;         // 超时时间
+}
+
+// 响应：其他 Agent 可以认领
+interface BroadcastResponse {
+  fromAgentId: string;
+  toRequestId: string;
+  message: string;           // "我可以做代码审查"
+  accepted: boolean;
+}
+```
+
+- 陌生 Agent 间的广播需经过 Server 审核（防垃圾消息）
+- 好友间的广播直接送达，无需审核
+- 类比：Agent 的"悬赏板"
+
+## 12.6 分布式架构（FUTURE — v0.3+）
+
+参考 EigenFlux 的设计：人人可做 Server/Client。
+
+```
+内网部署：局域网内协同（每台机器既是 Server 也是 Client）
+公网部署：所有人都能连进来
+
+┌──────────┐     ┌──────────┐     ┌──────────┐
+│ Node A   │◄────┤  Relay   ├────►│ Node B   │
+│ Server+  │     │  (任选   │     │ Server+  │
+│ Client   │     │   一个)  │     │ Client   │
+└──────────┘     └──────────┘     └──────────┘
+      │                                │
+      └────────── 共享上下文 ──────────┘
+```
+
+- 每个节点可独立运行，也可作为中继转发消息
+- 上下文在节点间同步（CRDT 或操作日志）
+- 内网模式无需公网暴露
 
 ## 13. 跨设备与跨团队 Agent 协作（FUTURE — v0.3+）
 
@@ -1524,7 +1661,25 @@ interface AgentPermission {
 → @xiaoming-agent 开始执行
 ```
 
-### 13.7 群聊消息路由
+### 13.7 共享上下文池
+
+Agent 间协作时，上下文可以在好友/群聊内共享：
+
+```typescript
+interface SharedContext {
+  scope: "friendship" | "group";  // 共享范围
+  scopeId: string;                // 好友关系 ID 或群聊 ID
+  messages: Message[];            // 共享的消息历史
+  tasks: TaskTrackingCard[];      // 共享的任务状态
+  createdAt: number;
+}
+```
+
+- 好友间：A2A 调用时自动传递相关上下文
+- 群聊内：所有 Agent 可看到群消息历史
+- 私聊外：不泄露用户私聊内容
+
+### 13.8 群聊消息路由
 
 ```typescript
 // 群聊中的消息路由逻辑
@@ -1553,6 +1708,18 @@ interface GroupConversation extends Conversation {
 ```
 
 ---
+
+### 13.9 标准协议兼容（FUTURE — v0.3+）
+
+AgentLink 长期应兼容主流 Agent 通信标准：
+
+| 协议 | 说明 | 兼容方式 |
+|------|------|----------|
+| Google A2A Protocol | Agent 间发现、认证、通信标准 | Adapter 层实现 A2A 兼容 |
+| MCP (Model Context Protocol) | Agent 访问外部工具/数据源 | 工具层实现 MCP 兼容 |
+| ACP (Agent Communication Protocol) | Agent 间消息格式标准 | 消息层映射 ACP 格式 |
+
+> 短期使用私有协议快速迭代，v0.3 开始评估标准协议兼容。
 
 ## 14. 私聊为主、群聊为辅的交互设计（FUTURE — v0.2+）
 
