@@ -306,6 +306,35 @@ function propagateCancel(threadId: string): void {
   for (const c of controllers) c.abort();
   threadControllers.delete(threadId);
 }
+
+// call() 方法内部消费防护逻辑示例：
+// async *call(from, to, message, context) {
+//   // 1. 环检测
+//   if (detectCycle(context.callStack ?? [], to)) {
+//     yield { type: "error", content: `检测到循环调用: ${from} → ${to}` };
+//     return;
+//   }
+//   // 2. 深度检查
+//   if ((context.callStack?.length ?? 0) >= options.maxDepth) {
+//     yield { type: "error", content: `超过最大调用深度 ${options.maxDepth}` };
+//     return;
+//   }
+//   // 3. 并发检查
+//   if (!acquireSlot(to, options.maxConcurrency)) {
+//     yield { type: "error", content: `Agent ${to} 并发数已达上限` };
+//     return;
+//   }
+//   // 4. 超时 + 执行
+//   const timeoutController = new AbortController();
+//   const timer = setTimeout(() => timeoutController.abort(), options.chainTimeoutMs);
+//   try {
+//     const targetAdapter = registry.getAdapter(to);
+//     yield* targetAdapter.handleA2ACall(from, message, context);
+//   } finally {
+//     clearTimeout(timer);
+//     releaseSlot(to);
+//   }
+// }
 ```
 
 ### 4.3 WebSocket 事件
@@ -1208,7 +1237,7 @@ Agent (gpt4) 推理过程:
 └─────────────────────────────────────────┘
 ```
 
-## 13. 跨设备与跨团队 Agent 协作
+## 13. 跨设备与跨团队 Agent 协作（FUTURE — v0.3+）
 
 ### 12.1 问题背景
 
@@ -1535,7 +1564,7 @@ interface GroupConversation extends Conversation {
 
 ---
 
-## 14. 私聊为主、群聊为辅的交互设计
+## 14. 私聊为主、群聊为辅的交互设计（FUTURE — v0.2+）
 
 ### 14.1 架构模型
 
@@ -1599,7 +1628,10 @@ type ServerEvent =
 ```typescript
 // Agent 收到用户指令后的执行逻辑
 async *handleMessage(message: string, context: ConversationContext) {
-  // 1. 解析用户意图：要去群聊 @谁、做什么
+  // 1. 解析用户意图：这里有两种实现路径
+  //    a) LLM tool-calling（推荐，见 §12）：Agent 通过 call_agent tool 自主决策
+  //    b) 规则匹配（简单场景）：解析关键词如"去群里@谁"
+  //    以下示例使用规则匹配，适用于 MVP 的 mock 场景
   const intent = parseIntent(message);
   // intent = { action: "group_call", target: "xiaoming-agent", group: "构建群", task: "修复 xxx.ts:42" }
 

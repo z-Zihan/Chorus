@@ -87,20 +87,20 @@
 ```
 用户: 帮我审查这个 PR
   ↓
-@orchestrator 收到请求
+主 Agent 收到请求，通过 tool-calling 自主决策
   ↓
-@code-reviewer 分析代码质量 ──→ 返回 3 个问题
+主 Agent → 调用 code-reviewer ──→ 返回 3 个问题
   ↓
-@security-checker 检查安全风险 ──→ 返回 1 个高危
+主 Agent → 调用 security-checker ──→ 返回 1 个高危
   ↓
-@orchestrator 汇总结果 ──→ 回复用户
+主 Agent 汇总结果 ──→ 回复用户
 ```
 
 UI 上展示：Agent 间的调用链可展开查看，类似 Discord 线程。
 
 ### 3.2 场景二：日常 AI 助手
 
-用户和自己的主 Agent 私聊，需要特定能力时 @对应 Agent：
+用户和自己的主 Agent 私聊，需要特定能力时提及对应 Agent：
 - 写代码 → @code-agent
 - 翻译 → @translate-agent  
 - 搜索 → @search-agent
@@ -247,7 +247,7 @@ interface Message {
 
 ---
 
-## 7.5 成功指标
+## 8. 成功指标
 
 | 指标 | 目标 |
 |------|------|
@@ -257,7 +257,7 @@ interface Message {
 
 ---
 
-## 8. 里程碑
+## 9. 里程碑
 
 | 版本 | 目标 | 预计 |
 |------|------|------|
@@ -268,7 +268,7 @@ interface Message {
 
 ---
 
-## 9. 跨设备与跨团队场景（FUTURE — v0.3+）
+## 10. 跨设备与跨团队场景（FUTURE — v0.3+）
 
 ### 9.1 场景一：跨设备数据迁移
 
@@ -313,7 +313,7 @@ interface Message {
 
 ---
 
-## 10. 私聊为主、群聊为辅的交互模式（FUTURE — v0.2+）
+## 11. 私聊为主、群聊为辅的交互模式（FUTURE — v0.2+）
 
 ### 10.1 核心理念
 
