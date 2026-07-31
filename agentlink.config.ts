@@ -16,5 +16,18 @@ export default {
       type: "mock",
       config: { model: "AgentLink Mock", delayMs: 24 },
     },
+    {
+      id: "claude",
+      name: "Claude Code",
+      description: "Claude Code CLI 本地 Agent",
+      type: "cli",
+      config: {
+        model: "claude-sonnet-4-20250514",
+        command: "claude",
+        args: ["-p", "--output-format", "stream-json", "--verbose", "--no-session-persistence"],
+        input: "argument",
+        output: "jsonl",
+      },
+    },
   ],
 } satisfies AppConfig;

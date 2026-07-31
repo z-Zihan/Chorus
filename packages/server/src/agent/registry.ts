@@ -1,6 +1,7 @@
 import type { Agent, AgentAdapter, AgentConfig, AgentStatus } from "@agentlink/shared";
 import type { Repository } from "../db/repository";
 import { BaseAdapter, messageFromError } from "./adapter";
+import { CliAdapter } from "./adapters/cli";
 import { MockAdapter } from "./adapters/mock";
 import { OpenAIAdapter } from "./adapters/openai";
 
@@ -103,6 +104,9 @@ export class AgentRegistry {
 function createAdapter(config: AgentConfig): AgentAdapter {
   if (config.type === "openai") {
     return new OpenAIAdapter(config.id, config.name, config.description);
+  }
+  if (config.type === "cli") {
+    return new CliAdapter(config.id, config.name, config.description);
   }
   return new MockAdapter(config.id, config.name, config.description);
 }
