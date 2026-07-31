@@ -1,0 +1,7 @@
+<!-- Placeholder source icon. Replace with final artwork before release. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title>AgentLink AL lettermark</title>
+  <rect width="512" height="512" rx="112" fill="#6366f1"/>
+  <path d="M100 356 205 142h54l105 214h-59l-21-47H180l-21 47h-59Zm102-97h60l-30-69-30 69Z" fill="#fff"/>
+  <path d="M324 142h58v164h82v50H324V142Z" fill="#fff"/>
+</svg>

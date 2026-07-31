@@ -1,0 +1,41 @@
+import type { AppConfig } from "@agentlink/shared";
+import Fastify, { type FastifyInstance } from "fastify";
+import { AgentRegistry } from "../../agent/registry";
+import { AgentRuntime } from "../../agent/runtime";
+import { createDatabase } from "../../db";
+import { Repository } from "../../db/repository";
+import { EventHub } from "../../ws/events";
+import { registerRoutes } from "../index";
+
+const testConfig: AppConfig = {
+  port: 0,
+  dbPath: ":memory:",
+  cors: { origin: [] },
+  auth: { enabled: false },
+  history: { maxMessages: 20, maxTokens: 8_000 },
+  agents: [
+    {
+      id: "test-agent",
+      name: "Test Agent",
+      type: "mock",
+      config: { delayMs: 0 },
+    },
+  ],
+};
+
+export async function buildTestApp(): Promise<FastifyInstance> {
+  const database = createDatabase(":memory:");
+  const repository = new Repository(database);
+  const registry = new AgentRegistry(repository);
+  await registry.initialize(testConfig.agents);
+
+  const app = Fastify({ logger: false });
+  const runtime = new AgentRuntime(repository, registry, new EventHub(), testConfig);
+  registerRoutes(app, repository, registry, runtime);
+  app.addHook("onClose", async () => {
+    for (const agent of registry.list()) registry.getAdapter(agent.id)?.destroy?.();
+    database.sqlite.close();
+  });
+  await app.ready();
+  return app;
+}

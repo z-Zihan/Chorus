@@ -1,56 +1,65 @@
 # AgentLink — 开发计划 (DEV_PLAN)
 
-> 版本: v1.0 | 日期: 2026-07-31 | 基于 PRD v1.1 + TECH v1.0
+> 版本: v1.1 | 日期: 2026-08-01 | 基于 PRD v1.1 + TECH v1.0
 
 ---
 
 ## 版本路线图
 
 ```
-v0.1 (MVP)          v0.2 (多 Agent + A2A)       v0.3 (群聊 + 搜索 + 生态)
-  ✅  已完成           🔲  待开发                   🔲  待开发
-  ──────────         ──────────                 ──────────
-  · 单 Agent 流式聊天  · 多 Agent 在线切换         · Agent 适配器完善
-  · Mock/OpenAI 适配器 · @提及 + tool-calling A2A  · 群聊会话
-  · A2A 调用链可视化    · 私聊主场模式              · 消息全文搜索
-  · SQLite 持久化
-  · Tauri 桌面客户端打包      · Agent 加好友              · 插件系统基础
-  · Markdown 渲染      · 共享上下文传递            · MCP 协议基础
-                      · 定时任务编排              · 多用户认证
-                      · OpenClaw/Dify 适配器     · LangChain/CLI 适配器
+v0.1 (MVP) ✅ 已完成    v0.2 (多 Agent + A2A)       v0.3 (群聊 + 搜索 + 生态)
+  ──────────             🔲  待开发                   🔲  待开发
+  · 单 Agent 流式聊天      · 多 Agent 在线切换         · Agent 适配器完善
+  · OpenAI/CLI 适配器     · @提及 + tool-calling A2A  · 群聊会话
+  · A2A 调用链可视化       · 私聊主场模式              · 消息全文搜索
+  · SQLite 持久化         · Agent 加好友              · 插件系统基础
+  · Tauri 桌面客户端打包   · 共享上下文传递            · MCP 协议基础
+  · Markdown 渲染         · 定时任务编排              · 多用户认证
+  · 系统托盘 + DMG/MSI    · OpenClaw/Dify 适配器     · LangChain/CLI 适配器
 ```
 
 ---
 
-## 一、v0.1 收尾 (预估 6 天)
+## 一、v0.1 收尾 ✅ 已完成 (2026-08-01)
 
-> 当前 v0.1 核心功能已完成，以下为稳定性、体验打磨和基础测试。
+> 全部 18 个任务完成，17 个测试通过，macOS DMG 构建验证通过。
 
-| ID | 标题 | 描述 | 预估 | 依赖 | 优先级 |
-|:---|------|------|:---:|------|:---:|
-| **0.1** | **稳定性 & 错误处理** | | | | |
-| P1-01 | React Error Boundary | 添加 `<ErrorBoundary>` 组件包裹 ChatArea/Sidebar，捕获渲染异常后展示降级 UI + 重试按钮 | 1.5h | — | 🔴 P0 |
-| P1-02 | WebSocket 心跳 & 断线重连 | `useWebSocket.ts` 中实现 30s ping/pong 心跳 + 指数退避重连 + lastEventId 补发 | 2h | — | 🔴 P0 |
-| P1-03 | API 请求错误统一处理 | `api.ts` 中封装 4xx/5xx 通用错误 toast，连接断开时自动切换为离线提示 | 1h | — | 🔴 P0 |
-| P1-04 | Agent 离线/超时优雅降级 | agent 不可用时展示离线 badge + 重试/切换 agent 入口，超时 60s 后自动 abort | 1.5h | P1-02 | 🟡 P1 |
-| **0.2** | **UI 细节打磨** | | | | |
-| P1-05 | 空状态 & 加载骨架屏 | 会话列表为空时展示引导文案；消息列表加载中展示骨架屏；首次进入自动创建演示会话 | 1.5h | — | 🟡 P1 |
-| P1-06 | 长消息折叠 & 滚动锚定 | 超过 2000 字符的消息自动折叠为"展开全文"；新消息到达时智能锚定（已在底部则自动滚，否则显示"↓ 新消息"按钮） | 1.5h | — | 🟡 P1 |
-| P1-07 | Markdown 增强 | 代码块添加语言标签 + 一键复制按钮；链接渲染为可点击外链 | 1h | — | 🟢 P2 |
-| P1-08 | 删除会话确认 | 删除会话前弹出确认对话框，防止误删 | 0.5h | — | 🟢 P2 |
-| P1-09 | 响应式布局微调 | 移动端窄屏下 Sidebar 自动折叠，支持滑动手势打开 | 1.5h | — | 🟢 P2 |
-| **0.3** | **Agent 配置 UI** | | | | |
-| P1-10 | Agent 设置面板 | 在 Sidebar 中点击 Agent → 弹出设置抽屉，可查看/编辑 Agent 名称、描述、avatar、model、systemPrompt 等 | 2h | — | 🟡 P1 |
-| P1-11 | API Key 安全输入 | 输入框 type=password + 显示/隐藏切换；后端加密存储，返回时脱敏 | 1h | — | 🟡 P1 |
-| **0.4** | **基础测试** | | | | |
-| P1-12 | 共享类型单元测试 | `shared/` 包：`parseMentions`、`truncateHistory`、`formatTimestamp` 等工具函数测试 | 1.5h | — | 🟡 P1 |
-| P1-13 | API 路由集成测试 | `vitest` + `supertest` 覆盖 agents/conversations CRUD + 健康检查 | 2h | — | 🟡 P1 |
-| P1-14 | Mock Adapter 行为测试 | 验证流式输出完整、取消信号生效、A2A 调用链生成正确 | 1.5h | P1-12 | 🟢 P2 |
-| **0.5** | **Tauri 桌面客户端打包** | | | | |
-| P1-15 | Tauri 开发环境验证 | 确保 `pnpm tauri:dev` 能启动 Tauri 窗口 + Node.js sidecar + 前端热更新 | 2h | — | 🔴 P0 |
-| P1-16 | Tauri 生产构建 | `pnpm tauri:build` 生成 .dmg，验证 sidecar 自动启动/关闭 | 2h | P1-15 | 🔴 P0 |
-| P1-17 | 系统托盘实现 | 托盘图标 + 右键菜单（显示窗口/退出），关闭窗口最小化到托盘 | 2h | P1-15 | 🟡 P1 |
-| P1-18 | 应用图标设计 | 替换 placeholder 图标为正式 AgentLink logo | 1h | — | 🟢 P2 |
+| ID | 标题 | 状态 | 备注 |
+|:---|------|:---:|------|
+| **0.1** | **稳定性 & 错误处理** | | |
+| P1-01 | React Error Boundary | ✅ | ErrorBoundary 组件包裹 Sidebar + ChatArea |
+| P1-02 | WebSocket 心跳 & 断线重连 | ✅ | 30s ping/pong + 指数退避重连 + lastEventId 补发 |
+| P1-03 | API 请求错误统一处理 | ✅ | Toast 通知系统 + 离线 banner + 5s 去重 |
+| P1-04 | Agent 离线/超时优雅降级 | ✅ | 发送前状态检查 + 60s 流式超时 + AbortController |
+| **0.2** | **UI 细节打磨** | | |
+| P1-05 | 空状态 & 加载骨架屏 | ✅ | 骨架屏 + 空状态引导 + 创建会话按钮 |
+| P1-06 | 长消息折叠 & 滚动锚定 | ✅ | 2000 字折叠 + 底部锚定 + 新消息按钮 |
+| P1-07 | Markdown 增强 | ✅ | CodeBlock 语言标签 + 复制按钮 + 外链新窗口 |
+| P1-08 | 删除会话确认 | ✅ | ConfirmDialog + hover 删除按钮 + 自动切换 |
+| P1-09 | 响应式布局微调 | ✅ | 移动端 overlay 侧栏 + 汉堡菜单 + 遮罩 |
+| **0.3** | **Agent 配置 UI** | | |
+| P1-10 | Agent 设置面板 | ✅ | 右侧滑出 drawer + 编辑 name/desc/model/systemPrompt |
+| P1-11 | API Key 安全输入 | ✅ | PasswordInput + show/hide + 空值不覆盖 |
+| **0.4** | **基础测试** | | |
+| P1-12 | 共享类型单元测试 | ✅ | 7 tests: truncateHistory + parseMentions |
+| P1-13 | API 路由集成测试 | ✅ | 7 tests: health + agents + conversations CRUD |
+| P1-14 | Mock Adapter 行为测试 | ✅ | 3 tests: 流式输出 + cancel signal + A2A |
+| **0.5** | **Tauri 桌面客户端打包** | | |
+| P1-15 | Tauri 开发环境验证 | ✅ | beforeDevCommand + devUrl + sidecar 配置 |
+| P1-16 | Tauri 生产构建 | ✅ | macOS DMG 构建通过 + bundle.resources 打包 server |
+| P1-17 | 系统托盘实现 | ✅ | 显示窗口/退出菜单 + 左键显示 + 关闭到托盘 |
+| P1-18 | 应用图标设计 | ✅ | SVG lettermark + PNG + ICO (Windows) |
+
+### v0.1 额外完成项
+
+- ✅ Toast 通知去重（5s 节流）
+- ✅ 共享状态常量提取（`constants/agent.ts`）
+- ✅ 消息加载竞态保护（`messagesRequestId`）
+- ✅ 会话删除后自动切换相邻会话
+- ✅ Windows 构建支持（MSI + NSIS + ICO 图标）
+- ✅ GitHub Actions CI（push tag 自动构建 macOS + Windows）
+- ✅ Windows 构建文档（`docs/WINDOWS_BUILD.md`）
+- ✅ Cargo 国内镜像配置（rsproxy.cn）
 
 ---
 
@@ -147,13 +156,9 @@ v0.1 (MVP)          v0.2 (多 Agent + A2A)       v0.3 (群聊 + 搜索 + 生态)
 ## 四、依赖关系图
 
 ```
-v0.1 收尾
+v0.1 收尾 ✅
 ─────────────────────────────────────────────────
-P1-01 ──→ P1-02 ──→ P1-04
-               └──→ P1-03
-P1-05  P1-06  P1-07  P1-08  P1-09  (独立)
-P1-10 ──→ P1-11
-P1-12 ──→ P1-13  P1-14
+P1-01~P1-18 全部完成
 
 v0.2 多 Agent + A2A
 ─────────────────────────────────────────────────
@@ -182,71 +187,14 @@ A4-01  A4-02  A4-03  (独立)
 
 ---
 
-## 五、推荐执行顺序
+## 五、任务统计
 
-### 第一阶段：v0.1 收尾 (6 天)
+| 版本 | 任务数 | 预估总工时 | P0 | P1 | P2 | 状态 |
+|------|:---:|:---:|:---:|:---:|:---:|:---:|
+| v0.1 收尾 | 18 | 28.5h | 5 | 8 | 5 | ✅ 已完成 |
+| v0.2 开发 | 17 | 35.5h | 9 | 6 | 2 | 🔲 待开发 |
+| v0.3 开发 | 13 | 27.5h | 6 | 5 | 2 | 🔲 待开发 |
+| **合计** | **48** | **91.5h** | **20** | **19** | **9** | |
 
-```
-Day 1-2:  P1-01 Error Boundary → P1-02 WS 心跳重连 → P1-03 API 错误处理
-Day 3:    P1-05 空状态骨架屏 → P1-06 长消息折叠 → P1-04 Agent 离线降级
-Day 4:    P1-10 Agent 配置面板 → P1-11 API Key 安全输入
-Day 5:    P1-12 共享类型测试 → P1-13 API 集成测试 → P1-14 Mock 测试
-Day 6:    P1-07 Markdown 增强 → P1-08 删除确认 → P1-09 响应式 → Buffer
-```
-
-### 第二阶段：v0.2 核心 (2 周)
-
-```
-Week 1:  多 Agent 基础设施 + @提及 A2A
-  Day 1-2:  M1-01 多Agent注册 → M1-02 列表UI → M1-03 会话绑定 → M1-04 选择器
-  Day 3-4:  M2-01 提及解析 → M2-02 OpenAI tool-calling → M2-03 A2A事件流
-  Day 5:    M2-04 A2A实时UI → M2-05 取消超时
-
-Week 2:  私聊主场 + 适配器
-  Day 1-2:  M3-01 会话模型 DM/Group → M3-02 私聊主场布局
-  Day 3:    M3-03 任务卡片 → M3-04 代你出击流程
-  Day 4:    M4-01 裸LLM适配器 → M4-02 CLI适配器
-  Day 5:    M4-03 OpenClaw → M4-04 Dify
-```
-
-### 第三阶段：v0.2 协作 + v0.3 启动 (2 周)
-
-```
-Week 3:  Agent 协作 + 搜索
-  Day 1-2:  M5-01 加好友 → M5-02 共享上下文 → M5-03 定时编排
-  Day 3-4:  A3-01 FTS索引 → A3-02 搜索API → A3-03 搜索UI
-  Day 5:    A2-01 群聊创建 → A2-02 群聊UI
-
-Week 4:  群聊 + 适配器完善 + 生态
-  Day 1:    A2-03 群聊路由策略
-  Day 2:    A1-01 LangChain → A1-02 热加载 → A1-03 健康检查
-  Day 3:    A1-04 日志指标 → A4-01 插件系统
-  Day 4:    A4-02 MCP协议 → A4-03 多用户认证
-  Day 5:    Buffer + 整体联调
-```
-
----
-
-## 六、风险 & 注意事项
-
-| 风险 | 影响 | 缓解措施 |
-|------|------|---------|
-| OpenAI tool-calling 格式不稳定 | M2-02 | 先用 mock 验证 A2A 流程，再接入 LLM tool-calling；预留 fallback 解析 |
-| WebSocket 大消息体性能 | P1-02 | 流式事件拆分为小 chunk（< 4KB）；EventHub 环形缓冲区限制 100 条 |
-| SQLite FTS5 中文分词不准 | A3-01 | 考虑使用 jieba 分词或降级为 LIKE 模糊搜索 |
-| 定时任务编排复杂度 | M5-03 | v0.2 仅支持简单 cron，不支持 DAG 依赖编排 |
-| 多 Agent 并发上限 | M2-05 | A2A Bus 内置 maxConcurrency=3，超限排队等待 |
-| Dify/OpenClaw API 变动 | M4-03/04 | 适配器设计为轻量封装，API 变动时仅需改适配器文件 |
-
----
-
-## 七、任务统计
-
-| 版本 | 任务数 | 预估总工时 | P0 | P1 | P2 |
-|------|:---:|:---:|:---:|:---:|:---:|
-| v0.1 收尾 | 18 | 28.5h | 5 | 8 | 5 |
-| v0.2 开发 | 17 | 35.5h | 9 | 6 | 2 |
-| v0.3 开发 | 13 | 27.5h | 6 | 5 | 2 |
-| **合计** | **48** | **91.5h** | **20** | **19** | **9** |
-
-> 按每天有效工作 5h 计算，总计约 **19 个工作日**（~4 周）。
+> v0.1 实际耗时约 4 小时（使用 Codex + Claude Code 辅助编码）。
+> v0.2 + v0.3 预估约 63h，按每天有效工作 5h 计算约 13 个工作日（~3 周）。

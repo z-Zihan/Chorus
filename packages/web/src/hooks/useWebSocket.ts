@@ -19,6 +19,7 @@ export function useWebSocket() {
 
   const addMessage = useChatStore((s) => s.addMessage);
   const appendStreamChunk = useChatStore((s) => s.appendStreamChunk);
+  const noteStreamActivity = useChatStore((s) => s.noteStreamActivity);
   const setMessageStatus = useChatStore((s) => s.setMessageStatus);
   const setWebSocketSend = useChatStore((s) => s.setWebSocketSend);
   const currentConversationId = useChatStore((s) => s.currentConversationId);
@@ -78,6 +79,7 @@ export function useWebSocket() {
             targetMessage.conversationId !== chatState.currentConversationId ||
             chunk.threadId
           ) break;
+          noteStreamActivity(messageId);
           if (chunk.type === "text") {
             appendStreamChunk(messageId, chunk.content);
           } else if (chunk.type === "thinking") {
@@ -219,6 +221,7 @@ export function useWebSocket() {
   }, [
     addMessage,
     appendStreamChunk,
+    noteStreamActivity,
     setMessageStatus,
     setWebSocketSend,
     currentConversationId,

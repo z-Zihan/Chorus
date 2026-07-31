@@ -10,13 +10,6 @@ export default {
   history: { maxMessages: 20, maxTokens: 8_000 },
   agents: [
     {
-      id: "link",
-      name: "Link",
-      description: "AgentLink 本地协作助手",
-      type: "mock",
-      config: { model: "AgentLink Mock", delayMs: 24 },
-    },
-    {
       id: "claude",
       name: "Claude Code",
       description: "Claude Code CLI 本地 Agent",

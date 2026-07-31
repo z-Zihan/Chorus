@@ -1,0 +1,85 @@
+name: Build Desktop App
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: 'Target platform (all/windows/macos)'
+        required: false
+        default: 'all'
+
+jobs:
+  # ─── Windows ──────────────────────────────────────────────
+  build-windows:
+    if: github.event_name == 'push' || inputs.platform == 'all' || inputs.platform == 'windows'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build Tauri app (MSI + NSIS)
+        run: pnpm tauri build --bundles msi,nsis
+        env:
+          RUSTUP_DIST_SERVER: https://rsproxy.cn
+          RUSTUP_UPDATE_ROOT: https://rsproxy.cn/rustup
+
+      - name: Upload MSI
+        uses: actions/upload-artifact@v4
+        with:
+          name: AgentLink-windows-msi
+          path: src-tauri/target/release/bundle/msi/*.msi
+          if-no-files-found: warn
+
+      - name: Upload NSIS (exe)
+        uses: actions/upload-artifact@v4
+        with:
+          name: AgentLink-windows-nsis
+          path: src-tauri/target/release/bundle/nsis/*.exe
+          if-no-files-found: warn
+
+  # ─── macOS ────────────────────────────────────────────────
+  build-macos:
+    if: github.event_name == 'push' || inputs.platform == 'all' || inputs.platform == 'macos'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build Tauri app (DMG)
+        run: pnpm tauri build --bundles dmg
+        env:
+          RUSTUP_DIST_SERVER: https://rsproxy.cn
+          RUSTUP_UPDATE_ROOT: https://rsproxy.cn/rustup
+
+      - name: Upload DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: AgentLink-macos-dmg
+          path: src-tauri/target/release/bundle/dmg/*.dmg
+          if-no-files-found: warn

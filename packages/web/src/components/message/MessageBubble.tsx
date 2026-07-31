@@ -1,7 +1,17 @@
+import {
+  Children,
+  isValidElement,
+  useState,
+  type ComponentPropsWithoutRef,
+  type ReactNode,
+} from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { AgentAvatar } from "@/components/agent/AgentAvatar";
 import type { Message } from "@/store/chatStore";
+
+const LONG_MESSAGE_THRESHOLD = 2_000;
+const COLLAPSED_MESSAGE_LENGTH = 500;
 
 interface Props {
   message: Message;
@@ -9,11 +19,63 @@ interface Props {
   agentAvatar?: string;
 }
 
+function getTextContent(node: ReactNode): string {
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(getTextContent).join("");
+  if (isValidElement<{ children?: ReactNode }>(node)) {
+    return getTextContent(node.props.children);
+  }
+  return "";
+}
+
+function CodeBlock({ children }: ComponentPropsWithoutRef<"pre">) {
+  const [copied, setCopied] = useState(false);
+  const codeElement = Children.toArray(children)[0];
+  const className = isValidElement<{ className?: string }>(codeElement)
+    ? codeElement.props.className ?? ""
+    : "";
+  const language = /language-([\w-]+)/.exec(className)?.[1] ?? "text";
+  const code = getTextContent(codeElement).replace(/\n$/, "");
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1_500);
+    } catch (error) {
+      console.error("Failed to copy code:", error);
+    }
+  };
+
+  return (
+    <div className="relative my-2 overflow-hidden rounded-lg bg-gray-950/80">
+      <div className="flex items-center justify-end gap-2 border-b border-gray-800 px-3 py-1.5">
+        <span className="rounded bg-gray-800 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-gray-400">
+          {language}
+        </span>
+        <button
+          type="button"
+          onClick={() => void handleCopy()}
+          className="rounded px-2 py-0.5 text-[11px] text-gray-400 transition-colors hover:bg-gray-800 hover:text-gray-100"
+        >
+          {copied ? "已复制" : "复制"}
+        </button>
+      </div>
+      <pre className="overflow-x-auto p-3 text-xs">{children}</pre>
+    </div>
+  );
+}
+
 export function MessageBubble({ message, agentName, agentAvatar }: Props) {
+  const [isExpanded, setIsExpanded] = useState(false);
   const isUser = message.fromType === "user";
   const isError = message.status === "error";
   const isPartial = message.status === "partial";
   const isStreaming = message.status === "streaming";
+  const isLongMessage = message.content.length > LONG_MESSAGE_THRESHOLD;
+  const displayedContent = isLongMessage && !isExpanded
+    ? `${message.content.slice(0, COLLAPSED_MESSAGE_LENGTH)}…`
+    : message.content;
 
   // System message — centered gray text
   if (message.fromType === "agent" && message.content.startsWith("[system]")) {
@@ -41,11 +103,11 @@ export function MessageBubble({ message, agentName, agentAvatar }: Props) {
 
       {/* Bubble */}
       <div
-        className={`group relative max-w-[75%] rounded-2xl px-4 py-2.5 ${
+        className={`group relative max-w-[85%] rounded-2xl px-4 py-2.5 md:max-w-[75%] ${
           isUser
             ? "bg-indigo-600 text-white"
             : isError
-            ? "bg-red-900/40 border border-red-700/50 text-red-200"
+            ? "border border-red-700/50 bg-red-900/40 text-red-200"
             : "bg-gray-800 text-gray-100"
         }`}
       >
@@ -58,18 +120,14 @@ export function MessageBubble({ message, agentName, agentAvatar }: Props) {
 
         {/* Content */}
         <div
-          className={`text-sm leading-relaxed [&_code]:rounded [&_code]:bg-gray-700/60 [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-xs [&_pre_code]:bg-transparent [&_pre_code]:p-0 ${
+          className={`break-words text-sm leading-relaxed [&_code]:rounded [&_code]:bg-gray-700/60 [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-xs [&_pre_code]:bg-transparent [&_pre_code]:p-0 ${
             isStreaming ? "typing-cursor" : ""
           }`}
         >
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             components={{
-              pre: ({ children }) => (
-                <pre className="my-2 overflow-x-auto rounded-lg bg-gray-950/80 p-3 text-xs">
-                  {children}
-                </pre>
-              ),
+              pre: CodeBlock,
               a: ({ href, children }) => (
                 <a
                   href={href}
@@ -82,9 +140,23 @@ export function MessageBubble({ message, agentName, agentAvatar }: Props) {
               ),
             }}
           >
-            {message.content || " "}
+            {displayedContent || " "}
           </ReactMarkdown>
         </div>
+
+        {isLongMessage && (
+          <button
+            type="button"
+            onClick={() => setIsExpanded((expanded) => !expanded)}
+            className={`mt-2 text-xs font-medium transition-colors ${
+              isUser
+                ? "text-indigo-100 hover:text-white"
+                : "text-indigo-400 hover:text-indigo-300"
+            }`}
+          >
+            {isExpanded ? "收起" : "展开全文"}
+          </button>
+        )}
 
         {/* Partial tag */}
         {isPartial && (
