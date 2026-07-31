@@ -50,10 +50,10 @@ export function AgentCard({ agent, onClick, selected }: Props) {
         )}
         <div className="mt-1 flex items-center gap-2 text-xs text-gray-600">
           <span>{STATUS_TEXT[agent.status] ?? "未知"}</span>
-          {agent.config?.model && (
+          {agent.model && (
             <>
               <span>·</span>
-              <span>{agent.config.model}</span>
+              <span>{agent.model}</span>
             </>
           )}
         </div>

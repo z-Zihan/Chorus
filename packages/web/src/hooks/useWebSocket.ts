@@ -14,6 +14,7 @@ export function useWebSocket() {
   const heartbeatTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const pongTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastEventId = useRef<string | null>(null);
+  const pendingEvents = useRef<ClientEvent[]>([]);
 
   const addMessage = useChatStore((s) => s.addMessage);
   const appendStreamChunk = useChatStore((s) => s.appendStreamChunk);
@@ -27,7 +28,13 @@ export function useWebSocket() {
 
     const sendEvent = (event: ClientEvent): boolean => {
       const ws = wsRef.current;
-      if (ws?.readyState !== WebSocket.OPEN) return false;
+      if (ws?.readyState !== WebSocket.OPEN) {
+        if (event.type === "cancel") {
+          pendingEvents.current.push(event);
+          return true;
+        }
+        return false;
+      }
       ws.send(JSON.stringify(event));
       return true;
     };
@@ -67,7 +74,8 @@ export function useWebSocket() {
           const targetMessage = chatState.messages.find((message) => message.id === messageId);
           if (
             !targetMessage ||
-            targetMessage.conversationId !== chatState.currentConversationId
+            targetMessage.conversationId !== chatState.currentConversationId ||
+            chunk.threadId
           ) break;
           if (chunk.type === "text") {
             appendStreamChunk(messageId, chunk.content);
@@ -82,33 +90,37 @@ export function useWebSocket() {
         }
 
         case "a2a_call":
-          if (!useChatStore.getState().messages.some((message) => message.id === `${event.threadId}-call`)) {
+          if (!useChatStore.getState().messages.some((message) => message.id === `a2a-call-${event.eventId}`)) {
             addMessage({
-              id: `${event.threadId}-call`,
+              id: `a2a-call-${event.eventId}`,
               conversationId: useChatStore.getState().currentConversationId ?? "",
               fromType: "agent",
-              fromId: event.from ?? "",
+              fromId: event.from,
               toType: "agent",
               toId: event.to,
-              content: event.message ?? "",
+              content: event.message,
               timestamp: Date.now(),
               threadId: event.threadId,
               status: "done",
+              metadata: { a2aType: "call" },
             });
           }
           break;
 
         case "a2a_response":
           {
-            const responseId = `${event.threadId}-response`;
             const chatState = useChatStore.getState();
-            const call = chatState.messages.find((message) =>
-              message.threadId === event.threadId && message.id.endsWith("-call")
+            const calls = chatState.messages.filter((message) =>
+              message.threadId === event.threadId && message.metadata?.a2aType === "call"
             );
+            const call = [...calls].reverse().find(
+              (message) => message.toId === event.chunk.sourceAgentId
+            ) ?? calls.at(-1);
+            const responseId = `${call?.id ?? `a2a-${event.threadId}`}-response`;
             const existing = chatState.messages.find((message) => message.id === responseId);
             const status: Message["status"] = event.chunk.type === "error"
               ? "error"
-              : event.chunk.type === "done"
+              : event.chunk.type === "done" || event.chunk.metadata?.status === "done"
                 ? "done"
                 : "streaming";
 
@@ -125,6 +137,7 @@ export function useWebSocket() {
                 threadId: event.threadId,
                 parentId: call?.id,
                 status,
+                metadata: { a2aType: "response" },
               });
             } else {
               if (event.chunk.content) appendStreamChunk(responseId, event.chunk.content);
@@ -167,6 +180,9 @@ export function useWebSocket() {
             conversationId: currentConversationId,
             lastEventId: lastEventId.current,
           }));
+        }
+        for (const event of pendingEvents.current.splice(0)) {
+          ws.send(JSON.stringify(event));
         }
       };
 

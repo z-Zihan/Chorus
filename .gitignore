@@ -5,3 +5,4 @@ data/*.db*
 .env
 .DS_Store
 pnpm-debug.log*
+*.tsbuildinfo
