@@ -53,7 +53,7 @@
 ## 3. 项目结构
 
 ```
-a2a-chat/
+agentlink/
 ├── docs/                    # 文档
 │   ├── PRD.md              # 产品需求文档
 │   └── TECH.md             # 技术设计文档
@@ -169,6 +169,8 @@ interface AgentAdapter {
     context: ConversationContext
   ): AsyncGenerator<StreamChunk, void, unknown>;
 
+  /** Agent 配置（只读引用） */
+  readonly config: Record<string, unknown>;
   /** 状态检查 */
   getStatus(): AgentStatus;
   /** 销毁 */
@@ -191,7 +193,9 @@ interface ConversationContext {
   conversationId: string;
   history: Message[];          // 已做截断处理（见下方策略）
   mentionedAgents?: string[];  // 被 @ 的其他 Agent
-  a2aBus?: A2ABus;             // A2A 消息总线，Agent 可通过它调用其他 Agent
+  a2aBus?: A2ABus;             // A2A 消息总线
+  callStack?: string[];        // A2A 调用栈，用于环检测
+  difyConversationId?: string; // Dify 适配器私有状态
 }
 
 /**
@@ -345,17 +349,19 @@ type ClientEvent =
   | { type: "message"; conversationId: string; content: string; mentionedAgents?: string[] }
   | { type: "typing"; conversationId: string; isTyping: boolean }
   | { type: "subscribe"; conversationId: string }
-  | { type: "cancel"; messageId: string };
+  | { type: "cancel"; messageId: string }
+  | { type: "ping" };
 
 // 服务端 → 客户端
 type ServerEvent =
-  | { type: "message"; message: Message }
-  | { type: "stream"; messageId: string; chunk: StreamChunk }
+  | { type: "message"; eventId: string; message: Message }
+  | { type: "stream"; eventId: string; messageId: string; chunk: StreamChunk }
   | { type: "a2a_call"; from: string; to: string; message: string; threadId: string }
   | { type: "a2a_response"; threadId: string; chunk: StreamChunk }
   | { type: "agent_status"; agentId: string; status: AgentStatus }
   | { type: "typing"; agentId: string; conversationId: string; isTyping: boolean }
-  | { type: "error"; message: string };
+  | { type: "error"; eventId: string; message: string }
+  | { type: "pong"; eventId: string };
 ```
 
 ## 5. 数据库设计
@@ -432,6 +438,7 @@ CREATE INDEX idx_messages_parent ON messages(parent_id) WHERE parent_id IS NOT N
 | DELETE | `/api/agents/:id` | 删除 Agent |
 | GET | `/api/conversations` | 获取会话列表 |
 | POST | `/api/conversations` | 创建会话 |
+| DELETE | `/api/conversations/:id` | 删除会话 |
 | GET | `/api/conversations/:id/messages` | 获取会话消息历史 |
 | POST | `/api/conversations/:id/messages` | 发送消息（非流式） |
 | GET | `/api/health` | 健康检查 |
@@ -595,7 +602,7 @@ wsServer.on("connection", (ws, req) => {
 
 interface Config {
   port: number;              // 默认 3210
-  dbPath: string;            // 默认 ./data/a2a-chat.db
+  dbPath: string;            // 默认 ./data/agentlink.db
   cors: {
     origin: string[];        // 默认 ["http://localhost:5173"]
   };
@@ -620,7 +627,7 @@ interface AgentConfig {
 }
 ```
 
-配置文件：`a2a-chat.config.ts`（项目根目录，TS 格式，类型安全）
+配置文件：`agentlink.config.ts`（项目根目录，TS 格式，类型安全）
 
 ## 9. 部署
 
@@ -644,7 +651,7 @@ pnpm start        # 启动服务，前端由后端静态托管
 FROM node:22-alpine
 WORKDIR /app
 COPY . .
-RUN pnpm install --frozen-lockfile && pnpm build
+RUN corepack enable && pnpm install --frozen-lockfile && pnpm build
 EXPOSE 3210
 CMD ["node", "packages/server/dist/index.js"]
 ```
@@ -801,7 +808,7 @@ class DifyAdapter implements AgentAdapter {
       },
       body: JSON.stringify({
         query: message,
-        user: "a2a-chat",
+        user: "agentlink",
         conversation_id: context.difyConversationId ?? "",
         response_mode: "streaming",
       }),
@@ -891,10 +898,10 @@ class LangChainAdapter implements AgentAdapter {
 
 ### 11.3 配置方式
 
-用户在 `a2a-chat.config.ts` 中声明要接入哪些 Agent：
+用户在 `agentlink.config.ts` 中声明要接入哪些 Agent：
 
 ```typescript
-import type { AgentConfig } from "@a2a-chat/shared";
+import type { AgentConfig } from "@agentlink/shared";
 
 export interface AppConfig {
   port: number;
@@ -953,24 +960,7 @@ export default {
 
 解析逻辑：
 
-```typescript
-function parseMentions(content: string): {
-  text: string;
-  mentionedAgents: string[];
-} {
-  const regex = /@([\w-]+)/g;
-  const mentionedAgents: string[] = [];
-  let match;
-  while ((match = regex.exec(content)) !== null) {
-    mentionedAgents.push(match[1]);
-  }
-  // 去掉 @mention 部分，返回纯文本
-  const text = content.replace(/@[\w-]+/g, "").replace(/\s+/g, " ").trim();
-  return { text, mentionedAgents };
-}
-```
-
-→ 只路由给被 @ 的 Agent；没 @ 任何 Agent 时，路由给当前会话的活跃 Agent。
+见 §10.3 的 parseMentions 实现。→ 只路由给被 @ 的 Agent；没 @ 任何 Agent 时，路由给当前会话的活跃 Agent。
 
 #### 方式二：Agent 主动调用其他 Agent
 
@@ -1026,7 +1016,7 @@ UI 上 Agent 间的调用以可折叠线程展示，用户可以展开查看每�
 ### 11.5 Adapter 注册流程
 
 ```
-1. 读取 a2a-chat.config.ts
+1. 读取 agentlink.config.ts
 2. 遍历 agents 数组
 3. 对每个 agent:
    a. 根据 type 创建对应 Adapter 实例
@@ -1048,7 +1038,7 @@ UI 上 Agent 间的调用以可折叠线程展示，用户可以展开查看每�
 
 ---
 
-## 12. A2A 触发机制设计
+## 12. A2A 触发机制设计（v0.2 架构预留，MVP 不实现）
 
 ### 12.1 设计目标
 
@@ -1184,7 +1174,7 @@ async function* handleMessageWithTools(
             agent.id,
             args.target_agent_id,
             args.message,
-            { ...context, a2aBus: undefined } // 防止无限递归
+            { ...context, callStack: [...(context.callStack ?? []), agent.id] }
           )) {
             if (subChunk.type === "text" && subChunk.content) {
               resultText += subChunk.content;
@@ -1239,14 +1229,14 @@ Agent (gpt4) 推理过程:
 
 ## 13. 跨设备与跨团队 Agent 协作（FUTURE — v0.3+）
 
-### 12.1 问题背景
+### 13.1 问题背景
 
 当前设计是单机本地部署，但实际场景需要：
 
 - **跨设备**：Agent1 在子涵的 Mac 上，Agent2 在同事的 Mac 上，两台机器的 Agent 需要互相通信
 - **跨团队**：子涵的 Agent 排查出问题，自动 @小明 的 Agent 去修复，小明的 Agent 在另一台机器上
 
-### 12.2 场景一：跨设备数据迁移
+### 13.2 场景一：跨设备数据迁移
 
 ```
 用户: "@Agent1 把你电脑上的数据整理一下，交接给 @Agent2"
@@ -1326,7 +1316,7 @@ DELETE /api/files/:fileId
   - 清理已下载的临时文件
 ```
 
-### 12.3 场景二：跨团队 Agent 协作（群聊 @他人 Agent）
+### 13.3 场景二：跨团队 Agent 协作（群聊 @他人 Agent）
 
 ```
 群聊: 构建发布群
@@ -1397,7 +1387,7 @@ DELETE /api/files/:fileId
 | **权限/审批** | Agent 被调用时可配置：自动接受 / 需主人确认 / 拒绝 |
 | **A2A 调用链展示** | 群聊中 Agent 间的调用以嵌套线程展示，可展开查看详情 |
 
-### 12.4 多设备架构升级
+### 13.4 多设备架构升级
 
 单机 → 多设备需要 Server 升级为"中继站"角色：
 
@@ -1457,7 +1447,7 @@ Agent1 发起 A2A 调用给 Agent2:
 4. 整个调用过程通过 WebSocket 推送给群聊展示
 ```
 
-### 12.5 数据模型扩展
+### 13.5 数据模型扩展
 
 ```sql
 -- 用户表 (新增)
@@ -1487,7 +1477,7 @@ ALTER TABLE agents ADD COLUMN device_id TEXT REFERENCES devices(id);
 -- SELECT a.* FROM agents a JOIN users u ON a.user_id = u.id WHERE u.name = '小明';
 ```
 
-### 12.6 权限与安全
+### 13.6 权限与安全
 
 跨设备/跨用户涉及安全问题，需要权限控制：
 
@@ -1534,7 +1524,7 @@ interface AgentPermission {
 → @xiaoming-agent 开始执行
 ```
 
-### 12.7 群聊消息路由
+### 13.7 群聊消息路由
 
 ```typescript
 // 群聊中的消息路由逻辑
@@ -1640,7 +1630,7 @@ async *handleMessage(message: string, context: ConversationContext) {
 
     // 2. 在群聊中创建消息
     const groupConvId = resolveGroupConversation(intent.group);
-    yield { type: "task_card", task: createTaskCard(intent) };
+    yield { type: "task", content: "", metadata: { task: createTaskCard(intent) } };
 
     // 3. 通过 A2A Bus 调用目标 Agent（在群聊上下文中）
     for await (const chunk of context.a2aBus?.call(
@@ -1650,7 +1640,7 @@ async *handleMessage(message: string, context: ConversationContext) {
       { ...context, conversationId: groupConvId }
     ) ?? []) {
       // 4. 实时更新任务卡片
-      yield { type: "task_update", step: { label: chunk.content, status: "running" } };
+      yield { type: "task_step", content: "", metadata: { step: { label: chunk.content, status: "running" } } };
     }
 
     yield { type: "text", content: "已完成，我来跟进后续..." };

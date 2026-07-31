@@ -49,11 +49,9 @@
 | Agent 适配器接口 | 定义标准接口（先实现一个 LLM adapter） | P0 |
 | mock A2A 调用链 | 用 mock adapter 硬编码一条 A2A 调用链，验证可视化 | P0 |
 | Agent 离线/错误态 | Agent 不可用时的错误展示 | P1 |
-| @提及 | 在聊天中 @某个 Agent | v0.2 |
-| A2A 通信 | 真实 Agent 间通信 | v0.2 |
-| 文件上传 | 图片/文件发送给 Agent | v0.2 |
 
 > MVP 单用户场景，user id 固定为 "user"，无认证。
+> @提及、A2A 通信、文件上传见 v0.2 规划。
 
 ### 2.2 v0.2 规划
 
@@ -64,7 +62,6 @@
 | A2A 通信 | Agent 通过 tool-calling 自主调用其他 Agent |
 | 私聊主场模式 | 私聊为主入口，Agent 代你出击到群聊 |
 | Agent 适配器 | OpenClaw / Dify / LangChain / 裸 LLM API |
-| 消息搜索 | 全文搜索历史消息 |
 
 ### 2.3 v0.3+ 规划（FUTURE）
 
@@ -81,6 +78,8 @@
 ---
 
 ## 3. 用户场景
+
+> 以下场景描述产品完整愿景。MVP (v0.1) 仅实现单 Agent 流式聊天，多 Agent 协作场景需 v0.2+ 才能完整跑通。
 
 ### 3.1 场景一：多 Agent 代码审查
 
@@ -202,13 +201,15 @@ Message (1) ──→ (0..N) Message (A2A 子消息)
 interface Message {
   id: string;
   conversationId: string;
-  from: { type: "user" | "agent"; id: string };
-  to: { type: "user" | "agent"; id: string };
+  fromType: "user" | "agent";
+  fromId: string;
+  toType?: "user" | "agent";
+  toId?: string;
   content: string;
   timestamp: number;
   threadId?: string;        // A2A 线程
   parentId?: string;        // 消息回复链
-  status: "sending" | "thinking" | "streaming" | "done" | "error";
+  status: "sending" | "thinking" | "streaming" | "done" | "partial" | "error";
   metadata?: {
     model?: string;
     tokensUsed?: number;
@@ -229,7 +230,7 @@ interface Message {
 | 存储 | SQLite，零配置 |
 | 浏览器 | Chrome / Safari / Firefox 最新版 |
 | 安全 | 本地运行，MVP 无认证；多用户场景加 Bearer Token |
-| 上下文管理 | history 按 token 数截断（默认保留最近 4000 tokens） |
+| 上下文管理 | history 按 token 数截断（默认保留最近 8000 tokens） |
 
 ---
 
@@ -270,7 +271,7 @@ interface Message {
 
 ## 10. 跨设备与跨团队场景（FUTURE — v0.3+）
 
-### 9.1 场景一：跨设备数据迁移
+### 10.1 场景一：跨设备数据迁移
 
 用户在聊天中让 Agent1 把本机数据整理后交接给另一台设备上的 Agent2：
 
@@ -283,7 +284,7 @@ interface Message {
 - Agent2 在同事的 Mac 上执行：下载 → 解压 → 校验 → 回复完成
 - Agent1 收到确认后回复用户
 
-### 9.2 场景二：跨团队 Agent 协作
+### 10.2 场景二：跨团队 Agent 协作
 
 群聊中 Agent 自动排查问题，找到责任人并 @他的 Agent 修复：
 
@@ -298,7 +299,7 @@ interface Message {
 @zihan-agent: 重新构建 → 成功 → 群里回复
 ```
 
-### 9.3 需要的扩展能力
+### 10.3 需要的扩展能力
 
 | 能力 | 说明 | 优先级 |
 |------|------|:---:|
@@ -315,11 +316,11 @@ interface Message {
 
 ## 11. 私聊为主、群聊为辅的交互模式（FUTURE — v0.2+）
 
-### 10.1 核心理念
+### 11.1 核心理念
 
 用户的日常入口是 **和自己的 Agent 私聊**（1对1），而不是群聊。用户在私聊中发现问题、讨论方案，需要涉及他人时让 Agent 代为出击到群聊。
 
-### 10.2 交互流程
+### 11.2 交互流程
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -345,7 +346,7 @@ interface Message {
 └─────────────────────────────────────────────────────────┘
 ```
 
-### 10.3 设计要点
+### 11.3 设计要点
 
 | 要点 | 说明 |
 |------|------|
@@ -355,7 +356,7 @@ interface Message {
 | **群聊是协作空间** | 群聊只在需要跨团队协作时使用，不作为日常入口 |
 | **任务追踪卡片** | Agent 在群聊的操作实时以卡片形式回传私聊，可展开查看详情 |
 
-### 10.4 消息类型扩展
+### 11.4 消息类型扩展
 
 私聊中嵌入"群聊任务追踪卡片"：
 
@@ -376,7 +377,7 @@ interface Message {
 └──────────────────────────────────────────┘
 ```
 
-### 10.5 场景示例
+### 11.5 场景示例
 
 #### 日常开发
 
