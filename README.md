@@ -43,7 +43,7 @@ pnpm install
 # 方式一：Tauri 桌面客户端开发（推荐）
 pnpm tauri:dev    # 启动 Tauri 桌面端 + Node.js 后端 + 前端热更新
 
-# 方式二：纯 Web 开发（浏览器调试）
+# 方式二：纯 Web 开发（仅用于浏览器调试，正式分发走 Tauri）
 pnpm dev           # 前端 5173 + 后端 3210
 ```
 
@@ -53,7 +53,7 @@ pnpm dev           # 前端 5173 + 后端 3210
 # 构建 Tauri 桌面客户端安装包
 pnpm tauri:build   # 生成 .dmg (macOS) / .msi (Windows) / .AppImage (Linux)
 
-# 或仅构建 Web 版本
+# 或仅构建 Web 版本（调试用）
 pnpm build         # 构建前端 + 编译后端
 pnpm start         # 启动服务，前端由后端静态托管
 ```
@@ -316,7 +316,7 @@ pnpm tauri:build
 
 桌面客户端内置 Node.js 后端（sidecar），用户无需额外安装 Node.js。
 
-### Web 版本（可选）
+### Web 版本（仅用于服务器部署调试，正式分发走 Tauri 桌面客户端）
 
 ```bash
 pnpm build && pnpm start

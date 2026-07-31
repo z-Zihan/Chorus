@@ -665,30 +665,37 @@ interface AgentConfig {
 
 ## 9. 部署
 
-### 本地开发
+### Tauri 桌面客户端开发
 
 ```bash
 pnpm install
-pnpm dev          # 同时启动前端 (5173) 和后端 (3210)
+pnpm tauri:dev    # 启动 Tauri 桌面端 + Node.js 后端 + 前端热更新
 ```
 
-### 生产部署
+> 开发模式下 Tauri 窗口加载 `http://localhost:5173`（Vite dev server），Node.js 后端通过 `pnpm dev` 并行启动。
+
+### Tauri 生产构建
 
 ```bash
+pnpm tauri:build   # 构建前端 + 编译后端 + Tauri 打包
+```
+
+生成平台对应安装包：
+- macOS: `.dmg` / `.app`
+- Windows: `.msi` / `.exe`
+- Linux: `.AppImage` / `.deb`
+
+> 桌面客户端内置 Node.js 后端（sidecar），用户无需额外安装 Node.js。Tauri 启动时自动拉起 Node.js 进程，关闭时自动停止。
+
+### 纯 Web 开发（可选，用于浏览器调试）
+
+```bash
+pnpm dev          # 前端 5173 + 后端 3210
 pnpm build        # 构建前端 + 编译后端
 pnpm start        # 启动服务，前端由后端静态托管
 ```
 
-### Docker
-
-```dockerfile
-FROM node:22-alpine
-WORKDIR /app
-COPY . .
-RUN corepack enable && pnpm install --frozen-lockfile && pnpm build
-EXPOSE 3210
-CMD ["node", "packages/server/dist/index.js"]
-```
+> Web 模式仅用于开发调试，正式分发走 Tauri 桌面客户端。
 
 ## 10. 关键实现细节
 
