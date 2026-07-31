@@ -176,15 +176,53 @@ interface AgentAdapter {
 }
 
 interface StreamChunk {
-  type: "text" | "thinking" | "tool_call" | "done" | "error";
+  type: "text" | "thinking" | "tool_call" | "file" | "done" | "error";
   content: string;
   metadata?: Record<string, unknown>;
+  threadId?: string;           // A2A 调用链 ID，前端据此分组展示
+  sourceAgentId?: string;      // 标识该 chunk 来自哪个 Agent，前端可区分渲染
 }
+
+// ⚠️ StreamChunk.type 只包含数据语义类型。
+// task_card / orchestration 等 UI 概念属于前端渲染层，
+// 由前端根据 StreamChunk 数据自行组装，不在协议中定义。
 
 interface ConversationContext {
   conversationId: string;
-  history: Message[];
+  history: Message[];          // 已做截断处理（见下方策略）
   mentionedAgents?: string[];  // 被 @ 的其他 Agent
+  a2aBus?: A2ABus;             // A2A 消息总线，Agent 可通过它调用其他 Agent
+}
+
+/**
+ * 上下文窗口管理：history 截断策略
+ *
+ * 策略 A（按条数）: 保留最近 N 条消息（默认 N=20）
+ * 策略 B（按 token）: 估算 history 总 token 数，超出阈值时从最早消息开始裁剪
+ *
+ * 最终实现采用两者取小：N 条消息且总 token ≤ maxTokens
+ */
+interface HistoryTruncationConfig {
+  maxMessages: number;     // 默认 20
+  maxTokens: number;       // 默认 8000
+}
+
+function truncateHistory(
+  history: Message[],
+  config: HistoryTruncationConfig
+): Message[] {
+  // 1. 先按条数截断
+  let result = history.slice(-config.maxMessages);
+
+  // 2. 再按 token 估算裁剪（粗略：1 token ≈ 4 chars）
+  const maxChars = config.maxTokens * 4;
+  let totalChars = result.reduce((sum, m) => sum + m.content.length, 0);
+  while (totalChars > maxChars && result.length > 1) {
+    totalChars -= result[0].content.length;
+    result = result.slice(1);
+  }
+
+  return result;
 }
 
 type AgentStatus = "online" | "offline" | "busy" | "error";
@@ -216,6 +254,58 @@ interface A2ABus {
     context: ConversationContext
   ): Promise<StreamChunk[][]>;
 }
+
+/**
+ * A2A Bus 防护机制
+ */
+interface A2ABusOptions {
+  maxDepth: number;          // 最大调用深度，默认 5
+  chainTimeoutMs: number;    // 链总超时，默认 60000 (60s)
+  maxConcurrency: number;    // 单个 Agent 同时被调用的上限，默认 3
+}
+
+// 默认防护参数
+const DEFAULT_A2A_OPTIONS: A2ABusOptions = {
+  maxDepth: 5,
+  chainTimeoutMs: 60_000,
+  maxConcurrency: 3,
+};
+
+// 调用栈追踪（环检测）
+interface CallFrame {
+  agentId: string;
+  callId: string;
+  startedAt: number;
+}
+
+// 环检测：A→B→A 直接拒绝
+function detectCycle(callStack: CallFrame[], targetAgentId: string): boolean {
+  return callStack.some(frame => frame.agentId === targetAgentId);
+}
+
+// 并发计数
+const concurrencyMap = new Map<string, number>();  // agentId → 当前并发数
+function acquireSlot(agentId: string, max: number): boolean {
+  const cur = concurrencyMap.get(agentId) ?? 0;
+  if (cur >= max) return false;
+  concurrencyMap.set(agentId, cur + 1);
+  return true;
+}
+function releaseSlot(agentId: string): void {
+  const cur = concurrencyMap.get(agentId) ?? 0;
+  if (cur <= 1) concurrencyMap.delete(agentId);
+  else concurrencyMap.set(agentId, cur - 1);
+}
+
+// 用户中止：cancel 事件传播
+// 当收到 ClientEvent { type: "cancel", messageId } 时，
+// 向调用链中所有正在执行的 Agent 发送 AbortSignal
+function propagateCancel(threadId: string): void {
+  const controllers = threadControllers.get(threadId);
+  if (!controllers) return;
+  for (const c of controllers) c.abort();
+  threadControllers.delete(threadId);
+}
 ```
 
 ### 4.3 WebSocket 事件
@@ -225,7 +315,8 @@ interface A2ABus {
 type ClientEvent =
   | { type: "message"; conversationId: string; content: string; mentionedAgents?: string[] }
   | { type: "typing"; conversationId: string; isTyping: boolean }
-  | { type: "subscribe"; conversationId: string };
+  | { type: "subscribe"; conversationId: string }
+  | { type: "cancel"; messageId: string };
 
 // 服务端 → 客户端
 type ServerEvent =
@@ -241,7 +332,15 @@ type ServerEvent =
 ## 5. 数据库设计
 
 ```sql
+-- 启用 WAL 模式（并发读写，避免读写锁）
+PRAGMA journal_mode=WAL;
+
+-- 启用外键约束
+PRAGMA foreign_keys=ON;
+
 -- Agent 注册表
+-- 注意: agents.status 不持久化到数据库，只存在于内存 Registry 中。
+-- 数据库只存静态配置，运行时状态由 AgentRegistry 在内存中维护。
 CREATE TABLE agents (
   id          TEXT PRIMARY KEY,
   name        TEXT NOT NULL,
@@ -249,7 +348,6 @@ CREATE TABLE agents (
   avatar      TEXT,
   type        TEXT NOT NULL,           -- 'openai' | 'openclaw' | 'dify' | 'custom'
   config      TEXT,                    -- JSON: API key, model, system prompt 等
-  status      TEXT DEFAULT 'offline',  -- 'online' | 'offline' | 'busy' | 'error'
   created_at  INTEGER NOT NULL,
   updated_at  INTEGER NOT NULL
 );
@@ -281,7 +379,7 @@ CREATE TABLE messages (
   content         TEXT NOT NULL,
   thread_id       TEXT,                -- A2A 线程 ID
   parent_id       TEXT REFERENCES messages(id),
-  status          TEXT DEFAULT 'done', -- 'sending' | 'thinking' | 'streaming' | 'done' | 'error'
+  status          TEXT DEFAULT 'done', -- 'sending' | 'thinking' | 'streaming' | 'done' | 'partial' | 'error'
   metadata        TEXT,                -- JSON
   created_at      INTEGER NOT NULL
 );
@@ -315,15 +413,151 @@ CREATE INDEX idx_messages_parent ON messages(parent_id) WHERE parent_id IS NOT N
 
 事件格式见 [4.3 WebSocket 事件](#43-websocket-事件)
 
+### 6.2.1 断线重连策略
+
+```typescript
+// packages/web/src/services/ws.ts
+
+class ReconnectingWebSocket {
+  private ws: WebSocket | null = null;
+  private lastEventId: string | null = null;
+  private reconnectDelay = 1000;   // 初始 1s
+  private maxReconnectDelay = 30000; // 最大 30s
+  private heartbeatInterval = 30000; // 30s 心跳
+
+  connect(url: string) {
+    this.ws = new WebSocket(url);
+
+    this.ws.onopen = () => {
+      this.reconnectDelay = 1000; // 重置退避
+      this.startHeartbeat();
+      // 重连后补发遗漏的消息
+      if (this.lastEventId) {
+        this.send({ type: "subscribe", conversationId: this.currentConvId, lastEventId: this.lastEventId });
+      }
+    };
+
+    this.ws.onclose = () => {
+      this.stopHeartbeat();
+      this.scheduleReconnect(url);
+    };
+
+    this.ws.onmessage = (e) => {
+      const event = JSON.parse(e.data);
+      if (event.eventId) this.lastEventId = event.eventId;
+      this.handleEvent(event);
+    };
+  }
+
+  // 心跳：每 30s 发送 ping，若 10s 内无 pong 则认为断线
+  private startHeartbeat() {
+    this.heartbeatTimer = setInterval(() => {
+      if (this.ws?.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({ type: "ping" }));
+        // 设置 pong 超时检查
+        this.pongTimeout = setTimeout(() => {
+          this.ws?.close(); // 触发重连
+        }, 10000);
+      }
+    }, this.heartbeatInterval);
+  }
+
+  private scheduleReconnect(url: string) {
+    setTimeout(() => {
+      this.reconnectDelay = Math.min(this.reconnectDelay * 2, this.maxReconnectDelay);
+      this.connect(url);
+    }, this.reconnectDelay);
+  }
+}
+```
+
+**服务端支持 last_event_id 补发：**
+
+```typescript
+// packages/server/src/ws/handler.ts
+// 维护每个会话的最近事件环形缓冲区 (默认 100 条)
+// 客户端重连时携带 lastEventId，服务端补发该 ID 之后的所有事件
+ws.on("message", (data) => {
+  const event = JSON.parse(data);
+  if (event.type === "subscribe" && event.lastEventId) {
+    const missed = eventBuffer.getAfter(event.conversationId, event.lastEventId);
+    for (const e of missed) ws.send(JSON.stringify(e));
+  }
+});
+```
+
+**心跳协议：**
+- 客户端每 30s 发送 `{ type: "ping" }`
+- 服务端收到后立即回复 `{ type: "pong" }`
+- 客户端 10s 内未收到 pong 则主动断开触发重连
+
 ## 7. 安全设计
 
 | 层面 | 方案 |
 |------|------|
-| 认证 | 可选 Bearer Token（默认本地不启用） |
+| 认证 | MVP 单用户：user id 固定为 "user"，不启用认证；多用户场景启用 Bearer Token |
 | CORS | 仅允许 localhost |
 | 输入校验 | Zod schema 验证所有输入 |
 | API Key 存储 | 加密存数据库，不明文返回 |
 | SQL 注入 | Drizzle ORM 参数化查询 |
+
+### 7.1 认证策略
+
+**MVP 单用户场景（默认）：**
+
+```typescript
+// 单用户模式：user id 固定为 "user"，无需认证
+const DEFAULT_USER_ID = "user";
+
+// 所有请求默认绑定到 "user"
+app.addHook("onRequest", async (req) => {
+  req.userId = DEFAULT_USER_ID;
+});
+```
+
+**多用户场景（可选启用）：**
+
+```typescript
+// 启用 Bearer Token 认证
+interface AuthConfig {
+  enabled: boolean;
+  tokens: Map<string, string>;  // token → userId
+}
+
+// 中间件校验
+app.addHook("onRequest", async (req, reply) => {
+  if (!authConfig.enabled) {
+    req.userId = "user";  // 单用户回退
+    return;
+  }
+
+  const auth = req.headers.authorization;
+  if (!auth?.startsWith("Bearer ")) {
+    reply.code(401).send({ error: "Missing token" });
+    return;
+  }
+
+  const token = auth.slice(7);
+  const userId = authConfig.tokens.get(token);
+  if (!userId) {
+    reply.code(403).send({ error: "Invalid token" });
+    return;
+  }
+
+  req.userId = userId;
+});
+
+// WebSocket 连接同样校验
+wsServer.on("connection", (ws, req) => {
+  const token = new URL(req.url, "http://localhost").searchParams.get("token");
+  const userId = authConfig.tokens.get(token ?? "");
+  if (!userId && authConfig.enabled) {
+    ws.close(4001, "Unauthorized");
+    return;
+  }
+  ws.userId = userId ?? "user";
+});
+```
 
 ## 8. 配置
 
@@ -437,7 +671,9 @@ function parseMentions(content: string): {
   while ((match = regex.exec(content)) !== null) {
     mentionedAgents.push(match[1]);
   }
-  return { text: content, mentionedAgents };
+  // 去掉 @mention 部分，返回纯文本
+  const text = content.replace(/@\w[\w-]*/g, "").replace(/\s+/g, " ").trim();
+  return { text, mentionedAgents };
 }
 ```
 
@@ -699,7 +935,9 @@ function parseMentions(content: string): {
   while ((match = regex.exec(content)) !== null) {
     mentionedAgents.push(match[1]);
   }
-  return { text: content, mentionedAgents };
+  // 去掉 @mention 部分，返回纯文本
+  const text = content.replace(/@[\w-]+/g, "").replace(/\s+/g, " ").trim();
+  return { text, mentionedAgents };
 }
 ```
 
@@ -781,7 +1019,196 @@ UI 上 Agent 间的调用以可折叠线程展示，用户可以展开查看每�
 
 ---
 
-## 12. 跨设备与跨团队 Agent 协作
+## 12. A2A 触发机制设计
+
+### 12.1 设计目标
+
+Agent 不依赖用户 @提及，而是通过 LLM tool-calling 自主决定何时调用其他 Agent。
+
+用户只需用自然语言描述需求，Agent 在推理过程中判断是否需要其他 Agent 协助，自动发起 A2A 调用。
+
+### 12.2 Agent 目录注入 System Prompt
+
+启动时，Agent Registry 将所有已注册 Agent 的信息组装为目录文本，注入到每个支持 tool-calling 的 Agent 的 system prompt 中：
+
+```typescript
+// packages/server/src/agent/registry.ts
+
+function buildAgentDirectory(excludeId: string): string {
+  const agents = registry.list()
+    .filter(a => a.id !== excludeId && a.getStatus() !== "offline");
+
+  if (agents.length === 0) return "";
+
+  const lines = agents.map(a =>
+    `- id: "${a.id}", name: "${a.name}", description: "${a.description}"`
+  );
+
+  return `\n## 可调用的 Agent 目录\n\n你可以通过 call_agent 工具调用以下 Agent 协助完成任务:\n\n${lines.join("\n")}\n`;
+}
+
+// 注入到 system prompt
+function buildSystemPrompt(agent: AgentAdapter): string {
+  const base = agent.config.systemPrompt ?? "";
+  const directory = buildAgentDirectory(agent.id);
+  return base + directory;
+}
+```
+
+### 12.3 Tool-Calling Schema 定义
+
+将 `a2aBus.call` 包装为 LLM 可识别的 tool：
+
+```typescript
+// packages/server/src/agent/a2a-tool.ts
+
+interface CallAgentTool {
+  type: "function";
+  function: {
+    name: "call_agent";
+    description: "调用另一个 Agent 处理子任务。仅在你判断需要其他 Agent 协助时调用。";
+    parameters: {
+      type: "object";
+      properties: {
+        target_agent_id: {
+          type: "string";
+          description: "目标 Agent 的 ID，参见 Agent 目录";
+        },
+        message: {
+          type: "string";
+          description: "传递给目标 Agent 的指令/问题";
+        },
+      };
+      required: ["target_agent_id", "message"];
+    };
+  };
+}
+
+// 工具返回值（简化为文本摘要供 LLM 消费）
+interface CallAgentToolResult {
+  output: string;       // 目标 Agent 回复的拼接文本
+  threadId: string;     // 调用链 ID
+  success: boolean;
+  error?: string;
+}
+```
+
+### 12.4 运行时调用流程
+
+```typescript
+// packages/server/src/agent/runtime.ts
+
+async function* handleMessageWithTools(
+  agent: AgentAdapter,
+  message: string,
+  context: ConversationContext
+): AsyncGenerator<StreamChunk> {
+  const systemPrompt = buildSystemPrompt(agent);
+  const tools = [CALL_AGENT_TOOL];
+
+  const stream = await llm.chat.completions.create({
+    model: agent.config.model,
+    messages: [
+      { role: "system", content: systemPrompt },
+      ...context.history.map(m => ({
+        role: m.fromType === "user" ? "user" : "assistant",
+        content: m.content,
+      })),
+      { role: "user", content: message },
+    ],
+    tools,
+    stream: true,
+  });
+
+  let toolCallPending = false;
+
+  for await (const chunk of stream) {
+    const delta = chunk.choices[0]?.delta;
+
+    // 普通文本输出
+    if (delta?.content) {
+      yield { type: "text", content: delta.content, sourceAgentId: agent.id };
+    }
+
+    // LLM 决定调用 tool
+    if (delta?.tool_calls) {
+      toolCallPending = true;
+      // 收集 tool call 参数（流式分片需要拼接）
+      const toolCall = collectToolCall(delta.tool_calls);
+
+      if (toolCall.function.name === "call_agent") {
+        const args = JSON.parse(toolCall.function.arguments);
+
+        yield {
+          type: "tool_call",
+          content: `调用 Agent: ${args.target_agent_id}`,
+          sourceAgentId: agent.id,
+          metadata: { tool: "call_agent", args },
+        };
+
+        // 执行 A2A 调用
+        if (context.a2aBus) {
+          const threadId = crypto.randomUUID();
+          let resultText = "";
+
+          for await (const subChunk of context.a2aBus.call(
+            agent.id,
+            args.target_agent_id,
+            args.message,
+            { ...context, a2aBus: undefined } // 防止无限递归
+          )) {
+            if (subChunk.type === "text" && subChunk.content) {
+              resultText += subChunk.content;
+            }
+            yield { ...subChunk, threadId, sourceAgentId: args.target_agent_id };
+          }
+
+          // 将结果喂回 LLM 继续推理
+          // (实际实现中需要将 resultText 作为 tool result 发回 LLM)
+        }
+      }
+    }
+  }
+
+  yield { type: "done", content: "" };
+}
+```
+
+### 12.5 触发示例
+
+```
+用户: "帮我写一个用户注册接口，要包含输入校验和安全检查"
+
+Agent (gpt4) 推理过程:
+  1. 分析任务: 需要写代码 + 安全审查
+  2. 发现 Agent 目录中有 "security-checker"
+  3. 调用 call_agent(target="security-checker", message="审查以下注册接口的安全性...")
+  4. 收到安全审查结果
+  5. 根据反馈修改代码
+  6. 输出最终结果
+```
+
+前端展示:
+
+```
+┌─────────────────────────────────────────┐
+│ 🤖 GPT-4o                               │
+│                                         │
+│ 我来帮你写用户注册接口...                │
+│                                         │
+│ 🔧 调用 Agent: security-checker         │
+│ ┌─────────────────────────────────────┐ │
+│ │ 🤖 security-checker                 │ │
+│ │ 该接口存在以下安全问题:              │ │
+│ │ 1. 密码未加盐                        │ │
+│ │ 2. 缺少速率限制                      │ │
+│ └─────────────────────────────────────┘ │
+│                                         │
+│ 根据安全建议，已修改...                  │
+└─────────────────────────────────────────┘
+```
+
+## 13. 跨设备与跨团队 Agent 协作
 
 ### 12.1 问题背景
 
@@ -1108,9 +1535,9 @@ interface GroupConversation extends Conversation {
 
 ---
 
-## 13. 私聊为主、群聊为辅的交互设计
+## 14. 私聊为主、群聊为辅的交互设计
 
-### 13.1 架构模型
+### 14.1 架构模型
 
 ```
 ┌──────────────────────────────────────────────────────────┐
@@ -1132,7 +1559,7 @@ interface GroupConversation extends Conversation {
 └──────────────────────────────────────────────────────────┘
 ```
 
-### 13.2 私聊中的群聊任务卡片
+### 14.2 私聊中的群聊任务卡片
 
 Agent 在群聊执行操作时，私聊中实时展示任务追踪卡片：
 
@@ -1165,7 +1592,7 @@ type ServerEvent =
   | { type: "task_update"; taskId: string; step: TaskStep; conversationId: string };
 ```
 
-### 13.3 "代你出击"的实现
+### 14.3 "代你出击"的实现
 
 用户在私聊中说"去群里 @他"，Agent 的处理流程：
 
@@ -1201,7 +1628,7 @@ async *handleMessage(message: string, context: ConversationContext) {
 }
 ```
 
-### 13.4 会话模型
+### 14.4 会话模型
 
 ```typescript
 // 私聊会话
@@ -1228,7 +1655,7 @@ interface ConversationList {
 }
 ```
 
-### 13.5 前端界面设计
+### 14.5 前端界面设计
 
 ```
 ┌─────────────┬──────────────────────────────────────────┐
@@ -1255,7 +1682,7 @@ interface ConversationList {
 └─────────────┴──────────────────────────────────────────┘
 ```
 
-### 13.6 任务编排卡片
+### 14.6 任务编排卡片
 
 Agent 执行多步骤任务时，在私聊中展示编排进度：
 
@@ -1283,7 +1710,7 @@ interface OrchestrationStep {
 }
 ```
 
-### 13.7 路由策略
+### 14.7 路由策略
 
 ```
 用户在私聊中发送消息:
