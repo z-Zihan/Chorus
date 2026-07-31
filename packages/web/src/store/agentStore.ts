@@ -1,23 +1,8 @@
 import { create } from "zustand";
+import type { Agent, AgentStatus } from "@agentlink/shared";
 import { api } from "@/services/api";
 
-export type AgentStatus = "online" | "offline" | "busy" | "error";
-
-export interface Agent {
-  id: string;
-  name: string;
-  description: string | null;
-  avatar: string | null;
-  type: string;
-  status: AgentStatus;
-  config?: {
-    model?: string;
-    systemPrompt?: string;
-    [key: string]: unknown;
-  };
-  createdAt: number;
-  updatedAt: number;
-}
+export type { Agent, AgentStatus } from "@agentlink/shared";
 
 interface AgentState {
   agents: Agent[];

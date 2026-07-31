@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
+import type { ClientEvent, Message, ServerEvent } from "@agentlink/shared";
 import { useChatStore } from "@/store/chatStore";
 import { useAgentStore } from "@/store/agentStore";
-import type { ServerEvent } from "@/services/api";
 
 const RECONNECT_BASE = 1000;
 const RECONNECT_MAX = 30000;
@@ -18,11 +18,20 @@ export function useWebSocket() {
   const addMessage = useChatStore((s) => s.addMessage);
   const appendStreamChunk = useChatStore((s) => s.appendStreamChunk);
   const setMessageStatus = useChatStore((s) => s.setMessageStatus);
+  const setWebSocketSend = useChatStore((s) => s.setWebSocketSend);
   const currentConversationId = useChatStore((s) => s.currentConversationId);
   const updateAgentStatus = useAgentStore((s) => s.updateAgentStatus);
 
   useEffect(() => {
     let mounted = true;
+
+    const sendEvent = (event: ClientEvent): boolean => {
+      const ws = wsRef.current;
+      if (ws?.readyState !== WebSocket.OPEN) return false;
+      ws.send(JSON.stringify(event));
+      return true;
+    };
+    setWebSocketSend(sendEvent);
 
     const stopHeartbeat = () => {
       if (heartbeatTimer.current) clearInterval(heartbeatTimer.current);
@@ -47,30 +56,22 @@ export function useWebSocket() {
 
       switch (event.type) {
         case "message":
-          if (event.message?.conversationId === currentConversationId) {
+          if (event.message.conversationId === useChatStore.getState().currentConversationId) {
             addMessage(event.message);
           }
           break;
 
         case "stream": {
           const { messageId, chunk } = event;
-          if (!messageId || !chunk) break;
+          const chatState = useChatStore.getState();
+          const targetMessage = chatState.messages.find((message) => message.id === messageId);
+          if (
+            !targetMessage ||
+            targetMessage.conversationId !== chatState.currentConversationId
+          ) break;
           if (chunk.type === "text") {
             appendStreamChunk(messageId, chunk.content);
           } else if (chunk.type === "thinking") {
-            const msgs = useChatStore.getState().messages;
-            if (!msgs.find((m) => m.id === messageId)) {
-              addMessage({
-                id: messageId,
-                conversationId: currentConversationId ?? "",
-                fromType: "agent",
-                fromId: chunk.sourceAgentId ?? "agent",
-                content: "",
-                timestamp: Date.now(),
-                status: "thinking",
-                threadId: chunk.threadId,
-              });
-            }
             setMessageStatus(messageId, "thinking");
           } else if (chunk.type === "done") {
             setMessageStatus(messageId, "done");
@@ -81,10 +82,10 @@ export function useWebSocket() {
         }
 
         case "a2a_call":
-          if (event.threadId) {
+          if (!useChatStore.getState().messages.some((message) => message.id === `${event.threadId}-call`)) {
             addMessage({
-              id: crypto.randomUUID(),
-              conversationId: currentConversationId ?? "",
+              id: `${event.threadId}-call`,
+              conversationId: useChatStore.getState().currentConversationId ?? "",
               fromType: "agent",
               fromId: event.from ?? "",
               toType: "agent",
@@ -98,8 +99,37 @@ export function useWebSocket() {
           break;
 
         case "a2a_response":
-          if (event.threadId && event.chunk?.content) {
-            appendStreamChunk(event.threadId + "-response", event.chunk.content);
+          {
+            const responseId = `${event.threadId}-response`;
+            const chatState = useChatStore.getState();
+            const call = chatState.messages.find((message) =>
+              message.threadId === event.threadId && message.id.endsWith("-call")
+            );
+            const existing = chatState.messages.find((message) => message.id === responseId);
+            const status: Message["status"] = event.chunk.type === "error"
+              ? "error"
+              : event.chunk.type === "done"
+                ? "done"
+                : "streaming";
+
+            if (!existing) {
+              addMessage({
+                id: responseId,
+                conversationId: call?.conversationId ?? chatState.currentConversationId ?? "",
+                fromType: "agent",
+                fromId: event.chunk.sourceAgentId ?? call?.toId ?? "agent",
+                toType: "agent",
+                toId: call?.fromId,
+                content: event.chunk.content,
+                timestamp: Date.now(),
+                threadId: event.threadId,
+                parentId: call?.id,
+                status,
+              });
+            } else {
+              if (event.chunk.content) appendStreamChunk(responseId, event.chunk.content);
+              if (status !== "streaming") setMessageStatus(responseId, status);
+            }
           }
           break;
 
@@ -165,11 +195,15 @@ export function useWebSocket() {
       mounted = false;
       stopHeartbeat();
       wsRef.current?.close();
+      if (useChatStore.getState().webSocketSend === sendEvent) {
+        setWebSocketSend(null);
+      }
     };
   }, [
     addMessage,
     appendStreamChunk,
     setMessageStatus,
+    setWebSocketSend,
     currentConversationId,
     updateAgentStatus,
   ]);

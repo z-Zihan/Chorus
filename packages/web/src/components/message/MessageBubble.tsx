@@ -58,7 +58,7 @@ export function MessageBubble({ message, agentName, agentAvatar }: Props) {
 
         {/* Content */}
         <div
-          className={`text-sm leading-relaxed ${
+          className={`text-sm leading-relaxed [&_code]:rounded [&_code]:bg-gray-700/60 [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-xs [&_pre_code]:bg-transparent [&_pre_code]:p-0 ${
             isStreaming ? "typing-cursor" : ""
           }`}
         >
@@ -70,14 +70,6 @@ export function MessageBubble({ message, agentName, agentAvatar }: Props) {
                   {children}
                 </pre>
               ),
-              code: ({ inline, children }) =>
-                inline ? (
-                  <code className="rounded bg-gray-700/60 px-1 py-0.5 text-xs">
-                    {children}
-                  </code>
-                ) : (
-                  <code>{children}</code>
-                ),
               a: ({ href, children }) => (
                 <a
                   href={href}
@@ -88,8 +80,6 @@ export function MessageBubble({ message, agentName, agentAvatar }: Props) {
                   {children}
                 </a>
               ),
-              // Fix type mismatch with react-markdown v9
-              // @ts-expect-error - inline prop exists at runtime
             }}
           >
             {message.content || " "}

@@ -1,71 +1,6 @@
+import type { Agent, AgentConfig, Conversation, Message } from "@agentlink/shared";
+
 const API_BASE = "/api";
-
-// ===== Types =====
-
-export interface StreamChunk {
-  type: "text" | "thinking" | "tool_call" | "file" | "done" | "error";
-  content: string;
-  metadata?: Record<string, unknown>;
-  threadId?: string;
-  sourceAgentId?: string;
-}
-
-export interface ServerEvent {
-  type:
-    | "message"
-    | "stream"
-    | "a2a_call"
-    | "a2a_response"
-    | "agent_status"
-    | "typing"
-    | "error"
-    | "pong";
-  eventId?: string;
-  message?: import("@/store/chatStore").Message;
-  messageId?: string;
-  chunk?: StreamChunk;
-  from?: string;
-  to?: string;
-  threadId?: string;
-  agentId?: string;
-  status?: import("@/store/agentStore").AgentStatus;
-  conversationId?: string;
-  isTyping?: boolean;
-}
-
-interface Conversation {
-  id: string;
-  title: string | null;
-  type: "dm" | "channel" | "group";
-  createdAt: number;
-  updatedAt: number;
-}
-
-interface Message {
-  id: string;
-  conversationId: string;
-  fromType: "user" | "agent";
-  fromId: string;
-  toType?: "user" | "agent";
-  toId?: string;
-  content: string;
-  timestamp: number;
-  threadId?: string;
-  parentId?: string;
-  status: "sending" | "thinking" | "streaming" | "done" | "partial" | "error";
-  metadata?: Record<string, unknown>;
-}
-
-interface Agent {
-  id: string;
-  name: string;
-  description: string | null;
-  avatar: string | null;
-  type: string;
-  config?: Record<string, unknown>;
-  createdAt: number;
-  updatedAt: number;
-}
 
 // ===== API =====
 
@@ -93,12 +28,12 @@ export const api = {
   // Agents
   getAgents: () => request<Agent[]>("/agents"),
   getAgent: (id: string) => request<Agent>(`/agents/${id}`),
-  createAgent: (data: Partial<Agent>) =>
+  createAgent: (data: AgentConfig) =>
     request<Agent>("/agents", {
       method: "POST",
       body: JSON.stringify(data),
     }),
-  updateAgent: (id: string, data: Partial<Agent>) =>
+  updateAgent: (id: string, data: Partial<Pick<AgentConfig, "name" | "description" | "avatar" | "config">>) =>
     request<Agent>(`/agents/${id}`, {
       method: "PATCH",
       body: JSON.stringify(data),
