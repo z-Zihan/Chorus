@@ -1,6 +1,6 @@
 # AgentLink — 技术设计文档
 
-> 版本: v1.0 | 日期: 2026-07-31
+> 版本: v1.1 | 日期: 2026-08-01
 
 ## 1. 系统架构
 
@@ -89,7 +89,7 @@ agentlink/
 │   │   │   │       ├── openai.ts   # OpenAI API 适配器
 │   │   │   │       ├── openclaw.ts # OpenClaw 适配器
 │   │   │   │       ├── dify.ts     # Dify 适配器
-│   │   │   │       └── mock.ts     # 测试用 Mock 适配器
+│   │   │   │       └── mock.ts     # 测试用 Mock 适配器（不用于生产）
 │   │   │   ├── db/                 # 数据库
 │   │   │   │   ├── schema.ts       # Drizzle schema
 │   │   │   │   ├── index.ts        # 数据库实例
@@ -650,7 +650,7 @@ interface Config {
 interface AgentConfig {
   id: string;
   name: string;
-  type: "openai" | "openclaw" | "dify" | "cli" | "mock" | "custom";
+  type: "openai" | "openclaw" | "dify" | "cli" | "mock" | "custom"; // mock 仅用于测试
   config: {
     apiKey?: string;
     model?: string;
