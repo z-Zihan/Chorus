@@ -27,28 +27,35 @@
 
 - Node.js ≥ 22 LTS
 - pnpm ≥ 9
+- Rust ≥ 1.75（Tauri 2.x 需要）
+- macOS / Windows / Linux
 
 ### 安装 & 运行
 
 ```bash
 # 克隆仓库
-git clone https://github.com/yourname/agentlink.git
-cd agentlink
+git clone https://github.com/z-Zihan/agent-link.git
+cd agent-link
 
 # 安装依赖
 pnpm install
 
-# 启动开发服务（前端 5173 + 后端 3210 同时启动）
-pnpm dev
-```
+# 方式一：Tauri 桌面客户端开发（推荐）
+pnpm tauri:dev    # 启动 Tauri 桌面端 + Node.js 后端 + 前端热更新
 
-打开浏览器访问 [http://localhost:5173](http://localhost:5173) 即可使用。
+# 方式二：纯 Web 开发（浏览器调试）
+pnpm dev           # 前端 5173 + 后端 3210
+```
 
 ### 生产构建
 
 ```bash
-pnpm build    # 构建前端 + 编译后端
-pnpm start    # 启动服务，前端由后端静态托管
+# 构建 Tauri 桌面客户端安装包
+pnpm tauri:build   # 生成 .dmg (macOS) / .msi (Windows) / .AppImage (Linux)
+
+# 或仅构建 Web 版本
+pnpm build         # 构建前端 + 编译后端
+pnpm start         # 启动服务，前端由后端静态托管
 ```
 
 ## 项目结构
@@ -89,6 +96,16 @@ agentlink/
 │       ├── index.html
 │       ├── vite.config.ts
 │       └── package.json
+├── src-tauri/               # Tauri 桌面端（Rust）
+│   ├── Cargo.toml
+│   ├── tauri.conf.json
+│   ├── src/
+│   │   ├── main.rs           # Tauri 入口
+│   │   └── lib.rs            # Tauri commands + Node.js sidecar 管理
+│   ├── capabilities/
+│   └── icons/
+├── scripts/
+│   └── gen-placeholder-icons.py  # 图标生成
 ├── pnpm-workspace.yaml
 ├── package.json
 └── README.md
@@ -282,3 +299,27 @@ pnpm typecheck        # 类型检查
 ## License
 
 MIT
+
+
+## 部署 / Deployment
+
+### Tauri 桌面客户端（推荐）
+
+```bash
+pnpm tauri:build
+```
+
+生成平台对应安装包：
+- macOS: `.dmg` / `.app`
+- Windows: `.msi` / `.exe`
+- Linux: `.AppImage` / `.deb`
+
+桌面客户端内置 Node.js 后端（sidecar），用户无需额外安装 Node.js。
+
+### Web 版本（可选）
+
+```bash
+pnpm build && pnpm start
+```
+
+通过浏览器访问 `http://localhost:3210`，适合服务器部署场景。
