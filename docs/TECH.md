@@ -1,4 +1,4 @@
-# A2A Agent Chat — 技术设计文档
+# AgentLink — 技术设计文档
 
 > 版本: v1.0 | 日期: 2026-07-31
 
@@ -713,7 +713,7 @@ function parseMentions(content: string): {
 ### 11.1 接入原理
 
 ```
-用户消息 → A2A Chat Server → Agent Adapter → 实际 Agent 后端
+用户消息 → AgentLink Server → Agent Adapter → 实际 Agent 后端
                               ↑
                      统一接口，不管后端是什么
 ```
@@ -764,7 +764,7 @@ class OpenClawAdapter implements AgentAdapter {
         sessionKey: this.sessionKey,
       }),
     });
-    // 读取 SSE 流，转发给 A2A Chat
+    // 读取 SSE 流，转发给 AgentLink
     const reader = res.body!.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
@@ -1259,7 +1259,7 @@ Agent (gpt4) 推理过程:
 │ 3. 上传中转   │ ←──确认────────  │ 6. 回复完成   │
 └──────────────┘                   └──────────────┘
         │                                  │
-        └──────── A2A Chat Server ─────────┘
+        └──────── AgentLink Server ─────────┘
                    (中转 + 寻址)
 ```
 
@@ -1267,15 +1267,15 @@ Agent (gpt4) 推理过程:
 
 ```
 1. 用户发送: "@Agent1 把数据整理一下交接给 @Agent2"
-2. A2A Chat Server 解析 @提及，路由给 Agent1
+2. AgentLink Server 解析 @提及，路由给 Agent1
 3. Agent1 执行:
    a. 扫描本地目录，筛选需要迁移的数据
    b. 打包压缩为 zip
-   c. 上传到 A2A Chat Server 中转存储 (POST /api/files/upload)
+   c. 上传到 AgentLink Server 中转存储 (POST /api/files/upload)
    d. 获得 fileId
    e. 通过 A2A Bus 调用 Agent2:
       "数据迁移请求，fileId: {fileId}, 包含 {N} 个文件, 大小: {size}"
-4. A2A Chat Server 转发 A2A 调用到 Agent2 所在的设备
+4. AgentLink Server 转发 A2A 调用到 Agent2 所在的设备
 5. Agent2 执行:
    a. 从中转存储下载文件 (GET /api/files/{fileId})
    b. 解压到本地指定目录
@@ -1403,7 +1403,7 @@ DELETE /api/files/:fileId
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│                  A2A Chat Server (中继)                   │
+│                  AgentLink Server (中继)                   │
 │                                                          │
 │  ┌─────────────┐  ┌──────────────┐  ┌───────────────┐   │
 │  │ Agent 目录   │  │ 文件中转存储  │  │ 消息路由表     │   │
