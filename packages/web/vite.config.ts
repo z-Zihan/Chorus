@@ -12,6 +12,7 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    strictPort: true,
     proxy: {
       "/api": {
         target: "http://localhost:3210",
@@ -22,5 +23,9 @@ export default defineConfig({
         ws: true,
       },
     },
+  },
+  // Ensure clear separation between Tauri and web builds
+  build: {
+    outDir: "dist",
   },
 });

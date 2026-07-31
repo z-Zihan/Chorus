@@ -49,6 +49,8 @@
 | Monorepo | pnpm workspace | 9 | 前后端统一管理 |
 | 语言 | TypeScript | 5.5 | 全栈类型安全 |
 | 运行时 | Node.js | 22 LTS | 稳定，长期支持 |
+| 桌面框架 | Tauri | 2.x | 轻量跨平台桌面端（WebView + Rust） |
+| 桌面语言 | Rust | 2021 edition | Tauri 后端，Node.js 进程管理 |
 
 ## 3. 项目结构
 

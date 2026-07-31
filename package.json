@@ -8,11 +8,14 @@
   },
   "scripts": {
     "dev": "concurrently -k -n server,web -c magenta,cyan \"pnpm --filter @agentlink/server dev\" \"pnpm --filter @agentlink/web dev\"",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "pnpm build && tauri build",
     "build": "pnpm --filter @agentlink/shared build && pnpm --filter @agentlink/server build && pnpm --filter @agentlink/web build",
     "typecheck": "pnpm -r typecheck",
     "start": "pnpm --filter @agentlink/server start"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0",
     "concurrently": "^9.2.0",
     "typescript": "^5.8.3"
   }

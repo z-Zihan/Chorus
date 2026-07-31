@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import type { ClientEvent, Message, ServerEvent } from "@agentlink/shared";
 import { useChatStore } from "@/store/chatStore";
 import { useAgentStore } from "@/store/agentStore";
+import { getWsUrl } from "@/services/env";
 
 const RECONNECT_BASE = 1000;
 const RECONNECT_MAX = 30000;
@@ -167,8 +168,8 @@ export function useWebSocket() {
 
     const connect = () => {
       if (!mounted) return;
-      const protocol = location.protocol === "https:" ? "wss:" : "ws:";
-      const ws = new WebSocket(`${protocol}//${location.host}/ws`);
+      const wsUrl = getWsUrl();
+      const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
       ws.onopen = () => {

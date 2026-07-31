@@ -1,6 +1,5 @@
 import type { Agent, AgentConfig, Conversation, Message } from "@agentlink/shared";
-
-const API_BASE = "/api";
+import { getApiBaseUrl } from "./env";
 
 // ===== API =====
 
@@ -8,7 +7,7 @@ async function request<T>(
   path: string,
   options?: RequestInit
 ): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await fetch(`${getApiBaseUrl()}${path}`, {
     headers: { "Content-Type": "application/json" },
     ...options,
   });
