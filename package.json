@@ -1,0 +1,19 @@
+{
+  "name": "agentlink",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@9.15.9",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n server,web -c magenta,cyan \"pnpm --filter @agentlink/server dev\" \"pnpm --filter @agentlink/web dev\"",
+    "build": "pnpm --filter @agentlink/shared build && pnpm --filter @agentlink/server build && pnpm --filter @agentlink/web build",
+    "typecheck": "pnpm -r typecheck",
+    "start": "pnpm --filter @agentlink/server start"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.0",
+    "typescript": "^5.8.3"
+  }
+}
