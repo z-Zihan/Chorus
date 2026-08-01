@@ -110,6 +110,8 @@ export function MessageList() {
       <div
         ref={scrollRef}
         onScroll={handleScroll}
+        role="log"
+        aria-live="polite"
         className="h-full overflow-y-auto px-4 py-4 md:px-6"
       >
         <div className="mx-auto flex max-w-4xl flex-col gap-4">

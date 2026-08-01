@@ -9,6 +9,8 @@ import { useWebSocket } from "@/hooks/useWebSocket";
 import { ErrorBoundary } from "@/components/common/ErrorBoundary";
 import { ToastContainer } from "@/components/common/ToastContainer";
 import { useUIStore } from "@/store/uiStore";
+import { useHotkeys } from "@/hooks/useHotkey";
+import { logger } from "@/utils/logger";
 
 export default function App() {
   const { t } = useTranslation(["common", "chat", "errors"]);
@@ -19,8 +21,30 @@ export default function App() {
   const isSidebarOpen = useUIStore((s) => s.isSidebarOpen);
   const openSidebar = useUIStore((s) => s.openSidebar);
   const closeSidebar = useUIStore((s) => s.closeSidebar);
+  const agents = useAgentStore((s) => s.agents);
+  const selectedAgentId = useAgentStore((s) => s.selectedAgentId);
+  const selectAgent = useAgentStore((s) => s.selectAgent);
+  const clearSelectedAgent = useAgentStore((s) => s.clearSelectedAgent);
 
   useWebSocket();
+
+  useHotkeys([
+    { key: "Ctrl+K", callback: () => logger.info("Search shortcut invoked") },
+    {
+      key: "Ctrl+,",
+      callback: () => {
+        if (selectedAgentId) clearSelectedAgent();
+        else if (agents[0]) selectAgent(agents[0].id);
+      },
+    },
+    {
+      key: "Escape",
+      callback: () => {
+        clearSelectedAgent();
+        closeSidebar();
+      },
+    },
+  ], [agents, selectedAgentId, selectAgent, clearSelectedAgent, closeSidebar]);
 
   // Init: load agents & conversations on mount
   useEffect(() => {

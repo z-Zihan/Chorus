@@ -4,6 +4,8 @@ import { api } from "@/services/api";
 import { useAgentStore } from "@/store/agentStore";
 import { useUIStore } from "@/store/uiStore";
 import i18n from "@/i18n";
+import { track } from "@/utils/analytics";
+import { logger } from "@/utils/logger";
 
 export type { Conversation, Message } from "@agentlink/shared";
 
@@ -81,6 +83,8 @@ export const useChatStore = create<ChatState>((set, get) => {
         streamingMessageId: null,
       }));
       useUIStore.getState().addToast(i18n.t("errors:agentTimeout"), "error");
+      logger.error("Agent response timed out", { messageId: targetId });
+      track("error_occurred", { message: "Agent response timed out", source: "chat_store", lineno: 0 });
       clearStreamTimer();
     }, STREAM_TIMEOUT_MS);
   };
@@ -103,7 +107,7 @@ export const useChatStore = create<ChatState>((set, get) => {
           get().setCurrentConversation(data[0].id);
         }
       } catch (e) {
-        console.error("Failed to fetch conversations:", e);
+        logger.error("Failed to fetch conversations", e);
       }
     },
 
@@ -127,7 +131,7 @@ export const useChatStore = create<ChatState>((set, get) => {
         set({ messages: data });
       }
     } catch (e) {
-      console.error("Failed to fetch messages:", e);
+      logger.error("Failed to fetch messages", e);
     } finally {
       if (
         requestId === messagesRequestId &&
@@ -169,6 +173,7 @@ export const useChatStore = create<ChatState>((set, get) => {
       messages: [...state.messages, userMsg],
       isStreaming: true,
     }));
+    track("message_sent", { conversationId: convId, transport: get().webSocketSend ? "websocket" : "http" });
     armStreamTimer(userMsg.id);
 
     const sent = get().webSocketSend?.({
@@ -188,7 +193,8 @@ export const useChatStore = create<ChatState>((set, get) => {
       set({ isStreaming: false, streamingMessageId: null });
     } catch (error) {
       if (!(error instanceof DOMException && error.name === "AbortError")) {
-        console.error("Failed to send message:", error);
+        logger.error("Failed to send message", error);
+        track("error_occurred", { message: "Failed to send message", source: "chat_store", lineno: 0 });
         clearStreamTimer();
         get().setMessageStatus(userMsg.id, "error");
         set({ isStreaming: false, streamingMessageId: null });
@@ -290,14 +296,16 @@ export const useChatStore = create<ChatState>((set, get) => {
           messages: [],
           isLoadingMessages: false,
         }));
+        track("conversation_created", { conversationId: conv.id });
       } catch (e) {
-        console.error("Failed to create conversation:", e);
+        logger.error("Failed to create conversation", e);
       }
     },
 
     deleteConversation: async (id) => {
       try {
         await api.deleteConversation(id);
+        track("conversation_deleted", { conversationId: id });
         const state = get();
         const deletedIndex = state.conversations.findIndex(
           (conversation) => conversation.id === id
@@ -331,7 +339,7 @@ export const useChatStore = create<ChatState>((set, get) => {
         }
         return true;
       } catch (e) {
-        console.error("Failed to delete conversation:", e);
+        logger.error("Failed to delete conversation", e);
         return false;
       }
     },

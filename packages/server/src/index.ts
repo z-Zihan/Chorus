@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import Fastify from "fastify";
+import type { FastifyBaseLogger } from "fastify";
 import cors from "@fastify/cors";
 import staticPlugin from "@fastify/static";
 import websocket from "@fastify/websocket";
@@ -12,6 +13,20 @@ import { AgentRuntime } from "./agent/runtime.js";
 import { EventHub } from "./ws/events.js";
 import { registerWebSocket } from "./ws/handler.js";
 import { registerRoutes } from "./routes/index.js";
+import { flushAnalytics, track } from "./analytics.js";
+import { logger } from "./utils/logger.js";
+
+process.on("uncaughtException", (error) => {
+  logger.fatal({ err: error }, "Uncaught exception");
+  track("error", { message: error.message, source: "uncaughtException" });
+  void flushAnalytics().finally(() => process.exit(1));
+});
+
+process.on("unhandledRejection", (reason) => {
+  const error = reason instanceof Error ? reason : new Error(String(reason));
+  logger.error({ err: error }, "Unhandled promise rejection");
+  track("error", { message: error.message, source: "unhandledRejection" });
+});
 
 async function main(): Promise<void> {
   const { config, rootDir } = await loadConfig();
@@ -25,8 +40,16 @@ async function main(): Promise<void> {
   const events = new EventHub();
   const runtime = new AgentRuntime(repository, registry, events, config);
 
-  const app = Fastify({
-    logger: { level: process.env.SERVER_LOG_LEVEL?.trim() || "info" },
+  const app = Fastify({ loggerInstance: logger as FastifyBaseLogger });
+
+  app.addHook("onRequest", async (request) => {
+    request.log.info({ method: request.method, url: request.url }, "Request received");
+  });
+  app.addHook("onResponse", async (request, reply) => {
+    request.log.info(
+      { method: request.method, url: request.url, statusCode: reply.statusCode },
+      "Request completed",
+    );
   });
 
   await app.register(cors, { origin: config.cors.origin });
@@ -62,6 +85,8 @@ async function main(): Promise<void> {
 }
 
 main().catch((err) => {
-  console.error("Fatal startup error:", err);
+  const error = err instanceof Error ? err : new Error(String(err));
+  logger.fatal({ err: error }, "Fatal startup error");
+  track("error", { message: error.message, source: "startup" });
   process.exit(1);
 });

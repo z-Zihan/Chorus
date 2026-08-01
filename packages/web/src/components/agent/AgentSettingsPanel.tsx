@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import type { Agent } from "@agentlink/shared";
-import { X } from "lucide-react";
+import { FileText, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { AgentAvatar } from "@/components/agent/AgentAvatar";
 import { PasswordInput } from "@/components/common/PasswordInput";
+import { LogViewer } from "@/components/common/LogViewer";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -18,6 +19,7 @@ import { STATUS_COLORS } from "@/constants/agent";
 import { changeLanguage, currentLanguage, type AppLanguage } from "@/i18n";
 import { getThemePreference, setThemePreference, type ThemePreference } from "@/services/theme";
 import { useAgentStore } from "@/store/agentStore";
+import { track } from "@/utils/analytics";
 
 type AgentWithConfig = Agent & { config?: Record<string, unknown> };
 
@@ -43,6 +45,7 @@ export function AgentSettingsPanel() {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [theme, setTheme] = useState<ThemePreference>(getThemePreference);
+  const [isLogViewerOpen, setIsLogViewerOpen] = useState(false);
 
   useEffect(() => {
     if (!selectedAgent) return;
@@ -80,6 +83,7 @@ export function AgentSettingsPanel() {
         description: description.trim(),
         ...(Object.keys(config).length > 0 ? { config } : {}),
       });
+      track("settings_changed", { section: "agent", agentId: displayedAgent.id });
       clearSelectedAgent();
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : t("errors:saveFailed"));
@@ -211,6 +215,7 @@ export function AgentSettingsPanel() {
                   onValueChange={(preference: ThemePreference) => {
                     setTheme(preference);
                     setThemePreference(preference);
+                    track("settings_changed", { section: "theme", value: preference });
                   }}
                 >
                   <SelectTrigger>
@@ -229,7 +234,10 @@ export function AgentSettingsPanel() {
                 </span>
                 <Select
                   value={currentLanguage()}
-                  onValueChange={(language: AppLanguage) => void changeLanguage(language)}
+                  onValueChange={(language: AppLanguage) => {
+                    track("settings_changed", { section: "language", value: language });
+                    void changeLanguage(language);
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -240,6 +248,19 @@ export function AgentSettingsPanel() {
                   </SelectContent>
                 </Select>
               </label>
+            </fieldset>
+
+            <fieldset className="rounded-xl border border-[var(--border-color)] p-4">
+              <legend className="px-1 text-sm font-semibold text-[var(--text-primary)]">
+                {t("settings:diagnostics")}
+              </legend>
+              <p className="mb-3 text-xs leading-5 text-[var(--text-muted)]">
+                {t("settings:logs.description")}
+              </p>
+              <Button variant="secondary" onClick={() => setIsLogViewerOpen(true)}>
+                <FileText aria-hidden="true" className="h-4 w-4" />
+                {t("settings:logs.view")}
+              </Button>
             </fieldset>
 
             {error && (
@@ -262,6 +283,7 @@ export function AgentSettingsPanel() {
           </Button>
         </div>
       </DialogContent>
+      <LogViewer open={isLogViewerOpen} onOpenChange={setIsLogViewerOpen} />
     </Dialog>
   );
 }

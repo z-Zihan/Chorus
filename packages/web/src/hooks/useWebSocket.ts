@@ -3,6 +3,8 @@ import type { ClientEvent, Message, ServerEvent } from "@agentlink/shared";
 import { useChatStore } from "@/store/chatStore";
 import { useAgentStore } from "@/store/agentStore";
 import { getWsUrl } from "@/services/env";
+import { logger } from "@/utils/logger";
+import { track } from "@/utils/analytics";
 
 const RECONNECT_BASE = 1000;
 const RECONNECT_MAX = 30000;
@@ -67,6 +69,12 @@ export function useWebSocket() {
         case "message":
           if (event.message.conversationId === useChatStore.getState().currentConversationId) {
             addMessage(event.message);
+            if (event.message.fromType === "agent" && event.message.status !== "thinking") {
+              track("message_received", {
+                conversationId: event.message.conversationId,
+                status: event.message.status,
+              });
+            }
           }
           break;
 
@@ -163,7 +171,8 @@ export function useWebSocket() {
           break;
 
         case "error":
-          console.error("Server error:", event.message);
+          logger.error("Server error", { message: event.message });
+          track("error_occurred", { message: event.message, source: "websocket", lineno: 0 });
           break;
       }
     };
@@ -175,6 +184,7 @@ export function useWebSocket() {
       wsRef.current = ws;
 
       ws.onopen = () => {
+        logger.info("WebSocket connected");
         reconnectDelay.current = RECONNECT_BASE;
         startHeartbeat();
         if (currentConversationId) {
@@ -193,7 +203,8 @@ export function useWebSocket() {
         try {
           handleEvent(JSON.parse(e.data));
         } catch (err) {
-          console.error("WS parse error:", err);
+          logger.error("WebSocket message parse error", err);
+          track("error_occurred", { message: "WebSocket message parse error", source: "websocket", lineno: 0 });
         }
       };
 

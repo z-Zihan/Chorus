@@ -10,6 +10,7 @@ import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { Button } from "@/components/ui/button";
 import { STATUS_COLORS } from "@/constants/agent";
 import { formatConversationTime } from "@/lib/date";
+import { useHotkey } from "@/hooks/useHotkey";
 
 export function Sidebar() {
   const { t } = useTranslation(["common", "sidebar"]);
@@ -34,6 +35,8 @@ export function Sidebar() {
     await createConversation();
     closeSidebar();
   };
+
+  useHotkey("Ctrl+N", () => void handleCreateConversation(), [createConversation, closeSidebar]);
 
   const handleConfirmDelete = async () => {
     if (!conversationToDelete) return;

@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import type { A2ABusLike, ConversationContext, StreamChunk } from "@agentlink/shared";
 import type { AgentRegistry } from "./registry";
+import { track } from "../analytics";
+import { logger } from "../utils/logger";
 
 export interface A2ABusOptions {
   maxDepth: number;
@@ -45,6 +47,9 @@ export class A2ABus implements A2ABusLike {
 
     this.concurrency.set(toAgentId, active + 1);
     const timeout = AbortSignal.timeout(this.options.chainTimeoutMs);
+    const startedAt = Date.now();
+    logger.info({ fromAgentId, toAgentId, threadId }, "A2A call started");
+    track("a2a_call_start", { fromAgentId, toAgentId, threadId });
     try {
       for await (const chunk of adapter.handleA2ACall(fromAgentId, message, {
         ...context,
@@ -53,7 +58,14 @@ export class A2ABus implements A2ABusLike {
       })) {
         yield { ...chunk, threadId, sourceAgentId: toAgentId };
       }
+    } catch (error) {
+      logger.error({ err: error, fromAgentId, toAgentId, threadId }, "A2A call failed");
+      track("error", { message: error instanceof Error ? error.message : String(error), source: "a2a_bus" });
+      throw error;
     } finally {
+      const durationMs = Date.now() - startedAt;
+      logger.info({ fromAgentId, toAgentId, threadId, durationMs }, "A2A call ended");
+      track("a2a_call_end", { fromAgentId, toAgentId, threadId, durationMs });
       if (active === 0) this.concurrency.delete(toAgentId);
       else this.concurrency.set(toAgentId, active);
     }

@@ -4,6 +4,7 @@ import type WebSocket from "ws";
 import { z } from "zod";
 import type { AgentRuntime } from "../agent/runtime";
 import type { EventHub } from "./events";
+import { track } from "../analytics.js";
 
 const eventSchema = z.discriminatedUnion("type", [
   z.object({
@@ -30,10 +31,13 @@ export function registerWebSocket(
   app.get("/ws", { websocket: true }, (socket) => {
     const ws = socket as WebSocket;
     events.add(ws);
+    app.log.info("WebSocket client connected");
+    track("ws_connect");
 
     ws.on("message", (data) => {
       let raw: unknown;
-      try { raw = JSON.parse(data.toString()); } catch {
+      try { raw = JSON.parse(data.toString()); } catch (error) {
+        app.log.warn({ err: error }, "Invalid WebSocket JSON payload");
         events.sendDirect(ws, { type: "error", message: "Invalid JSON payload" });
         return;
       }
@@ -42,10 +46,23 @@ export function registerWebSocket(
         events.sendDirect(ws, { type: "error", message: parsed.error.issues[0]?.message ?? "Invalid event" });
         return;
       }
-      handleEvent(ws, parsed.data as ClientEvent, events, runtime);
+      try {
+        handleEvent(ws, parsed.data as ClientEvent, events, runtime, app);
+      } catch (error) {
+        app.log.error({ err: error }, "WebSocket event handler failed");
+        events.sendDirect(ws, { type: "error", message: "Unable to process event" });
+      }
     });
-    ws.on("close", () => events.remove(ws));
-    ws.on("error", () => events.remove(ws));
+    ws.on("close", () => {
+      app.log.info("WebSocket client disconnected");
+      track("ws_disconnect");
+      events.remove(ws);
+    });
+    ws.on("error", (error) => {
+      app.log.error({ err: error }, "WebSocket connection error");
+      track("error", { message: error.message, source: "websocket" });
+      events.remove(ws);
+    });
   });
 }
 
@@ -54,6 +71,7 @@ function handleEvent(
   event: ClientEvent,
   events: EventHub,
   runtime: AgentRuntime,
+  app: FastifyInstance,
 ): void {
   if (event.type === "ping") {
     events.sendDirect(socket, { type: "pong" });
@@ -63,9 +81,12 @@ function handleEvent(
     runtime.cancel(event.messageId);
   } else if (event.type === "message") {
     void runtime.handleUserMessage(event.conversationId, event.content, event.mentionedAgents)
-      .catch((error: unknown) => events.sendDirect(socket, {
-        type: "error",
-        message: error instanceof Error ? error.message : "Unable to send message",
-      }));
+      .catch((error: unknown) => {
+        app.log.error({ err: error }, "Agent runtime failed while handling WebSocket message");
+        events.sendDirect(socket, {
+          type: "error",
+          message: error instanceof Error ? error.message : "Unable to send message",
+        });
+      });
   }
 }

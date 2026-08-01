@@ -3,6 +3,14 @@ import { useUIStore } from "@/store/uiStore";
 import { getApiBaseUrl } from "./env";
 import i18n from "@/i18n";
 
+export interface ServerLogEntry {
+  timestamp: number;
+  level: "debug" | "info" | "warn" | "error";
+  message: string;
+  data?: unknown;
+  source: "backend";
+}
+
 // ===== API =====
 
 let lastOfflineToastAt = 0;
@@ -87,4 +95,11 @@ export const api = {
       body: JSON.stringify({ content }),
       signal,
     }),
+
+  // Diagnostics
+  getLogs: (level?: string, limit = 500) => {
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (level && level !== "all") params.set("level", level);
+    return request<ServerLogEntry[]>(`/logs?${params.toString()}`);
+  },
 };

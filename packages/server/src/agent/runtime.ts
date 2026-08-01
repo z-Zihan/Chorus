@@ -6,6 +6,8 @@ import type { EventHub } from "../ws/events";
 import { messageFromError } from "./adapter";
 import { A2ABus } from "./a2a-bus";
 import type { AgentRegistry } from "./registry";
+import { track } from "../analytics";
+import { logger } from "../utils/logger";
 
 export class AgentRuntime {
   private readonly controllers = new Map<string, AbortController>();
@@ -46,6 +48,7 @@ export class AgentRuntime {
     });
     this.repository.saveMessage(userMessage);
     this.events.publish(conversationId, { type: "message", message: userMessage });
+    track("message_sent", { conversationId, from: "user", to: agentId });
 
     const adapter = this.registry.getAdapter(agentId);
     if (!adapter || this.registry.getStatus(agentId) !== "online") {
@@ -58,6 +61,8 @@ export class AgentRuntime {
       });
       this.repository.saveMessage(errorMessage);
       this.events.publish(conversationId, { type: "message", message: errorMessage });
+      logger.warn({ conversationId, agentId }, "Agent unavailable for message");
+      track("error", { message: "Agent unavailable", source: "agent_runtime", agentId });
       return;
     }
 
@@ -91,6 +96,8 @@ export class AgentRuntime {
     const startedAt = Date.now();
     this.controllers.set(reply.id, controller);
     this.registry.setStatus(adapter.id, "busy");
+    logger.info({ agentId: adapter.id, conversationId: reply.conversationId }, "Agent invocation started");
+    track("agent_invoke_start", { agentId: adapter.id, conversationId: reply.conversationId });
     this.events.publish(undefined, { type: "agent_status", agentId: adapter.id, status: "busy" });
     this.events.publish(reply.conversationId, {
       type: "typing",
@@ -122,6 +129,10 @@ export class AgentRuntime {
       const cancelled = controller.signal.aborted || (error instanceof DOMException && error.name === "AbortError");
       const status: MessageStatus = output ? "partial" : "error";
       const detail = cancelled ? "生成已停止" : messageFromError(error);
+      if (!cancelled) {
+        logger.error({ err: error, agentId: adapter.id, conversationId: reply.conversationId }, "Agent invocation failed");
+        track("error", { message: detail, source: "agent_runtime", agentId: adapter.id });
+      }
       const errorChunk: StreamChunk = { type: "error", content: detail };
       chunks.push(errorChunk);
       this.events.publish(reply.conversationId, { type: "stream", messageId: reply.id, chunk: errorChunk });
@@ -153,6 +164,9 @@ export class AgentRuntime {
     };
     this.repository.updateMessage(reply.id, content, status, finalMessage.metadata);
     this.events.publish(reply.conversationId, { type: "message", message: finalMessage });
+    const durationMs = Date.now() - startedAt;
+    logger.info({ agentId, conversationId: reply.conversationId, status, durationMs }, "Agent invocation ended");
+    track("agent_invoke_end", { agentId, conversationId: reply.conversationId, status, durationMs });
     this.registry.setStatus(agentId, "online");
     this.events.publish(undefined, { type: "agent_status", agentId, status: "online" });
   }

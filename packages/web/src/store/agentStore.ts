@@ -1,6 +1,8 @@
 import { create } from "zustand";
 import type { Agent, AgentConfig, AgentStatus } from "@agentlink/shared";
 import { api } from "@/services/api";
+import { track } from "@/utils/analytics";
+import { logger } from "@/utils/logger";
 
 export type { Agent, AgentStatus } from "@agentlink/shared";
 
@@ -30,7 +32,7 @@ export const useAgentStore = create<AgentState>((set) => ({
       const data = await api.getAgents();
       set({ agents: data, isLoading: false });
     } catch (e) {
-      console.error("Failed to fetch agents:", e);
+      logger.error("Failed to fetch agents", e);
       set({ isLoading: false });
     }
   },
@@ -47,9 +49,11 @@ export const useAgentStore = create<AgentState>((set) => ({
 
   updateAgentStatus: (agentId, status) =>
     set((state) => ({
-      agents: state.agents.map((a) =>
-        a.id === agentId ? { ...a, status } : a
-      ),
+      agents: state.agents.map((a) => {
+        if (a.id !== agentId) return a;
+        if (a.status !== status) track("agent_status_change", { agentId, status });
+        return { ...a, status };
+      }),
     })),
 
   selectAgent: (agentId) => set({ selectedAgentId: agentId }),

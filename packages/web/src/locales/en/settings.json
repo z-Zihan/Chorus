@@ -13,6 +13,7 @@
   "apiKeyShow": "Show API Key",
   "apiKeyHide": "Hide API Key",
   "preferences": "Appearance",
+  "diagnostics": "Diagnostics",
   "theme": "Theme",
   "themeOptions": {
     "dark": "Dark",
@@ -23,6 +24,24 @@
   "languageOptions": {
     "zh-CN": "中文",
     "en": "English"
+  },
+  "logs": {
+    "view": "View logs",
+    "title": "Diagnostic logs",
+    "description": "View and export recent frontend and server logs.",
+    "levelFilter": "Filter by log level",
+    "searchLabel": "Search logs",
+    "searchPlaceholder": "Search messages or details",
+    "export": "Export JSON",
+    "empty": "No logs match the current filters.",
+    "backendUnavailable": "Server logs could not be loaded. Frontend logs remain available.",
+    "levels": {
+      "all": "All",
+      "debug": "Debug",
+      "info": "Info",
+      "warn": "Warning",
+      "error": "Error"
+    }
   },
   "errors": {
     "nameRequired": "Agent name is required"
