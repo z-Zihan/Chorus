@@ -40,9 +40,18 @@
     "useAgent": "Use this Agent",
     "needsAuth": "Login required",
     "needsAuthDesc": "Please login in your terminal then rescan",
+    "loginInstructions": {
+      "claude-code": "Run `claude login` to sign in",
+      "codex": "Run `codex login` to sign in",
+      "copilot-cli": "Run `copilot auth` to sign in",
+      "unknown": "Sign in to the CLI from your terminal"
+    },
+    "openTerminal": "Open terminal",
+    "openTerminalWebHint": "Open your system terminal and run the login command shown above",
     "rescanAfterLogin": "Done logging in, rescan",
     "noneFound": "No AI CLI found",
     "noneFoundDesc": "Please install Claude Code, Codex, or Copilot CLI first",
+    "installAgent": "Install Agent",
     "creatingWorkspace": "Creating workspace…",
     "error": "Detection failed",
     "rescan": "Rescan",
@@ -54,7 +63,11 @@
       "PROBE_FAILED": "Detection failed",
       "PERMISSION_DENIED": "Permission denied",
       "AUTH_REQUIRED": "Authentication required",
-      "VERSION_UNSUPPORTED": "Version unsupported"
+      "VERSION_UNSUPPORTED": "Version unsupported",
+      "CLI_SCAN_FAILED": "Unable to scan local CLIs. Check your environment and try again",
+      "UNSUPPORTED_CLI": "This CLI is not supported",
+      "INVALID_DETECTION": "Invalid Agent detection result",
+      "UNKNOWN": "An unknown error occurred. Please try again"
     }
   }
 }

@@ -8,6 +8,26 @@
     "opener:default",
     "process:allow-restart",
     "shell:allow-open",
+    {
+      "identifier": "shell:allow-spawn",
+      "allow": [
+        {
+          "name": "open-terminal-macos",
+          "cmd": "open",
+          "args": ["-a", "Terminal"]
+        },
+        {
+          "name": "open-terminal-windows",
+          "cmd": "cmd",
+          "args": ["/c", "start", "", "cmd"]
+        },
+        {
+          "name": "open-terminal-linux",
+          "cmd": "x-terminal-emulator",
+          "args": []
+        }
+      ]
+    },
     "updater:default"
   ]
 }

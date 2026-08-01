@@ -16,14 +16,16 @@ export function resolveAppDataDir(): string {
   return join(process.env.XDG_DATA_HOME?.trim() || join(homedir(), ".local", "share"), "agentlink");
 }
 
-const defaults: AppConfig = {
-  port: 3210,
-  dbPath: join(resolveAppDataDir(), "agentlink.db"),
-  cors: { origin: ["http://localhost:5173", "http://127.0.0.1:5173"] },
-  auth: { enabled: false },
-  history: { maxMessages: 20, maxTokens: 8_000 },
-  agents: [],
-};
+function defaultConfig(): AppConfig {
+  return {
+    port: 3210,
+    dbPath: join(resolveAppDataDir(), "agentlink.db"),
+    cors: { origin: ["http://localhost:5173", "http://127.0.0.1:5173"] },
+    auth: { enabled: false },
+    history: { maxMessages: 20, maxTokens: 8_000 },
+    agents: [],
+  };
+}
 
 function applyEnvOverrides(config: AppConfig): AppConfig {
   const envPort = Number.parseInt(process.env.SERVER_PORT ?? "", 10);
@@ -44,10 +46,21 @@ function locateConfig(): string | undefined {
   return candidates.find(existsSync);
 }
 
-export async function loadConfig(): Promise<{ config: AppConfig; rootDir: string }> {
+export function hasExistingConfig(): boolean {
+  return locateConfig() !== undefined;
+}
+
+export type LoadedConfig = {
+  config: AppConfig;
+  rootDir: string;
+  source: "explicit_config" | "defaults";
+};
+
+export async function loadConfig(): Promise<LoadedConfig> {
+  const defaults = defaultConfig();
   const configPath = locateConfig();
   if (!configPath) {
-    return { config: applyEnvOverrides(defaults), rootDir: process.cwd() };
+    return { config: applyEnvOverrides(defaults), rootDir: process.cwd(), source: "defaults" };
   }
 
   const jiti = createJiti(import.meta.url, { interopDefault: true });
@@ -60,5 +73,9 @@ export async function loadConfig(): Promise<{ config: AppConfig; rootDir: string
     history: { ...defaults.history, ...userConfig.history },
     agents: userConfig.agents ?? defaults.agents,
   };
-  return { config: applyEnvOverrides(config), rootDir: dirname(configPath) };
+  return {
+    config: applyEnvOverrides(config),
+    rootDir: dirname(configPath),
+    source: "explicit_config",
+  };
 }

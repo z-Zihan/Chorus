@@ -40,9 +40,18 @@
     "useAgent": "使用此 Agent",
     "needsAuth": "需要登录",
     "needsAuthDesc": "请在终端中登录后重新检测",
+    "loginInstructions": {
+      "claude-code": "运行 `claude login` 登录",
+      "codex": "运行 `codex login` 登录",
+      "copilot-cli": "运行 `copilot auth` 登录",
+      "unknown": "请在终端中登录对应的 CLI"
+    },
+    "openTerminal": "打开终端",
+    "openTerminalWebHint": "请手动打开系统终端并运行上面的登录命令",
     "rescanAfterLogin": "登录完成，重新检测",
     "noneFound": "未检测到 AI CLI",
     "noneFoundDesc": "请先安装 Claude Code、Codex 或 Copilot CLI",
+    "installAgent": "安装 Agent",
     "creatingWorkspace": "正在创建工作区…",
     "error": "检测失败",
     "rescan": "重新扫描",
@@ -54,7 +63,11 @@
       "PROBE_FAILED": "检测失败",
       "PERMISSION_DENIED": "权限不足",
       "AUTH_REQUIRED": "需要登录",
-      "VERSION_UNSUPPORTED": "版本不兼容"
+      "VERSION_UNSUPPORTED": "版本不兼容",
+      "CLI_SCAN_FAILED": "无法扫描本机 CLI，请检查环境后重试",
+      "UNSUPPORTED_CLI": "暂不支持此 CLI",
+      "INVALID_DETECTION": "无效的 Agent 检测结果",
+      "UNKNOWN": "发生未知错误，请重试"
     }
   }
 }
