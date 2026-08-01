@@ -43,6 +43,25 @@
       "error": "错误"
     }
   },
+  "updates": {
+    "available": "新版本可用 v{{version}}",
+    "installNow": "立即更新",
+    "later": "稍后",
+    "downloading": "正在下载 {{progress}}%",
+    "downloadProgress": "更新下载进度",
+    "restartPrompt": "更新已安装。是否立即重启 AgentLink？",
+    "installed": "更新已安装，重启后生效。",
+    "installFailed": "更新安装失败，请稍后重试。",
+    "check": "检查更新",
+    "checking": "正在检查…",
+    "upToDate": "当前已是最新版本。",
+    "checkFailed": "检查更新失败，请稍后重试。",
+    "channel": "更新通道",
+    "channels": {
+      "stable": "稳定版",
+      "beta": "测试版"
+    }
+  },
   "errors": {
     "nameRequired": "Agent 名称不能为空"
   }

@@ -12,6 +12,10 @@
   --border-color: #3f3f46;
   --accent-color: #4f46e5;
   --accent-hover: #6366f1;
+  --update-bg: #172554;
+  --update-border: #1e40af;
+  --update-text: #dbeafe;
+  --update-progress-track: #1e3a8a;
 }
 
 :root[data-theme="light"] {
@@ -28,4 +32,8 @@
   --border-color: #cbd5e1;
   --accent-color: #4f46e5;
   --accent-hover: #4338ca;
+  --update-bg: #eff6ff;
+  --update-border: #bfdbfe;
+  --update-text: #1e3a8a;
+  --update-progress-track: #dbeafe;
 }

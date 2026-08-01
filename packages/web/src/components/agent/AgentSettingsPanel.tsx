@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Agent } from "@agentlink/shared";
-import { FileText, X } from "lucide-react";
+import { FileText, RefreshCw, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { AgentAvatar } from "@/components/agent/AgentAvatar";
 import { PasswordInput } from "@/components/common/PasswordInput";
@@ -18,6 +18,13 @@ import {
 import { STATUS_COLORS } from "@/constants/agent";
 import { changeLanguage, currentLanguage, type AppLanguage } from "@/i18n";
 import { getThemePreference, setThemePreference, type ThemePreference } from "@/services/theme";
+import {
+  announceUpdate,
+  checkForUpdates,
+  getUpdateChannel,
+  setUpdateChannel,
+  type UpdateChannel,
+} from "@/services/updater";
 import { useAgentStore } from "@/store/agentStore";
 import { track } from "@/utils/analytics";
 
@@ -46,6 +53,9 @@ export function AgentSettingsPanel() {
   const [error, setError] = useState<string | null>(null);
   const [theme, setTheme] = useState<ThemePreference>(getThemePreference);
   const [isLogViewerOpen, setIsLogViewerOpen] = useState(false);
+  const [updateChannel, setChannel] = useState<UpdateChannel>(getUpdateChannel);
+  const [isCheckingForUpdates, setIsCheckingForUpdates] = useState(false);
+  const [updateStatus, setUpdateStatus] = useState<string | null>(null);
 
   useEffect(() => {
     if (!selectedAgent) return;
@@ -89,6 +99,24 @@ export function AgentSettingsPanel() {
       setError(saveError instanceof Error ? saveError.message : t("errors:saveFailed"));
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleCheckForUpdates = async () => {
+    setIsCheckingForUpdates(true);
+    setUpdateStatus(null);
+    try {
+      const update = await checkForUpdates();
+      if (update) {
+        announceUpdate(update);
+        setUpdateStatus(t("settings:updates.available", { version: update.version }));
+      } else {
+        setUpdateStatus(t("settings:updates.upToDate"));
+      }
+    } catch {
+      setUpdateStatus(t("settings:updates.checkFailed"));
+    } finally {
+      setIsCheckingForUpdates(false);
     }
   };
 
@@ -248,6 +276,28 @@ export function AgentSettingsPanel() {
                   </SelectContent>
                 </Select>
               </label>
+              <label className="block">
+                <span className="mb-2 block text-sm font-medium text-[var(--text-primary)]">
+                  {t("settings:updates.channel")}
+                </span>
+                <Select
+                  value={updateChannel}
+                  onValueChange={(channel: UpdateChannel) => {
+                    setChannel(channel);
+                    setUpdateChannel(channel);
+                    setUpdateStatus(null);
+                    track("settings_changed", { section: "updateChannel", value: channel });
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="stable">{t("settings:updates.channels.stable")}</SelectItem>
+                    <SelectItem value="beta">{t("settings:updates.channels.beta")}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </label>
             </fieldset>
 
             <fieldset className="rounded-xl border border-[var(--border-color)] p-4">
@@ -257,10 +307,30 @@ export function AgentSettingsPanel() {
               <p className="mb-3 text-xs leading-5 text-[var(--text-muted)]">
                 {t("settings:logs.description")}
               </p>
-              <Button variant="secondary" onClick={() => setIsLogViewerOpen(true)}>
-                <FileText aria-hidden="true" className="h-4 w-4" />
-                {t("settings:logs.view")}
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="secondary" onClick={() => setIsLogViewerOpen(true)}>
+                  <FileText aria-hidden="true" className="h-4 w-4" />
+                  {t("settings:logs.view")}
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => void handleCheckForUpdates()}
+                  disabled={isCheckingForUpdates}
+                >
+                  <RefreshCw
+                    aria-hidden="true"
+                    className={`h-4 w-4 ${isCheckingForUpdates ? "animate-spin" : ""}`}
+                  />
+                  {isCheckingForUpdates
+                    ? t("settings:updates.checking")
+                    : t("settings:updates.check")}
+                </Button>
+              </div>
+              {updateStatus && (
+                <p className="mt-3 text-xs text-[var(--text-secondary)]" role="status">
+                  {updateStatus}
+                </p>
+              )}
             </fieldset>
 
             {error && (

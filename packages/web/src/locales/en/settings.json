@@ -43,6 +43,25 @@
       "error": "Error"
     }
   },
+  "updates": {
+    "available": "New version available v{{version}}",
+    "installNow": "Update now",
+    "later": "Later",
+    "downloading": "Downloading {{progress}}%",
+    "downloadProgress": "Update download progress",
+    "restartPrompt": "The update is installed. Restart AgentLink now?",
+    "installed": "The update is installed and will apply after restart.",
+    "installFailed": "The update could not be installed. Please try again later.",
+    "check": "Check for updates",
+    "checking": "Checking…",
+    "upToDate": "You are using the latest version.",
+    "checkFailed": "Could not check for updates. Please try again later.",
+    "channel": "Update channel",
+    "channels": {
+      "stable": "Stable",
+      "beta": "Beta"
+    }
+  },
   "errors": {
     "nameRequired": "Agent name is required"
   }

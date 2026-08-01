@@ -6,6 +6,8 @@
   "permissions": [
     "core:default",
     "opener:default",
-    "shell:allow-open"
+    "process:allow-restart",
+    "shell:allow-open",
+    "updater:default"
   ]
 }
