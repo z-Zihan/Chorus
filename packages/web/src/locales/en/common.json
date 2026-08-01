@@ -22,7 +22,11 @@
     "offline": "Offline",
     "busy": "Busy",
     "error": "Error",
-    "unknown": "Unknown"
+    "unknown": "Unknown",
+    "installed": "Installed",
+    "needs_auth": "Login required",
+    "unsupported": "Unsupported",
+    "ready": "Ready"
   },
   "aria": {
     "openSidebar": "Open sidebar",
@@ -41,6 +45,16 @@
     "noneFoundDesc": "Please install Claude Code, Codex, or Copilot CLI first",
     "creatingWorkspace": "Creating workspace…",
     "error": "Detection failed",
-    "rescan": "Rescan"
+    "rescan": "Rescan",
+    "errors": {
+      "PROBE_TIMEOUT": "Detection timed out",
+      "CLI_NOT_FOUND": "CLI not found",
+      "CLI_NOT_READY": "CLI not ready",
+      "ADAPTER_INIT_FAILED": "Agent initialization failed",
+      "PROBE_FAILED": "Detection failed",
+      "PERMISSION_DENIED": "Permission denied",
+      "AUTH_REQUIRED": "Authentication required",
+      "VERSION_UNSUPPORTED": "Version unsupported"
+    }
   }
 }

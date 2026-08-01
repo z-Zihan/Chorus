@@ -22,7 +22,11 @@
     "offline": "离线",
     "busy": "忙碌",
     "error": "错误",
-    "unknown": "未知"
+    "unknown": "未知",
+    "installed": "已安装",
+    "needs_auth": "需要登录",
+    "unsupported": "版本不兼容",
+    "ready": "可用"
   },
   "aria": {
     "openSidebar": "打开侧栏",
@@ -41,6 +45,16 @@
     "noneFoundDesc": "请先安装 Claude Code、Codex 或 Copilot CLI",
     "creatingWorkspace": "正在创建工作区…",
     "error": "检测失败",
-    "rescan": "重新扫描"
+    "rescan": "重新扫描",
+    "errors": {
+      "PROBE_TIMEOUT": "检测超时",
+      "CLI_NOT_FOUND": "未找到 CLI",
+      "CLI_NOT_READY": "CLI 不可用",
+      "ADAPTER_INIT_FAILED": "Agent 初始化失败",
+      "PROBE_FAILED": "检测失败",
+      "PERMISSION_DENIED": "权限不足",
+      "AUTH_REQUIRED": "需要登录",
+      "VERSION_UNSUPPORTED": "版本不兼容"
+    }
   }
 }

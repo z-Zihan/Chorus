@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Loader2, RefreshCw, Search, Terminal, AlertCircle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useOnboardingStore } from "@/store/onboardingStore";
@@ -8,7 +8,12 @@ import { Button } from "@/components/ui/button";
 
 export function OnboardingFlow() {
   const { t } = useTranslation(["common"]);
-  const { status, isLoading, checkStatus, rescan, selectAgent, complete } = useOnboardingStore();
+  const status = useOnboardingStore((s) => s.status);
+  const isLoading = useOnboardingStore((s) => s.isLoading);
+  const checkStatus = useOnboardingStore((s) => s.checkStatus);
+  const rescan = useOnboardingStore((s) => s.rescan);
+  const selectAgent = useOnboardingStore((s) => s.selectAgent);
+  const complete = useOnboardingStore((s) => s.complete);
   const fetchAgents = useAgentStore((s) => s.fetchAgents);
   const fetchConversations = useChatStore((s) => s.fetchConversations);
 
@@ -17,8 +22,10 @@ export function OnboardingFlow() {
   }, [checkStatus]);
 
   // When onboarding completes, refresh agents + conversations then dismiss
+  const completedRef = useRef(false);
   useEffect(() => {
-    if (status?.step === "completed") {
+    if (status?.step === "completed" && !completedRef.current) {
+      completedRef.current = true;
       void fetchAgents();
       void fetchConversations();
       const timer = setTimeout(() => void complete(), 500);
@@ -29,7 +36,12 @@ export function OnboardingFlow() {
   if (!status || status.step === "completed") return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--bg-base)]">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={t("common:onboarding.chooseAgent")}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--bg-base)]"
+    >
       <div className="w-full max-w-md px-6">
         {status.step === "bootstrapping" && (
           <div className="text-center">
@@ -127,7 +139,9 @@ export function OnboardingFlow() {
             <h2 className="mt-4 text-lg font-semibold text-[var(--text-primary)]">
               {t("common:onboarding.error")}
             </h2>
-            <p className="mt-2 text-sm text-[var(--text-secondary)]">{status.code}</p>
+            <p className="mt-2 text-sm text-[var(--text-secondary)]">
+              {t(`common:onboarding.errors.${status.code}`, { defaultValue: status.code })}
+            </p>
             {status.recoverable && (
               <Button className="mt-4 w-full" onClick={() => void rescan()} disabled={isLoading}>
                 <RefreshCw className="mr-2 h-4 w-4" />
