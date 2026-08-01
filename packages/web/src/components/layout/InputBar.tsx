@@ -1,5 +1,7 @@
 import { useState, useRef, useCallback } from "react";
+import { Send, Square } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { Button } from "@/components/ui/button";
 import { useChatStore } from "@/store/chatStore";
 
 export function InputBar() {
@@ -52,20 +54,19 @@ export function InputBar() {
           />
         </div>
         {isStreaming ? (
-          <button
-            onClick={cancelStream}
-            className="flex h-10 items-center rounded-xl bg-red-600 px-4 text-sm font-medium text-white transition-colors hover:bg-red-500"
-          >
+          <Button variant="danger" onClick={cancelStream} className="rounded-xl">
+            <Square aria-hidden="true" className="h-4 w-4 fill-current" />
             {t("common:buttons.stop")}
-          </button>
+          </Button>
         ) : (
-          <button
+          <Button
             onClick={handleSend}
             disabled={!input.trim() || !currentConversationId}
-            className="flex h-10 items-center rounded-xl bg-[var(--accent-color)] px-4 text-sm font-medium text-white transition-colors hover:bg-[var(--accent-hover)] disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-xl"
           >
+            <Send aria-hidden="true" className="h-4 w-4" />
             {t("common:buttons.send")}
-          </button>
+          </Button>
         )}
       </div>
     </div>

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ChevronDown, MessageSquare } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useChatStore } from "@/store/chatStore";
 import { useAgentStore } from "@/store/agentStore";
@@ -16,7 +17,9 @@ function MessageSkeletons({ label }: { label: string }) {
           key={`${side}-${index}`}
           className={`flex animate-pulse gap-3 ${side === "right" ? "justify-end" : "justify-start"}`}
         >
-          {side === "left" && <div className="h-8 w-8 shrink-0 rounded-full bg-[var(--bg-elevated)]" />}
+          {side === "left" && (
+            <div className="h-8 w-8 shrink-0 rounded-full bg-[var(--bg-elevated)]" />
+          )}
           <div
             className={`h-16 rounded-2xl bg-[var(--bg-elevated)] ${index === 1 ? "w-2/5" : "w-3/5"}`}
           />
@@ -79,9 +82,7 @@ export function MessageList() {
     if (msg.threadId && !seenThreads.has(msg.threadId)) {
       seenThreads.add(msg.threadId);
       const threadMessages = messages.filter((m) => m.threadId === msg.threadId);
-      rendered.push(
-        <A2AThread key={`thread-${msg.threadId}`} messages={threadMessages} />
-      );
+      rendered.push(<A2AThread key={`thread-${msg.threadId}`} messages={threadMessages} />);
       continue;
     }
 
@@ -95,7 +96,7 @@ export function MessageList() {
         message={msg}
         agentName={agent?.name}
         agentAvatar={agent?.avatar}
-      />
+      />,
     );
   }
 
@@ -117,9 +118,7 @@ export function MessageList() {
           ) : messages.length === 0 && !isStreaming ? (
             <div className="flex flex-col items-center justify-center py-24 text-center">
               <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--bg-surface)] text-[var(--accent-hover)] ring-1 ring-[var(--border-color)]">
-                <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M8 10h.01M12 10h.01M16 10h.01M21 12a8 8 0 0 1-8 8 9 9 0 0 1-4-.9L3 21l1.9-5A8 8 0 1 1 21 12Z" />
-                </svg>
+                <MessageSquare aria-hidden="true" className="h-7 w-7" />
               </div>
               <p className="mt-4 text-sm font-medium text-[var(--text-primary)]">
                 {t("emptyTitle")}
@@ -138,7 +137,8 @@ export function MessageList() {
           onClick={() => scrollToBottom()}
           className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-full border border-[var(--accent-hover)] bg-[var(--accent-color)] px-4 py-2 text-sm font-medium text-white shadow-xl transition-colors hover:bg-[var(--accent-hover)]"
         >
-          ↓ {t("newMessages")}
+          <ChevronDown aria-hidden="true" className="mr-1 inline h-4 w-4" />
+          {t("newMessages")}
         </button>
       )}
     </div>

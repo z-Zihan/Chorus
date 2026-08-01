@@ -1,15 +1,22 @@
 import { useEffect, useState } from "react";
 import type { Agent } from "@agentlink/shared";
+import { X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { AgentAvatar } from "@/components/agent/AgentAvatar";
 import { PasswordInput } from "@/components/common/PasswordInput";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { STATUS_COLORS } from "@/constants/agent";
 import { changeLanguage, currentLanguage, type AppLanguage } from "@/i18n";
-import {
-  getThemePreference,
-  setThemePreference,
-  type ThemePreference,
-} from "@/services/theme";
+import { getThemePreference, setThemePreference, type ThemePreference } from "@/services/theme";
 import { useAgentStore } from "@/store/agentStore";
 
 type AgentWithConfig = Agent & { config?: Record<string, unknown> };
@@ -24,12 +31,9 @@ export function AgentSettingsPanel() {
   const agents = useAgentStore((state) => state.agents);
   const selectedAgentId = useAgentStore((state) => state.selectedAgentId);
   const updateAgent = useAgentStore((state) => state.updateAgent);
-  const clearSelectedAgent = useAgentStore(
-    (state) => state.clearSelectedAgent
-  );
+  const clearSelectedAgent = useAgentStore((state) => state.clearSelectedAgent);
   const selectedAgent = agents.find((agent) => agent.id === selectedAgentId);
   const [displayedAgent, setDisplayedAgent] = useState<Agent | null>(null);
-  const [isVisible, setIsVisible] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [systemPrompt, setSystemPrompt] = useState("");
@@ -53,28 +57,7 @@ export function AgentSettingsPanel() {
     setError(null);
   }, [selectedAgent]);
 
-  useEffect(() => {
-    if (!selectedAgentId) {
-      setIsVisible(false);
-      return;
-    }
-
-    const frame = window.requestAnimationFrame(() => setIsVisible(true));
-    return () => window.cancelAnimationFrame(frame);
-  }, [selectedAgentId]);
-
-  useEffect(() => {
-    if (!selectedAgentId) return;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !isSaving) clearSelectedAgent();
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [clearSelectedAgent, isSaving, selectedAgentId]);
-
   if (!displayedAgent) return null;
-
-  const isOpen = Boolean(selectedAgentId) && isVisible;
 
   const handleSave = async () => {
     const trimmedName = name.trim();
@@ -99,62 +82,45 @@ export function AgentSettingsPanel() {
       });
       clearSelectedAgent();
     } catch (saveError) {
-      setError(
-        saveError instanceof Error ? saveError.message : t("errors:saveFailed")
-      );
+      setError(saveError instanceof Error ? saveError.message : t("errors:saveFailed"));
     } finally {
       setIsSaving(false);
     }
   };
 
   return (
-    <div
-      aria-hidden={!isOpen}
-      className={`fixed inset-0 z-50 transition ${
-        isOpen ? "pointer-events-auto" : "pointer-events-none"
-      }`}
+    <Dialog
+      open={Boolean(selectedAgentId)}
+      onOpenChange={(open) => {
+        if (!open && !isSaving) clearSelectedAgent();
+      }}
     >
-      <button
-        type="button"
-        aria-label={t("settings:closeSettings")}
-        onClick={clearSelectedAgent}
-        disabled={isSaving}
-        className={`absolute inset-0 bg-black/70 backdrop-blur-sm transition-opacity duration-200 ${
-          isOpen ? "opacity-100" : "opacity-0"
-        }`}
-      />
-      <aside
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="agent-settings-title"
-        className={`absolute inset-y-0 right-0 flex w-full max-w-md flex-col border-l border-[var(--border-color)] bg-[var(--bg-surface)] shadow-2xl transition-transform duration-200 ease-out ${
-          isOpen ? "translate-x-0" : "translate-x-full"
-        }`}
+      <DialogContent
+        variant="drawer"
+        aria-describedby={undefined}
+        onEscapeKeyDown={(event) => {
+          if (isSaving) event.preventDefault();
+        }}
+        onPointerDownOutside={(event) => {
+          if (isSaving) event.preventDefault();
+        }}
       >
         <div className="flex items-center justify-between border-b border-[var(--border-color)] px-5 py-4">
-          <h2 id="agent-settings-title" className="font-semibold text-[var(--text-primary)]">
-            {t("settings:title")}
-          </h2>
-          <button
-            type="button"
+          <DialogTitle id="agent-settings-title">{t("settings:title")}</DialogTitle>
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={clearSelectedAgent}
             disabled={isSaving}
             aria-label={t("common:buttons.close")}
-            className="rounded-lg p-2 text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] disabled:opacity-50"
           >
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18 18 6M6 6l12 12" />
-            </svg>
-          </button>
+            <X aria-hidden="true" className="h-5 w-5" />
+          </Button>
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-6">
           <div className="mb-6 flex items-center gap-4 rounded-xl border border-[var(--border-color)] bg-[var(--bg-base)] p-4">
-            <AgentAvatar
-              name={displayedAgent.name}
-              src={displayedAgent.avatar}
-              size="lg"
-            />
+            <AgentAvatar name={displayedAgent.name} src={displayedAgent.avatar} size="lg" />
             <div className="min-w-0 flex-1">
               <div className="truncate font-medium text-[var(--text-primary)]">
                 {displayedAgent.name}
@@ -164,7 +130,9 @@ export function AgentSettingsPanel() {
                   {displayedAgent.type}
                 </span>
                 <span className="flex items-center gap-1.5">
-                  <span className={`h-2 w-2 rounded-full ${STATUS_COLORS[displayedAgent.status]}`} />
+                  <span
+                    className={`h-2 w-2 rounded-full ${STATUS_COLORS[displayedAgent.status]}`}
+                  />
                   {t(`common:status.${displayedAgent.status}`)}
                 </span>
               </div>
@@ -173,17 +141,20 @@ export function AgentSettingsPanel() {
 
           <div className="space-y-5">
             <label className="block">
-              <span className="mb-2 block text-sm font-medium text-[var(--text-primary)]">{t("settings:name")}</span>
-              <input
+              <span className="mb-2 block text-sm font-medium text-[var(--text-primary)]">
+                {t("settings:name")}
+              </span>
+              <Input
                 value={name}
                 onChange={(event) => setName(event.target.value)}
                 maxLength={100}
-                className="w-full rounded-lg border border-[var(--border-color)] bg-[var(--bg-base)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none transition focus:border-[var(--accent-color)] focus:ring-2 focus:ring-indigo-500/20"
               />
             </label>
 
             <label className="block">
-              <span className="mb-2 block text-sm font-medium text-[var(--text-primary)]">{t("settings:description")}</span>
+              <span className="mb-2 block text-sm font-medium text-[var(--text-primary)]">
+                {t("settings:description")}
+              </span>
               <textarea
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
@@ -194,17 +165,20 @@ export function AgentSettingsPanel() {
             </label>
 
             <label className="block">
-              <span className="mb-2 block text-sm font-medium text-[var(--text-primary)]">{t("settings:model")}</span>
-              <input
+              <span className="mb-2 block text-sm font-medium text-[var(--text-primary)]">
+                {t("settings:model")}
+              </span>
+              <Input
                 value={model}
                 onChange={(event) => setModel(event.target.value)}
                 placeholder={t("settings:modelPlaceholder")}
-                className="w-full rounded-lg border border-[var(--border-color)] bg-[var(--bg-base)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none transition placeholder:text-[var(--text-muted)] focus:border-[var(--accent-color)] focus:ring-2 focus:ring-indigo-500/20"
               />
             </label>
 
             <label className="block">
-              <span className="mb-2 block text-sm font-medium text-[var(--text-primary)]">{t("settings:systemPrompt")}</span>
+              <span className="mb-2 block text-sm font-medium text-[var(--text-primary)]">
+                {t("settings:systemPrompt")}
+              </span>
               <textarea
                 value={systemPrompt}
                 onChange={(event) => setSystemPrompt(event.target.value)}
@@ -221,9 +195,7 @@ export function AgentSettingsPanel() {
                 onChange={setApiKey}
                 placeholder={t("settings:apiKeyPlaceholder")}
               />
-              <p className="mt-2 text-xs text-[var(--text-muted)]">
-                {t("settings:apiKeyHelp")}
-              </p>
+              <p className="mt-2 text-xs text-[var(--text-muted)]">{t("settings:apiKeyHelp")}</p>
             </div>
 
             <fieldset className="space-y-4 rounded-xl border border-[var(--border-color)] p-4">
@@ -234,37 +206,47 @@ export function AgentSettingsPanel() {
                 <span className="mb-2 block text-sm font-medium text-[var(--text-primary)]">
                   {t("settings:theme")}
                 </span>
-                <select
+                <Select
                   value={theme}
-                  onChange={(event) => {
-                    const preference = event.target.value as ThemePreference;
+                  onValueChange={(preference: ThemePreference) => {
                     setTheme(preference);
                     setThemePreference(preference);
                   }}
-                  className="w-full rounded-lg border border-[var(--border-color)] bg-[var(--bg-base)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--accent-color)]"
                 >
-                  <option value="dark">{t("settings:themeOptions.dark")}</option>
-                  <option value="light">{t("settings:themeOptions.light")}</option>
-                  <option value="system">{t("settings:themeOptions.system")}</option>
-                </select>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="dark">{t("settings:themeOptions.dark")}</SelectItem>
+                    <SelectItem value="light">{t("settings:themeOptions.light")}</SelectItem>
+                    <SelectItem value="system">{t("settings:themeOptions.system")}</SelectItem>
+                  </SelectContent>
+                </Select>
               </label>
               <label className="block">
                 <span className="mb-2 block text-sm font-medium text-[var(--text-primary)]">
                   {t("settings:language")}
                 </span>
-                <select
+                <Select
                   value={currentLanguage()}
-                  onChange={(event) => void changeLanguage(event.target.value as AppLanguage)}
-                  className="w-full rounded-lg border border-[var(--border-color)] bg-[var(--bg-base)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--accent-color)]"
+                  onValueChange={(language: AppLanguage) => void changeLanguage(language)}
                 >
-                  <option value="zh-CN">{t("settings:languageOptions.zh-CN")}</option>
-                  <option value="en">{t("settings:languageOptions.en")}</option>
-                </select>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="zh-CN">{t("settings:languageOptions.zh-CN")}</SelectItem>
+                    <SelectItem value="en">{t("settings:languageOptions.en")}</SelectItem>
+                  </SelectContent>
+                </Select>
               </label>
             </fieldset>
 
             {error && (
-              <div role="alert" className="rounded-lg border border-red-900 bg-red-950/50 px-3 py-2.5 text-sm text-red-300">
+              <div
+                role="alert"
+                className="rounded-lg border border-red-900 bg-red-950/50 px-3 py-2.5 text-sm text-red-300"
+              >
                 {error}
               </div>
             )}
@@ -272,24 +254,14 @@ export function AgentSettingsPanel() {
         </div>
 
         <div className="flex justify-end gap-3 border-t border-[var(--border-color)] bg-[var(--bg-surface)] px-5 py-4">
-          <button
-            type="button"
-            onClick={clearSelectedAgent}
-            disabled={isSaving}
-            className="rounded-lg border border-[var(--border-color)] px-4 py-2.5 text-sm font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-hover)] disabled:opacity-50"
-          >
+          <Button variant="secondary" onClick={clearSelectedAgent} disabled={isSaving}>
             {t("common:buttons.cancel")}
-          </button>
-          <button
-            type="button"
-            onClick={() => void handleSave()}
-            disabled={isSaving}
-            className="min-w-24 rounded-lg bg-[var(--accent-color)] px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[var(--accent-hover)] disabled:cursor-wait disabled:opacity-60"
-          >
+          </Button>
+          <Button onClick={() => void handleSave()} disabled={isSaving} className="min-w-24">
             {isSaving ? t("common:buttons.saving") : t("common:buttons.save")}
-          </button>
+          </Button>
         </div>
-      </aside>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

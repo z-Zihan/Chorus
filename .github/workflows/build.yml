@@ -1,16 +1,38 @@
 name: Build Desktop App
 
 on:
+  pull_request:
   push:
-    tags: ['v*']
+    tags: ["v*"]
   workflow_dispatch:
     inputs:
       platform:
-        description: 'Target platform (all/windows/macos)'
+        description: "Target platform (all/windows/macos)"
         required: false
-        default: 'all'
+        default: "all"
 
 jobs:
+  lint:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint, typecheck, and test
+        run: pnpm lint && pnpm typecheck && pnpm test
+
   # ─── Windows ──────────────────────────────────────────────
   build-windows:
     if: github.event_name == 'push' || inputs.platform == 'all' || inputs.platform == 'windows'

@@ -1,4 +1,5 @@
 import { MessageList } from "@/components/message/MessageList";
+import { Menu, MessageSquare } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { InputBar } from "@/components/layout/InputBar";
 import { useChatStore } from "@/store/chatStore";
@@ -13,9 +14,7 @@ export function ChatArea() {
   const agents = useAgentStore((s) => s.agents);
   const openSidebar = useUIStore((s) => s.openSidebar);
   const currentConv = conversations.find((c) => c.id === currentConversationId);
-  const currentAgent = agents.find(
-    (agent) => agent.id === currentConv?.agentIds[0]
-  );
+  const currentAgent = agents.find((agent) => agent.id === currentConv?.agentIds[0]);
 
   return (
     <div className="flex h-full flex-col">
@@ -27,13 +26,11 @@ export function ChatArea() {
           aria-label={t("common:aria.openSidebar")}
           className="mr-3 rounded-lg p-1.5 text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] md:hidden"
         >
-          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-          </svg>
+          <Menu aria-hidden="true" className="h-5 w-5" />
         </button>
         <div className="flex items-center gap-3">
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--bg-elevated)] text-sm">
-            {currentConv?.type === "dm" ? "💬" : "👥"}
+            <MessageSquare aria-hidden="true" className="h-4 w-4" />
           </div>
           <div>
             <h2 className="font-semibold text-[var(--text-primary)]">
@@ -42,9 +39,7 @@ export function ChatArea() {
             {currentAgent && (
               <div className="mt-0.5 flex items-center gap-1.5 text-xs text-[var(--text-secondary)]">
                 <span
-                  className={`h-1.5 w-1.5 rounded-full ${
-                    STATUS_COLORS[currentAgent.status]
-                  }`}
+                  className={`h-1.5 w-1.5 rounded-full ${STATUS_COLORS[currentAgent.status]}`}
                 />
                 {t(`common:status.${currentAgent.status}`)}
               </div>

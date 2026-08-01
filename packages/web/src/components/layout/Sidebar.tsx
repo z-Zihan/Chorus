@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { MessageSquare, Plus, Settings, Trash2, X } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import { useChatStore, type Conversation } from "@/store/chatStore";
 import { useAgentStore } from "@/store/agentStore";
@@ -6,12 +7,13 @@ import { useUIStore } from "@/store/uiStore";
 import { AgentAvatar } from "@/components/agent/AgentAvatar";
 import { AgentSettingsPanel } from "@/components/agent/AgentSettingsPanel";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
+import { Button } from "@/components/ui/button";
 import { STATUS_COLORS } from "@/constants/agent";
+import { formatConversationTime } from "@/lib/date";
 
 export function Sidebar() {
-  const { t, i18n } = useTranslation(["common", "sidebar"]);
-  const [conversationToDelete, setConversationToDelete] =
-    useState<Conversation | null>(null);
+  const { t } = useTranslation(["common", "sidebar"]);
+  const [conversationToDelete, setConversationToDelete] = useState<Conversation | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const conversations = useChatStore((s) => s.conversations);
   const currentConversationId = useChatStore((s) => s.currentConversationId);
@@ -53,17 +55,28 @@ export function Sidebar() {
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--accent-color)] text-sm font-bold text-white">
             AL
           </div>
-          <span className="flex-1 font-semibold text-[var(--text-primary)]">{t("common:appName")}</span>
-          <button
-            type="button"
+          <span className="flex-1 font-semibold text-[var(--text-primary)]">
+            {t("common:appName")}
+          </span>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => void handleCreateConversation()}
+            aria-label={t("sidebar:createConversation")}
+            title={t("sidebar:createConversation")}
+            className="h-8 w-8"
+          >
+            <Plus aria-hidden="true" className="h-5 w-5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={closeSidebar}
             aria-label={t("common:aria.closeSidebar")}
-            className="rounded-md p-1 text-[var(--text-tertiary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] md:hidden"
+            className="h-8 w-8 md:hidden"
           >
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18 18 6M6 6l12 12" />
-            </svg>
-          </button>
+            <X aria-hidden="true" className="h-5 w-5" />
+          </Button>
         </div>
 
         {/* Conversations */}
@@ -74,20 +87,17 @@ export function Sidebar() {
           <div className="space-y-1">
             {conversations.length === 0 && (
               <div className="rounded-lg border border-dashed border-[var(--border-color)] px-4 py-6 text-center">
-                <p className="text-sm text-[var(--text-tertiary)]">{t("sidebar:noConversations")}</p>
-                <button
-                  type="button"
-                  onClick={() => void handleCreateConversation()}
-                  className="mt-3 rounded-lg bg-[var(--accent-color)] px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--accent-hover)]"
-                >
+                <p className="text-sm text-[var(--text-tertiary)]">
+                  {t("sidebar:noConversations")}
+                </p>
+                <Button onClick={() => void handleCreateConversation()} size="sm" className="mt-3">
+                  <Plus aria-hidden="true" className="h-4 w-4" />
                   {t("sidebar:createConversation")}
-                </button>
+                </Button>
               </div>
             )}
             {conversations.map((conv) => {
-              const conversationAgent = agents.find(
-                (agent) => agent.id === conv.agentIds[0]
-              );
+              const conversationAgent = agents.find((agent) => agent.id === conv.agentIds[0]);
               const isAgentOffline = conversationAgent?.status === "offline";
 
               return (
@@ -102,7 +112,7 @@ export function Sidebar() {
                     }`}
                   >
                     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--bg-elevated)] text-sm">
-                      {conv.type === "dm" ? "💬" : "👥"}
+                      <MessageSquare aria-hidden="true" className="h-4 w-4" />
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
@@ -116,20 +126,20 @@ export function Sidebar() {
                         )}
                       </div>
                       <div className="truncate text-xs text-[var(--text-muted)]">
-                        {new Date(conv.updatedAt).toLocaleString(i18n.resolvedLanguage)}
+                        {formatConversationTime(conv.updatedAt)}
                       </div>
                     </div>
                   </button>
                   <button
                     type="button"
                     onClick={() => setConversationToDelete(conv)}
-                    aria-label={t("sidebar:deleteConversationAria", { title: conv.title || t("sidebar:untitledConversation") })}
+                    aria-label={t("sidebar:deleteConversationAria", {
+                      title: conv.title || t("sidebar:untitledConversation"),
+                    })}
                     title={t("sidebar:deleteConversation")}
                     className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-[var(--text-tertiary)] opacity-100 transition hover:bg-red-950 hover:text-red-400 focus:opacity-100 md:opacity-0 md:group-hover:opacity-100"
                   >
-                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6h18m-2 0-.8 13a2 2 0 0 1-2 2H7.8a2 2 0 0 1-2-2L5 6m3 0V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m-6 4v7m4-7v7" />
-                    </svg>
+                    <Trash2 aria-hidden="true" className="h-4 w-4" />
                   </button>
                 </div>
               );
@@ -163,16 +173,10 @@ export function Sidebar() {
                     {t(`common:status.${agent.status}`)}
                   </div>
                 </div>
-                <svg
+                <Settings
                   aria-hidden="true"
                   className="h-4 w-4 shrink-0 text-[var(--text-tertiary)] opacity-100 transition group-hover:text-[var(--text-primary)] md:opacity-0 md:group-hover:opacity-100 md:group-focus:opacity-100"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9.6 3.4 10.2 2h3.6l.6 1.4 1.5.9 1.5-.2 1.8 3.1-.9 1.2v1.8l.9 1.2-1.8 3.1-1.5-.2-1.5.9-.6 1.4h-3.6l-.6-1.4-1.5-.9-1.5.2-1.8-3.1.9-1.2V8.4l-.9-1.2 1.8-3.1 1.5.2 1.5-.9Z" />
-                  <circle cx="12" cy="9.3" r="2.5" strokeWidth={1.8} />
-                </svg>
+                />
               </button>
             ))}
           </div>

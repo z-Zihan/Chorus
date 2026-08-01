@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { Menu } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { ChatArea } from "@/components/layout/ChatArea";
@@ -66,17 +67,13 @@ export default function App() {
                 aria-label={t("common:aria.openSidebar")}
                 className="absolute left-4 top-3 rounded-lg p-2 text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] md:hidden"
               >
-                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                </svg>
+                <Menu aria-hidden="true" className="h-5 w-5" />
               </button>
               <div className="text-center">
                 <h1 className="mb-2 text-2xl font-semibold text-[var(--text-secondary)]">
                   {t("common:appName")}
                 </h1>
-                <p className="text-sm text-[var(--text-muted)]">
-                  {t("chat:chooseConversation")}
-                </p>
+                <p className="text-sm text-[var(--text-muted)]">{t("chat:chooseConversation")}</p>
               </div>
             </div>
           )}

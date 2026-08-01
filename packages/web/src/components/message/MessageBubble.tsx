@@ -5,10 +5,12 @@ import {
   type ComponentPropsWithoutRef,
   type ReactNode,
 } from "react";
+import { Check, ChevronDown, ChevronUp, Copy } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useTranslation } from "react-i18next";
 import { AgentAvatar } from "@/components/agent/AgentAvatar";
+import { formatMessageTime } from "@/lib/date";
 import type { Message } from "@/store/chatStore";
 
 const LONG_MESSAGE_THRESHOLD = 2_000;
@@ -34,7 +36,7 @@ function CodeBlock({ children }: ComponentPropsWithoutRef<"pre">) {
   const [copied, setCopied] = useState(false);
   const codeElement = Children.toArray(children)[0];
   const className = isValidElement<{ className?: string }>(codeElement)
-    ? codeElement.props.className ?? ""
+    ? (codeElement.props.className ?? "")
     : "";
   const language = /language-([\w-]+)/.exec(className)?.[1] ?? "text";
   const code = getTextContent(codeElement).replace(/\n$/, "");
@@ -60,6 +62,11 @@ function CodeBlock({ children }: ComponentPropsWithoutRef<"pre">) {
           onClick={() => void handleCopy()}
           className="rounded px-2 py-0.5 text-[11px] text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
         >
+          {copied ? (
+            <Check aria-hidden="true" className="mr-1 inline h-3 w-3" />
+          ) : (
+            <Copy aria-hidden="true" className="mr-1 inline h-3 w-3" />
+          )}
           {copied ? t("buttons.copied") : t("buttons.copy")}
         </button>
       </div>
@@ -69,16 +76,17 @@ function CodeBlock({ children }: ComponentPropsWithoutRef<"pre">) {
 }
 
 export function MessageBubble({ message, agentName, agentAvatar }: Props) {
-  const { t, i18n } = useTranslation(["common", "chat"]);
+  const { t } = useTranslation(["common", "chat"]);
   const [isExpanded, setIsExpanded] = useState(false);
   const isUser = message.fromType === "user";
   const isError = message.status === "error";
   const isPartial = message.status === "partial";
   const isStreaming = message.status === "streaming";
   const isLongMessage = message.content.length > LONG_MESSAGE_THRESHOLD;
-  const displayedContent = isLongMessage && !isExpanded
-    ? `${message.content.slice(0, COLLAPSED_MESSAGE_LENGTH)}…`
-    : message.content;
+  const displayedContent =
+    isLongMessage && !isExpanded
+      ? `${message.content.slice(0, COLLAPSED_MESSAGE_LENGTH)}…`
+      : message.content;
 
   // System message — centered gray text
   if (message.fromType === "agent" && message.content.startsWith("[system]")) {
@@ -92,11 +100,7 @@ export function MessageBubble({ message, agentName, agentAvatar }: Props) {
   }
 
   return (
-    <div
-      className={`flex gap-3 message-enter ${
-        isUser ? "flex-row-reverse" : "flex-row"
-      }`}
-    >
+    <div className={`flex gap-3 message-enter ${isUser ? "flex-row-reverse" : "flex-row"}`}>
       {/* Avatar */}
       {!isUser && (
         <div className="mt-0.5 flex-shrink-0">
@@ -110,15 +114,13 @@ export function MessageBubble({ message, agentName, agentAvatar }: Props) {
           isUser
             ? "bg-[var(--accent-color)] text-white"
             : isError
-            ? "border border-red-700/50 bg-red-900/40 text-red-200"
-            : "bg-[var(--bg-elevated)] text-[var(--text-primary)]"
+              ? "border border-red-700/50 bg-red-900/40 text-red-200"
+              : "bg-[var(--bg-elevated)] text-[var(--text-primary)]"
         }`}
       >
         {/* Agent name label */}
         {!isUser && agentName && (
-          <div className="mb-1 text-xs font-medium text-[var(--accent-hover)]">
-            {agentName}
-          </div>
+          <div className="mb-1 text-xs font-medium text-[var(--accent-hover)]">{agentName}</div>
         )}
 
         {/* Content */}
@@ -157,15 +159,18 @@ export function MessageBubble({ message, agentName, agentAvatar }: Props) {
                 : "text-[var(--accent-hover)] hover:opacity-80"
             }`}
           >
+            {isExpanded ? (
+              <ChevronUp aria-hidden="true" className="mr-1 inline h-3.5 w-3.5" />
+            ) : (
+              <ChevronDown aria-hidden="true" className="mr-1 inline h-3.5 w-3.5" />
+            )}
             {isExpanded ? t("chat:collapseMessage") : t("chat:expandMessage")}
           </button>
         )}
 
         {/* Partial tag */}
         {isPartial && (
-          <div className="mt-1 text-xs text-yellow-500">
-            ⚠ {t("chat:partialMessage")}
-          </div>
+          <div className="mt-1 text-xs text-yellow-500">⚠ {t("chat:partialMessage")}</div>
         )}
 
         {/* Timestamp */}
@@ -174,10 +179,7 @@ export function MessageBubble({ message, agentName, agentAvatar }: Props) {
             isUser ? "text-indigo-200/70" : "text-[var(--text-tertiary)]"
           }`}
         >
-          {new Date(message.timestamp).toLocaleTimeString(i18n.resolvedLanguage, {
-            hour: "2-digit",
-            minute: "2-digit",
-          })}
+          {formatMessageTime(message.timestamp)}
           {message.metadata?.model && ` · ${message.metadata.model}`}
         </div>
       </div>

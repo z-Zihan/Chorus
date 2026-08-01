@@ -1,20 +1,21 @@
 import { useState } from "react";
+import { ChevronDown, ClipboardList } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { AgentAvatar } from "@/components/agent/AgentAvatar";
 import { useAgentStore } from "@/store/agentStore";
 import type { Message } from "@/store/chatStore";
+import { formatMessageTime } from "@/lib/date";
 
 interface Props {
   messages: Message[];
 }
 
 export function A2AThread({ messages }: Props) {
-  const { t, i18n } = useTranslation("chat");
+  const { t } = useTranslation("chat");
   const [expanded, setExpanded] = useState(false);
   const agents = useAgentStore((s) => s.agents);
 
-  const getAgentName = (id: string) =>
-    agents.find((a) => a.id === id)?.name ?? id;
+  const getAgentName = (id: string) => agents.find((a) => a.id === id)?.name ?? id;
 
   return (
     <div className="message-enter rounded-xl border border-[var(--border-color)] bg-[var(--bg-surface)]">
@@ -23,28 +24,19 @@ export function A2AThread({ messages }: Props) {
         onClick={() => setExpanded(!expanded)}
         className="flex w-full items-center gap-2 px-4 py-2.5 text-left"
       >
-        <span className="text-sm">📋</span>
+        <ClipboardList aria-hidden="true" className="h-4 w-4 text-[var(--text-tertiary)]" />
         <span className="flex-1 text-sm font-medium text-[var(--text-primary)]">
           {t("a2aChain")}
         </span>
         <span className="text-xs text-[var(--text-tertiary)]">
           {t("a2aMessages", { count: messages.length })}
         </span>
-        <svg
+        <ChevronDown
+          aria-hidden="true"
           className={`h-4 w-4 text-[var(--text-tertiary)] transition-transform ${
             expanded ? "rotate-180" : ""
           }`}
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M19 9l-7 7-7-7"
-          />
-        </svg>
+        />
       </button>
 
       {/* Expanded: show each A2A message */}
@@ -63,9 +55,7 @@ export function A2AThread({ messages }: Props) {
                     {toName && (
                       <>
                         {" → "}
-                        <span className="font-medium text-[var(--text-primary)]">
-                          {toName}
-                        </span>
+                        <span className="font-medium text-[var(--text-primary)]">{toName}</span>
                       </>
                     )}
                   </div>
@@ -74,10 +64,7 @@ export function A2AThread({ messages }: Props) {
                   </div>
                 </div>
                 <span className="text-[10px] text-[var(--text-muted)]">
-                  {new Date(msg.timestamp).toLocaleTimeString(i18n.resolvedLanguage, {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
+                  {formatMessageTime(msg.timestamp)}
                 </span>
               </div>
             );
