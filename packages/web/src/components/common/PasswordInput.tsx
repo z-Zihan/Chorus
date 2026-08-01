@@ -1,4 +1,5 @@
 import { useId, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 interface PasswordInputProps {
   label: string;
@@ -13,6 +14,7 @@ export function PasswordInput({
   onChange,
   placeholder,
 }: PasswordInputProps) {
+  const { t } = useTranslation(["common", "settings"]);
   const inputId = useId();
   const [isVisible, setIsVisible] = useState(false);
 
@@ -20,7 +22,7 @@ export function PasswordInput({
     <div>
       <label
         htmlFor={inputId}
-        className="mb-2 block text-sm font-medium text-gray-300"
+        className="mb-2 block text-sm font-medium text-[var(--text-primary)]"
       >
         {label}
       </label>
@@ -32,14 +34,14 @@ export function PasswordInput({
           onChange={(event) => onChange(event.target.value)}
           placeholder={placeholder}
           autoComplete="new-password"
-          className="w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2.5 pr-11 text-sm text-gray-100 outline-none transition placeholder:text-gray-600 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+          className="w-full rounded-lg border border-[var(--border-color)] bg-[var(--bg-base)] px-3 py-2.5 pr-11 text-sm text-[var(--text-primary)] outline-none transition placeholder:text-[var(--text-muted)] focus:border-[var(--accent-color)] focus:ring-2 focus:ring-indigo-500/20"
         />
         <button
           type="button"
           onClick={() => setIsVisible((visible) => !visible)}
-          aria-label={isVisible ? "隐藏 API Key" : "显示 API Key"}
-          title={isVisible ? "隐藏" : "显示"}
-          className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-gray-500 transition-colors hover:text-gray-200"
+          aria-label={isVisible ? t("settings:apiKeyHide") : t("settings:apiKeyShow")}
+          title={isVisible ? t("common:buttons.hide") : t("common:buttons.show")}
+          className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-primary)]"
         >
           {isVisible ? (
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">

@@ -3,6 +3,7 @@ import type { ClientEvent, Conversation, Message } from "@agentlink/shared";
 import { api } from "@/services/api";
 import { useAgentStore } from "@/store/agentStore";
 import { useUIStore } from "@/store/uiStore";
+import i18n from "@/i18n";
 
 export type { Conversation, Message } from "@agentlink/shared";
 
@@ -79,7 +80,7 @@ export const useChatStore = create<ChatState>((set, get) => {
         isStreaming: false,
         streamingMessageId: null,
       }));
-      useUIStore.getState().addToast("Agent 响应超时", "error");
+      useUIStore.getState().addToast(i18n.t("errors:agentTimeout"), "error");
       clearStreamTimer();
     }, STREAM_TIMEOUT_MS);
   };
@@ -150,7 +151,7 @@ export const useChatStore = create<ChatState>((set, get) => {
       .getState()
       .agents.find((agent) => agent.id === activeAgentId);
     if (!activeAgent || activeAgent.status !== "online") {
-      useUIStore.getState().addToast("Agent 当前不可用", "error");
+      useUIStore.getState().addToast(i18n.t("errors:agentUnavailable"), "error");
       return;
     }
 

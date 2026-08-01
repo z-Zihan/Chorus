@@ -1,0 +1,15 @@
+{
+  "chooseConversation": "选择一个会话开始对话",
+  "defaultConversationTitle": "私聊：我的 Agent",
+  "inputPlaceholder": "输入消息…（Enter 发送，Shift+Enter 换行）",
+  "loadingMessages": "正在加载消息",
+  "emptyTitle": "开始你的第一次对话",
+  "emptyDescription": "在下方输入消息，和 Agent 打个招呼吧",
+  "newMessages": "新消息",
+  "expandMessage": "展开全文",
+  "collapseMessage": "收起",
+  "partialMessage": "消息不完整（流式中断）",
+  "a2aChain": "A2A 调用链",
+  "a2aMessages_one": "{{count}} 条消息",
+  "a2aMessages_other": "{{count}} 条消息"
+}

@@ -1,9 +1,10 @@
-import { useEffect } from "react";
+import { useEffect, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 
 interface ConfirmDialogProps {
   open: boolean;
   title: string;
-  message: string;
+  message: ReactNode;
   confirmLabel?: string;
   cancelLabel?: string;
   isConfirming?: boolean;
@@ -15,12 +16,13 @@ export function ConfirmDialog({
   open,
   title,
   message,
-  confirmLabel = "确认",
-  cancelLabel = "取消",
+  confirmLabel,
+  cancelLabel,
   isConfirming = false,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
+  const { t } = useTranslation("common");
   useEffect(() => {
     if (!open) return;
 
@@ -45,14 +47,14 @@ export function ConfirmDialog({
         aria-modal="true"
         aria-labelledby="confirm-dialog-title"
         aria-describedby="confirm-dialog-description"
-        className="w-full max-w-sm rounded-xl border border-gray-800 bg-gray-900 p-5 shadow-2xl"
+        className="w-full max-w-sm rounded-xl border border-[var(--border-color)] bg-[var(--bg-surface)] p-5 shadow-2xl"
       >
-        <h2 id="confirm-dialog-title" className="text-base font-semibold text-gray-100">
+        <h2 id="confirm-dialog-title" className="text-base font-semibold text-[var(--text-primary)]">
           {title}
         </h2>
         <p
           id="confirm-dialog-description"
-          className="mt-2 text-sm leading-6 text-gray-400"
+          className="mt-2 text-sm leading-6 text-[var(--text-secondary)]"
         >
           {message}
         </p>
@@ -61,9 +63,9 @@ export function ConfirmDialog({
             type="button"
             onClick={onCancel}
             disabled={isConfirming}
-            className="rounded-lg border border-gray-700 px-4 py-2 text-sm font-medium text-gray-300 transition-colors hover:bg-gray-800 disabled:opacity-50"
+            className="rounded-lg border border-[var(--border-color)] px-4 py-2 text-sm font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-hover)] disabled:opacity-50"
           >
-            {cancelLabel}
+            {cancelLabel ?? t("buttons.cancel")}
           </button>
           <button
             type="button"
@@ -71,7 +73,7 @@ export function ConfirmDialog({
             disabled={isConfirming}
             className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-500 disabled:cursor-wait disabled:opacity-60"
           >
-            {isConfirming ? "删除中..." : confirmLabel}
+            {isConfirming ? t("buttons.deleting") : confirmLabel ?? t("buttons.confirm")}
           </button>
         </div>
       </div>

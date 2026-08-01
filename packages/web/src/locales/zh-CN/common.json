@@ -1,0 +1,32 @@
+{
+  "appName": "AgentLink",
+  "loading": "加载中…",
+  "buttons": {
+    "save": "保存",
+    "saving": "保存中…",
+    "cancel": "取消",
+    "delete": "删除",
+    "deleting": "删除中…",
+    "confirm": "确认",
+    "close": "关闭",
+    "retry": "重试",
+    "send": "发送",
+    "stop": "停止",
+    "copy": "复制",
+    "copied": "已复制",
+    "show": "显示",
+    "hide": "隐藏"
+  },
+  "status": {
+    "online": "在线",
+    "offline": "离线",
+    "busy": "忙碌",
+    "error": "错误",
+    "unknown": "未知"
+  },
+  "aria": {
+    "openSidebar": "打开侧栏",
+    "closeSidebar": "关闭侧栏",
+    "closeNotification": "关闭通知"
+  }
+}

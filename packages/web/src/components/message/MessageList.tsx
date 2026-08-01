@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useChatStore } from "@/store/chatStore";
 import { useAgentStore } from "@/store/agentStore";
 import { MessageBubble } from "./MessageBubble";
@@ -7,17 +8,17 @@ import { A2AThread } from "./A2AThread";
 
 const BOTTOM_THRESHOLD_PX = 80;
 
-function MessageSkeletons() {
+function MessageSkeletons({ label }: { label: string }) {
   return (
-    <div className="flex flex-col gap-5" aria-label="正在加载消息">
+    <div className="flex flex-col gap-5" aria-label={label}>
       {["left", "right", "left"].map((side, index) => (
         <div
           key={`${side}-${index}`}
           className={`flex animate-pulse gap-3 ${side === "right" ? "justify-end" : "justify-start"}`}
         >
-          {side === "left" && <div className="h-8 w-8 shrink-0 rounded-full bg-gray-800" />}
+          {side === "left" && <div className="h-8 w-8 shrink-0 rounded-full bg-[var(--bg-elevated)]" />}
           <div
-            className={`h-16 rounded-2xl bg-gray-800 ${index === 1 ? "w-2/5" : "w-3/5"}`}
+            className={`h-16 rounded-2xl bg-[var(--bg-elevated)] ${index === 1 ? "w-2/5" : "w-3/5"}`}
           />
         </div>
       ))}
@@ -26,6 +27,7 @@ function MessageSkeletons() {
 }
 
 export function MessageList() {
+  const { t } = useTranslation("chat");
   const messages = useChatStore((s) => s.messages);
   const isLoadingMessages = useChatStore((s) => s.isLoadingMessages);
   const isStreaming = useChatStore((s) => s.isStreaming);
@@ -111,18 +113,18 @@ export function MessageList() {
       >
         <div className="mx-auto flex max-w-4xl flex-col gap-4">
           {isLoadingMessages && messages.length === 0 ? (
-            <MessageSkeletons />
+            <MessageSkeletons label={t("loadingMessages")} />
           ) : messages.length === 0 && !isStreaming ? (
             <div className="flex flex-col items-center justify-center py-24 text-center">
-              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gray-900 text-indigo-400 ring-1 ring-gray-800">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--bg-surface)] text-[var(--accent-hover)] ring-1 ring-[var(--border-color)]">
                 <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M8 10h.01M12 10h.01M16 10h.01M21 12a8 8 0 0 1-8 8 9 9 0 0 1-4-.9L3 21l1.9-5A8 8 0 1 1 21 12Z" />
                 </svg>
               </div>
-              <p className="mt-4 text-sm font-medium text-gray-300">
-                开始你的第一次对话
+              <p className="mt-4 text-sm font-medium text-[var(--text-primary)]">
+                {t("emptyTitle")}
               </p>
-              <p className="mt-1 text-xs text-gray-600">在下方输入消息，和 Agent 打个招呼吧</p>
+              <p className="mt-1 text-xs text-[var(--text-muted)]">{t("emptyDescription")}</p>
             </div>
           ) : (
             rendered
@@ -134,9 +136,9 @@ export function MessageList() {
         <button
           type="button"
           onClick={() => scrollToBottom()}
-          className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-full border border-indigo-500/40 bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-xl transition-colors hover:bg-indigo-500"
+          className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-full border border-[var(--accent-hover)] bg-[var(--accent-color)] px-4 py-2 text-sm font-medium text-white shadow-xl transition-colors hover:bg-[var(--accent-hover)]"
         >
-          ↓ 新消息
+          ↓ {t("newMessages")}
         </button>
       )}
     </div>

@@ -1,0 +1,12 @@
+{
+  "conversations": "Conversations",
+  "noConversations": "No conversations yet",
+  "createConversation": "Create conversation",
+  "untitledConversation": "Untitled conversation",
+  "agentStatus": "Agent status",
+  "noAgents": "No agents",
+  "deleteConversation": "Delete conversation",
+  "deleteConversationAria": "Delete conversation {{title}}",
+  "deleteDialogTitle": "Delete conversation?",
+  "deleteDialogMessage": "“{{title}}” and all its messages will be permanently deleted. This cannot be undone."
+}

@@ -1,0 +1,10 @@
+{
+  "offlineBanner": "Connection lost — reconnecting",
+  "offlineToast": "Connection lost. Retrying…",
+  "requestFailed": "Request failed ({{status}})",
+  "agentTimeout": "Agent response timed out",
+  "agentUnavailable": "Agent is currently unavailable",
+  "saveFailed": "Could not save. Please try again later.",
+  "pageError": "Something went wrong",
+  "unknown": "An unknown error occurred"
+}

@@ -1,0 +1,10 @@
+{
+  "offlineBanner": "连接已断开 — 正在重连",
+  "offlineToast": "连接断开，正在重试…",
+  "requestFailed": "请求失败（{{status}}）",
+  "agentTimeout": "Agent 响应超时",
+  "agentUnavailable": "Agent 当前不可用",
+  "saveFailed": "保存失败，请稍后重试",
+  "pageError": "页面出现错误",
+  "unknown": "发生了未知错误"
+}

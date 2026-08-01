@@ -1,0 +1,12 @@
+{
+  "conversations": "会话",
+  "noConversations": "还没有会话",
+  "createConversation": "创建新会话",
+  "untitledConversation": "未命名会话",
+  "agentStatus": "Agent 状态",
+  "noAgents": "暂无 Agent",
+  "deleteConversation": "删除会话",
+  "deleteConversationAria": "删除会话 {{title}}",
+  "deleteDialogTitle": "删除会话？",
+  "deleteDialogMessage": "“{{title}}”及其中的消息将被永久删除，此操作无法撤销。"
+}

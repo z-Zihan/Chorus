@@ -1,6 +1,7 @@
 import type { Agent, AgentConfig, Conversation, Message } from "@agentlink/shared";
 import { useUIStore } from "@/store/uiStore";
 import { getApiBaseUrl } from "./env";
+import i18n from "@/i18n";
 
 // ===== API =====
 
@@ -26,14 +27,14 @@ async function request<T>(
     const now = Date.now();
     if (now - lastOfflineToastAt >= 5_000) {
       lastOfflineToastAt = now;
-      ui.addToast("连接断开，正在重试...", "error");
+      ui.addToast(i18n.t("errors:offlineToast"), "error");
     }
     throw error;
   }
 
   if (!res.ok) {
     const body = await res.text();
-    let message = body || `请求失败 (${res.status})`;
+    let message = body || i18n.t("errors:requestFailed", { status: res.status });
     try {
       const parsed = JSON.parse(body) as { error?: string; message?: string };
       message = parsed.error ?? parsed.message ?? message;

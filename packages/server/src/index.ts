@@ -25,7 +25,9 @@ async function main(): Promise<void> {
   const events = new EventHub();
   const runtime = new AgentRuntime(repository, registry, events, config);
 
-  const app = Fastify({ logger: true });
+  const app = Fastify({
+    logger: { level: process.env.SERVER_LOG_LEVEL?.trim() || "info" },
+  });
 
   await app.register(cors, { origin: config.cors.origin });
   await app.register(websocket);

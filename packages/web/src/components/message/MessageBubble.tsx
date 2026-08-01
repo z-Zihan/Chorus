@@ -7,6 +7,7 @@ import {
 } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { useTranslation } from "react-i18next";
 import { AgentAvatar } from "@/components/agent/AgentAvatar";
 import type { Message } from "@/store/chatStore";
 
@@ -29,6 +30,7 @@ function getTextContent(node: ReactNode): string {
 }
 
 function CodeBlock({ children }: ComponentPropsWithoutRef<"pre">) {
+  const { t } = useTranslation("common");
   const [copied, setCopied] = useState(false);
   const codeElement = Children.toArray(children)[0];
   const className = isValidElement<{ className?: string }>(codeElement)
@@ -48,17 +50,17 @@ function CodeBlock({ children }: ComponentPropsWithoutRef<"pre">) {
   };
 
   return (
-    <div className="relative my-2 overflow-hidden rounded-lg bg-gray-950/80">
-      <div className="flex items-center justify-end gap-2 border-b border-gray-800 px-3 py-1.5">
-        <span className="rounded bg-gray-800 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-gray-400">
+    <div className="relative my-2 overflow-hidden rounded-lg bg-[var(--bg-base)]">
+      <div className="flex items-center justify-end gap-2 border-b border-[var(--border-color)] px-3 py-1.5">
+        <span className="rounded bg-[var(--bg-elevated)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[var(--text-secondary)]">
           {language}
         </span>
         <button
           type="button"
           onClick={() => void handleCopy()}
-          className="rounded px-2 py-0.5 text-[11px] text-gray-400 transition-colors hover:bg-gray-800 hover:text-gray-100"
+          className="rounded px-2 py-0.5 text-[11px] text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
         >
-          {copied ? "已复制" : "复制"}
+          {copied ? t("buttons.copied") : t("buttons.copy")}
         </button>
       </div>
       <pre className="overflow-x-auto p-3 text-xs">{children}</pre>
@@ -67,6 +69,7 @@ function CodeBlock({ children }: ComponentPropsWithoutRef<"pre">) {
 }
 
 export function MessageBubble({ message, agentName, agentAvatar }: Props) {
+  const { t, i18n } = useTranslation(["common", "chat"]);
   const [isExpanded, setIsExpanded] = useState(false);
   const isUser = message.fromType === "user";
   const isError = message.status === "error";
@@ -81,7 +84,7 @@ export function MessageBubble({ message, agentName, agentAvatar }: Props) {
   if (message.fromType === "agent" && message.content.startsWith("[system]")) {
     return (
       <div className="flex justify-center py-2">
-        <span className="rounded-full bg-gray-800/50 px-3 py-1 text-xs text-gray-500">
+        <span className="rounded-full bg-[var(--bg-elevated)] px-3 py-1 text-xs text-[var(--text-tertiary)]">
           {message.content.replace("[system]", "").trim()}
         </span>
       </div>
@@ -105,22 +108,22 @@ export function MessageBubble({ message, agentName, agentAvatar }: Props) {
       <div
         className={`group relative max-w-[85%] rounded-2xl px-4 py-2.5 md:max-w-[75%] ${
           isUser
-            ? "bg-indigo-600 text-white"
+            ? "bg-[var(--accent-color)] text-white"
             : isError
             ? "border border-red-700/50 bg-red-900/40 text-red-200"
-            : "bg-gray-800 text-gray-100"
+            : "bg-[var(--bg-elevated)] text-[var(--text-primary)]"
         }`}
       >
         {/* Agent name label */}
         {!isUser && agentName && (
-          <div className="mb-1 text-xs font-medium text-indigo-400">
+          <div className="mb-1 text-xs font-medium text-[var(--accent-hover)]">
             {agentName}
           </div>
         )}
 
         {/* Content */}
         <div
-          className={`break-words text-sm leading-relaxed [&_code]:rounded [&_code]:bg-gray-700/60 [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-xs [&_pre_code]:bg-transparent [&_pre_code]:p-0 ${
+          className={`break-words text-sm leading-relaxed [&_code]:rounded [&_code]:bg-[var(--bg-active)] [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-xs [&_pre_code]:bg-transparent [&_pre_code]:p-0 ${
             isStreaming ? "typing-cursor" : ""
           }`}
         >
@@ -133,7 +136,7 @@ export function MessageBubble({ message, agentName, agentAvatar }: Props) {
                   href={href}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-indigo-400 underline hover:text-indigo-300"
+                  className="text-[var(--accent-hover)] underline hover:opacity-80"
                 >
                   {children}
                 </a>
@@ -151,27 +154,27 @@ export function MessageBubble({ message, agentName, agentAvatar }: Props) {
             className={`mt-2 text-xs font-medium transition-colors ${
               isUser
                 ? "text-indigo-100 hover:text-white"
-                : "text-indigo-400 hover:text-indigo-300"
+                : "text-[var(--accent-hover)] hover:opacity-80"
             }`}
           >
-            {isExpanded ? "收起" : "展开全文"}
+            {isExpanded ? t("chat:collapseMessage") : t("chat:expandMessage")}
           </button>
         )}
 
         {/* Partial tag */}
         {isPartial && (
           <div className="mt-1 text-xs text-yellow-500">
-            ⚠ 消息不完整（流式中断）
+            ⚠ {t("chat:partialMessage")}
           </div>
         )}
 
         {/* Timestamp */}
         <div
           className={`mt-1 text-right text-[10px] ${
-            isUser ? "text-indigo-300/60" : "text-gray-500"
+            isUser ? "text-indigo-200/70" : "text-[var(--text-tertiary)]"
           }`}
         >
-          {new Date(message.timestamp).toLocaleTimeString("zh-CN", {
+          {new Date(message.timestamp).toLocaleTimeString(i18n.resolvedLanguage, {
             hour: "2-digit",
             minute: "2-digit",
           })}

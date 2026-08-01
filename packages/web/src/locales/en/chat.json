@@ -1,0 +1,15 @@
+{
+  "chooseConversation": "Select a conversation to start chatting",
+  "defaultConversationTitle": "Direct message: My Agent",
+  "inputPlaceholder": "Type a message… (Enter to send, Shift+Enter for a new line)",
+  "loadingMessages": "Loading messages",
+  "emptyTitle": "Start your first conversation",
+  "emptyDescription": "Type a message below and say hello to your Agent",
+  "newMessages": "New messages",
+  "expandMessage": "Show more",
+  "collapseMessage": "Show less",
+  "partialMessage": "Incomplete message (stream interrupted)",
+  "a2aChain": "A2A call chain",
+  "a2aMessages_one": "{{count}} message",
+  "a2aMessages_other": "{{count}} messages"
+}

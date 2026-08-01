@@ -3,6 +3,8 @@ dist/
 .vite/
 data/*.db*
 .env
+.env.local
+.env.*.local
 .DS_Store
 pnpm-debug.log*
 *.tsbuildinfo

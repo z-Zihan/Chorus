@@ -1,8 +1,7 @@
 @import "tailwindcss";
+@import "./themes.css";
 
-:root {
-  color-scheme: dark;
-}
+@custom-variant dark (&:where(.dark, .dark *));
 
 html,
 body,
@@ -13,6 +12,8 @@ body,
 }
 
 body {
+  background: var(--bg-base);
+  color: var(--text-primary);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -28,11 +29,11 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgb(63 63 70);
+  background: var(--border-color);
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgb(82 82 91);
+  background: var(--bg-active);
 }
 
 /* Typing cursor blink */
@@ -44,7 +45,7 @@ body {
   content: "▊";
   animation: blink 1s infinite;
   margin-left: 2px;
-  color: rgb(129 140 248);
+  color: var(--accent-hover);
 }
 
 /* Typing dots */

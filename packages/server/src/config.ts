@@ -13,6 +13,15 @@ const defaults: AppConfig = {
   agents: [],
 };
 
+function applyEnvOverrides(config: AppConfig): AppConfig {
+  const envPort = Number.parseInt(process.env.SERVER_PORT ?? "", 10);
+  const port = Number.isInteger(envPort) && envPort > 0 && envPort <= 65_535
+    ? envPort
+    : config.port;
+  const dbPath = process.env.SERVER_DB_PATH?.trim() || config.dbPath;
+  return { ...config, port, dbPath };
+}
+
 function locateConfig(): string | undefined {
   const here = dirname(fileURLToPath(import.meta.url));
   const candidates = [
@@ -25,7 +34,9 @@ function locateConfig(): string | undefined {
 
 export async function loadConfig(): Promise<{ config: AppConfig; rootDir: string }> {
   const configPath = locateConfig();
-  if (!configPath) return { config: defaults, rootDir: process.cwd() };
+  if (!configPath) {
+    return { config: applyEnvOverrides(defaults), rootDir: process.cwd() };
+  }
 
   const jiti = createJiti(import.meta.url, { interopDefault: true });
   const userConfig = (await jiti.import(configPath, { default: true })) as Partial<AppConfig>;
@@ -37,5 +48,5 @@ export async function loadConfig(): Promise<{ config: AppConfig; rootDir: string
     history: { ...defaults.history, ...userConfig.history },
     agents: userConfig.agents ?? defaults.agents,
   };
-  return { config, rootDir: dirname(configPath) };
+  return { config: applyEnvOverrides(config), rootDir: dirname(configPath) };
 }

@@ -1,7 +1,9 @@
 import { useState, useRef, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { useChatStore } from "@/store/chatStore";
 
 export function InputBar() {
+  const { t } = useTranslation(["common", "chat"]);
   const [input, setInput] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const sendMessage = useChatStore((s) => s.sendMessage);
@@ -35,17 +37,17 @@ export function InputBar() {
   };
 
   return (
-    <div className="border-t border-gray-800 bg-gray-900 px-4 py-3">
+    <div className="border-t border-[var(--border-color)] bg-[var(--bg-surface)] px-4 py-3">
       <div className="flex items-end gap-3">
-        <div className="flex flex-1 items-end rounded-xl border border-gray-700 bg-gray-800 px-4 py-2.5 focus-within:border-indigo-500">
+        <div className="flex flex-1 items-end rounded-xl border border-[var(--border-color)] bg-[var(--bg-elevated)] px-4 py-2.5 focus-within:border-[var(--accent-color)]">
           <textarea
             ref={textareaRef}
             value={input}
             onChange={handleInput}
             onKeyDown={handleKeyDown}
             rows={1}
-            placeholder="输入消息... (Enter 发送, Shift+Enter 换行)"
-            className="max-h-40 flex-1 resize-none bg-transparent text-sm text-gray-100 placeholder-gray-500 focus:outline-none"
+            placeholder={t("chat:inputPlaceholder")}
+            className="max-h-40 flex-1 resize-none bg-transparent text-sm text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none"
             disabled={isStreaming}
           />
         </div>
@@ -54,15 +56,15 @@ export function InputBar() {
             onClick={cancelStream}
             className="flex h-10 items-center rounded-xl bg-red-600 px-4 text-sm font-medium text-white transition-colors hover:bg-red-500"
           >
-            停止
+            {t("common:buttons.stop")}
           </button>
         ) : (
           <button
             onClick={handleSend}
             disabled={!input.trim() || !currentConversationId}
-            className="flex h-10 items-center rounded-xl bg-indigo-600 px-4 text-sm font-medium text-white transition-colors hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex h-10 items-center rounded-xl bg-[var(--accent-color)] px-4 text-sm font-medium text-white transition-colors hover:bg-[var(--accent-hover)] disabled:cursor-not-allowed disabled:opacity-40"
           >
-            发送
+            {t("common:buttons.send")}
           </button>
         )}
       </div>

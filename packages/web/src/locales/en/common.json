@@ -1,0 +1,32 @@
+{
+  "appName": "AgentLink",
+  "loading": "Loading…",
+  "buttons": {
+    "save": "Save",
+    "saving": "Saving…",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "deleting": "Deleting…",
+    "confirm": "Confirm",
+    "close": "Close",
+    "retry": "Retry",
+    "send": "Send",
+    "stop": "Stop",
+    "copy": "Copy",
+    "copied": "Copied",
+    "show": "Show",
+    "hide": "Hide"
+  },
+  "status": {
+    "online": "Online",
+    "offline": "Offline",
+    "busy": "Busy",
+    "error": "Error",
+    "unknown": "Unknown"
+  },
+  "aria": {
+    "openSidebar": "Open sidebar",
+    "closeSidebar": "Close sidebar",
+    "closeNotification": "Close notification"
+  }
+}

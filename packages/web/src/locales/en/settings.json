@@ -1,0 +1,30 @@
+{
+  "title": "Agent settings",
+  "closeSettings": "Close Agent settings",
+  "name": "Name",
+  "description": "Description",
+  "model": "Model",
+  "modelPlaceholder": "For example, gpt-4o-mini",
+  "systemPrompt": "System prompt",
+  "systemPromptPlaceholder": "Describe the Agent's role and behavior",
+  "apiKey": "API Key",
+  "apiKeyPlaceholder": "Leave blank to keep the existing API Key",
+  "apiKeyHelp": "Saved keys are never displayed for security.",
+  "apiKeyShow": "Show API Key",
+  "apiKeyHide": "Hide API Key",
+  "preferences": "Appearance",
+  "theme": "Theme",
+  "themeOptions": {
+    "dark": "Dark",
+    "light": "Light",
+    "system": "Use system setting"
+  },
+  "language": "Language",
+  "languageOptions": {
+    "zh-CN": "中文",
+    "en": "English"
+  },
+  "errors": {
+    "nameRequired": "Agent name is required"
+  }
+}
