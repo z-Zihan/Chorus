@@ -1,0 +1,21 @@
+services:
+  agentlink-relay:
+    image: agentlink/relay:latest
+    build:
+      context: ../..
+      dockerfile: packages/relay/Dockerfile
+    ports:
+      - "3211:3211"
+    volumes:
+      - relay-data:/data
+    environment:
+      RELAY_PORT: "3211"
+      RELAY_JWT_SECRET: ${RELAY_JWT_SECRET:-change-me}
+      RELAY_OFFLINE_TTL_DAYS: "7"
+      RELAY_MAX_HUBS: "1000"
+      RELAY_DB_PATH: /data/relay.db
+      RELAY_LOG_LEVEL: info
+    restart: unless-stopped
+
+volumes:
+  relay-data:

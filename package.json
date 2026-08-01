@@ -13,7 +13,7 @@
     "db:generate": "pnpm --filter @agentlink/server db:generate",
     "db:migrate": "pnpm --filter @agentlink/server db:migrate",
     "db:studio": "pnpm --filter @agentlink/server db:studio",
-    "build": "pnpm --filter @agentlink/shared build && pnpm --filter @agentlink/server build && pnpm --filter @agentlink/web build",
+    "build": "pnpm --filter @agentlink/shared build && pnpm --filter @agentlink/relay build && pnpm --filter @agentlink/server build && pnpm --filter @agentlink/web build",
     "test": "pnpm --filter @agentlink/shared test && pnpm --filter @agentlink/server test",
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint .",

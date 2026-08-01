@@ -1,0 +1,29 @@
+{
+  "name": "@agentlink/relay",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsup src/index.ts --format esm --platform node --sourcemap --clean",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@agentlink/shared": "workspace:*",
+    "@fastify/cors": "^10.1.0",
+    "@fastify/websocket": "^11.0.2",
+    "better-sqlite3": "^11.10.0",
+    "drizzle-orm": "^0.36.4",
+    "fastify": "^5.4.0",
+    "nanoid": "^3.3.16",
+    "pino": "^10.3.1"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.15.30",
+    "tsup": "^8.5.0",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3"
+  }
+}
