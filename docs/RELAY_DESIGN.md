@@ -512,3 +512,92 @@ Hub B 解密 → 路由给 Agent B → 流式回复
   ↓
 Hub B 加密回复 → HubEnvelope(to: "room:xxx") → Relay → fan-out
 ```
+
+---
+
+## 13. Review 结论与修订
+
+> 2026-08-01 Code Review 结果，已合并到上述设计中。
+
+### 13.1 Ed25519 / X25519 密钥转换（已修订 §2, §3）
+
+**问题**：Hub ID = Ed25519 公钥，但 crypto_box 需要 X25519 公钥。
+
+**方案**：生成一对 Ed25519 密钥用于签名和身份，加密时通过 `crypto_sign_ed25519_pk_to_curve25519` 转换为 X25519 公钥。Hub ID = Ed25519 公钥完整 hex（不截断），显示时取前 8 位。
+
+```typescript
+import sodium from "libsodium-wrappers";
+
+// 加密时转换公钥
+const x25519PublicKey = sodium.crypto_sign_ed25519_pk_to_curve25519(ed25519PublicKey);
+const ciphertext = sodium.crypto_box(payload, nonce, x25519PublicKey, x25519SecretKey);
+```
+
+### 13.2 群聊加密：群成员公钥分发（已修订 §7）
+
+**问题**：发送方需要所有群成员的公钥才能逐个加密。
+
+**方案**：
+- 创建/加入房间时，Relay 返回所有成员的 Hub ID + 公钥
+- 发送方缓存群成员公钥列表，定期刷新
+- v1 逐个加密（群成员 ≤ 50 时可行）
+- v2 引入 MLS 群组密钥（支持大群）
+
+```
+POST /api/rooms/:id/join
+Response:
+{
+  "roomId": "xxx",
+  "members": [
+    { "hubId": "a1b2...", "publicKey": "ed25519-pub-hex", "displayName": "子涵", "online": true },
+    ...
+  ]
+}
+```
+
+### 13.3 Tauri sidecar mDNS 验证（已修订 §5, R3-01）
+
+**问题**：Tauri 生产模式下 Node.js sidecar 运行在子进程，mDNS 可能受限。
+
+**方案**：
+- R3-01 任务描述增加"验证 Tauri sidecar 模式下 mDNS 可用性"
+- mDNS 绑定到 `0.0.0.0:3212`
+- macOS：确认 App Sandbox 网络权限（com.apple.security.network.server）
+- Windows：确认防火墙例外（首次启动提示用户允许）
+- fallback：如果 mDNS 不可用，仅使用 Relay 模式
+
+### 13.4 离线消息持久化（已修订 §4, R1-04）
+
+**问题**：Relay 单实例宕机可能导致离线消息丢失。
+
+**方案**：
+- SQLite WAL 模式 + 每 5 分钟 checkpoint
+- 离线消息表写入时同步刷盘（`PRAGMA synchronous = FULL`）
+- v2 支持 Redis 副本
+
+### 13.5 消息顺序保证（已修订 §3）
+
+**问题**：不同 Hub 时钟偏差导致消息顺序错乱。
+
+**方案**：
+- 接收方按 `timestamp` 排序，容忍 ±5s 时钟偏差
+- Relay 在 fan-out 时附加 `relayTimestamp` 作为排序兜底
+- 群聊 UI 内消息按 `timestamp` 排序，不按到达顺序
+
+```typescript
+interface HubEnvelope {
+  // ... 现有字段
+  relayTimestamp?: number;  // Relay 转发时附加，用于跨 Hub 排序兜底
+}
+```
+
+### 13.6 其他修订
+
+| 位置 | 修订内容 |
+|------|---------|
+| §2 Hub ID | 用完整公钥 hex 做 ID，显示时截断前 8 位 |
+| §5 mDNS TXT | 只带 Hub ID + displayName，不带公钥（公钥通过 Relay 获取） |
+| §4 REST API | 新增 `DELETE /api/hubs/:id` — Hub 注销，清除公钥和离线消息 |
+| §8 速率限制 | 分级：direct 50/s, group 20/s, broadcast 5/s |
+| §4 离线 TTL | 做成环境变量 `RELAY_OFFLINE_TTL_DAYS`，默认 7 天 |
+| §5 P2P 端口 | 支持配置端口范围，被封时回退到 Relay |
