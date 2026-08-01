@@ -9,6 +9,8 @@ import { useWebSocket } from "@/hooks/useWebSocket";
 import { ErrorBoundary } from "@/components/common/ErrorBoundary";
 import { ToastContainer } from "@/components/common/ToastContainer";
 import { UpdateBanner } from "@/components/common/UpdateBanner";
+import { OnboardingFlow } from "@/components/onboarding/OnboardingFlow";
+import { useOnboardingStore } from "@/store/onboardingStore";
 import { useUIStore } from "@/store/uiStore";
 import { useHotkeys } from "@/hooks/useHotkey";
 import { logger } from "@/utils/logger";
@@ -28,6 +30,7 @@ export default function App() {
   const clearSelectedAgent = useAgentStore((s) => s.clearSelectedAgent);
 
   useWebSocket();
+  const onboardingStatus = useOnboardingStore((s) => s.status);
 
   useHotkeys(
     [
@@ -108,6 +111,7 @@ export default function App() {
           )}
         </main>
       </div>
+      {onboardingStatus && onboardingStatus.step !== "completed" && <OnboardingFlow />}
       <ToastContainer />
     </div>
   );

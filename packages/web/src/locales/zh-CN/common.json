@@ -28,5 +28,19 @@
     "openSidebar": "打开侧栏",
     "closeSidebar": "关闭侧栏",
     "closeNotification": "关闭通知"
+  },
+  "onboarding": {
+    "bootstrapping": "正在初始化…",
+    "scanning": "正在检测已安装的 AI CLI…",
+    "chooseAgent": "选择一个 Agent 开始",
+    "useAgent": "使用此 Agent",
+    "needsAuth": "需要登录",
+    "needsAuthDesc": "请在终端中登录后重新检测",
+    "rescanAfterLogin": "登录完成，重新检测",
+    "noneFound": "未检测到 AI CLI",
+    "noneFoundDesc": "请先安装 Claude Code、Codex 或 Copilot CLI",
+    "creatingWorkspace": "正在创建工作区…",
+    "error": "检测失败",
+    "rescan": "重新扫描"
   }
 }

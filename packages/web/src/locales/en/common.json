@@ -28,5 +28,19 @@
     "openSidebar": "Open sidebar",
     "closeSidebar": "Close sidebar",
     "closeNotification": "Close notification"
+  },
+  "onboarding": {
+    "bootstrapping": "Initializing…",
+    "scanning": "Detecting installed AI CLIs…",
+    "chooseAgent": "Choose an Agent to start",
+    "useAgent": "Use this Agent",
+    "needsAuth": "Login required",
+    "needsAuthDesc": "Please login in your terminal then rescan",
+    "rescanAfterLogin": "Done logging in, rescan",
+    "noneFound": "No AI CLI found",
+    "noneFoundDesc": "Please install Claude Code, Codex, or Copilot CLI first",
+    "creatingWorkspace": "Creating workspace…",
+    "error": "Detection failed",
+    "rescan": "Rescan"
   }
 }

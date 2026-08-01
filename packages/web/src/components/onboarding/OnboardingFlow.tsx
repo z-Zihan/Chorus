@@ -1,0 +1,142 @@
+import { useEffect } from "react";
+import { Loader2, RefreshCw, Search, Terminal, AlertCircle } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { useOnboardingStore } from "@/store/onboardingStore";
+import { useAgentStore } from "@/store/agentStore";
+import { useChatStore } from "@/store/chatStore";
+import { Button } from "@/components/ui/button";
+
+export function OnboardingFlow() {
+  const { t } = useTranslation(["common"]);
+  const { status, isLoading, checkStatus, rescan, selectAgent, complete } = useOnboardingStore();
+  const fetchAgents = useAgentStore((s) => s.fetchAgents);
+  const fetchConversations = useChatStore((s) => s.fetchConversations);
+
+  useEffect(() => {
+    void checkStatus();
+  }, [checkStatus]);
+
+  // When onboarding completes, refresh agents + conversations then dismiss
+  useEffect(() => {
+    if (status?.step === "completed") {
+      void fetchAgents();
+      void fetchConversations();
+      const timer = setTimeout(() => void complete(), 500);
+      return () => clearTimeout(timer);
+    }
+  }, [status?.step, fetchAgents, fetchConversations, complete]);
+
+  if (!status || status.step === "completed") return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--bg-base)]">
+      <div className="w-full max-w-md px-6">
+        {status.step === "bootstrapping" && (
+          <div className="text-center">
+            <Loader2 className="mx-auto h-8 w-8 animate-spin text-[var(--accent-color)]" />
+            <p className="mt-4 text-sm text-[var(--text-secondary)]">{t("common:onboarding.bootstrapping")}</p>
+          </div>
+        )}
+
+        {status.step === "scanning" && (
+          <div className="text-center">
+            <Loader2 className="mx-auto h-8 w-8 animate-spin text-[var(--accent-color)]" />
+            <p className="mt-4 text-sm text-[var(--text-secondary)]">{t("common:onboarding.scanning")}</p>
+          </div>
+        )}
+
+        {status.step === "choose_agent" && (
+          <div>
+            <h2 className="mb-4 text-center text-lg font-semibold text-[var(--text-primary)]">
+              {t("common:onboarding.chooseAgent")}
+            </h2>
+            <div className="space-y-2">
+              {status.detections.map((d) => (
+                <div
+                  key={d.id}
+                  className="flex items-center justify-between rounded-lg border border-[var(--border-color)] bg-[var(--bg-surface)] px-4 py-3"
+                >
+                  <div className="flex items-center gap-3">
+                    <Terminal className="h-5 w-5 text-[var(--text-secondary)]" />
+                    <div>
+                      <div className="text-sm font-medium text-[var(--text-primary)]">{d.displayName}</div>
+                      {d.version && (
+                        <div className="text-xs text-[var(--text-tertiary)]">v{d.version}</div>
+                      )}
+                    </div>
+                  </div>
+                  {d.status === "ready" ? (
+                    <Button size="sm" onClick={() => void selectAgent(d.id)} disabled={isLoading}>
+                      {t("common:onboarding.useAgent")}
+                    </Button>
+                  ) : (
+                    <span className="text-xs text-[var(--text-tertiary)]">{t(`common:status.${d.status}`)}</span>
+                  )}
+                </div>
+              ))}
+            </div>
+            <Button variant="ghost" className="mt-4 w-full" onClick={() => void rescan()} disabled={isLoading}>
+              <RefreshCw className="mr-2 h-4 w-4" />
+              {t("common:onboarding.rescan")}
+            </Button>
+          </div>
+        )}
+
+        {status.step === "needs_auth" && (
+          <div className="text-center">
+            <AlertCircle className="mx-auto h-8 w-8 text-amber-400" />
+            <h2 className="mt-4 text-lg font-semibold text-[var(--text-primary)]">
+              {t("common:onboarding.needsAuth")}
+            </h2>
+            <p className="mt-2 text-sm text-[var(--text-secondary)]">
+              {status.detection?.displayName}: {t("common:onboarding.needsAuthDesc")}
+            </p>
+            <Button className="mt-4 w-full" onClick={() => void rescan()} disabled={isLoading}>
+              <RefreshCw className="mr-2 h-4 w-4" />
+              {t("common:onboarding.rescanAfterLogin")}
+            </Button>
+          </div>
+        )}
+
+        {status.step === "none_found" && (
+          <div className="text-center">
+            <Search className="mx-auto h-8 w-8 text-[var(--text-tertiary)]" />
+            <h2 className="mt-4 text-lg font-semibold text-[var(--text-primary)]">
+              {t("common:onboarding.noneFound")}
+            </h2>
+            <p className="mt-2 text-sm text-[var(--text-secondary)]">
+              {t("common:onboarding.noneFoundDesc")}
+            </p>
+            <Button className="mt-4 w-full" onClick={() => void rescan()} disabled={isLoading}>
+              <RefreshCw className="mr-2 h-4 w-4" />
+              {t("common:onboarding.rescan")}
+            </Button>
+          </div>
+        )}
+
+        {status.step === "creating_workspace" && (
+          <div className="text-center">
+            <Loader2 className="mx-auto h-8 w-8 animate-spin text-[var(--accent-color)]" />
+            <p className="mt-4 text-sm text-[var(--text-secondary)]">{t("common:onboarding.creatingWorkspace")}</p>
+          </div>
+        )}
+
+        {status.step === "error" && (
+          <div className="text-center">
+            <AlertCircle className="mx-auto h-8 w-8 text-red-400" />
+            <h2 className="mt-4 text-lg font-semibold text-[var(--text-primary)]">
+              {t("common:onboarding.error")}
+            </h2>
+            <p className="mt-2 text-sm text-[var(--text-secondary)]">{status.code}</p>
+            {status.recoverable && (
+              <Button className="mt-4 w-full" onClick={() => void rescan()} disabled={isLoading}>
+                <RefreshCw className="mr-2 h-4 w-4" />
+                {t("common:onboarding.rescan")}
+              </Button>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { MessageSquare, Plus, Settings, Trash2, X } from "lucide-react";
+import { MessageSquare, Plus, Search, Settings, Trash2, X } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import { useChatStore, type Conversation } from "@/store/chatStore";
 import { useAgentStore } from "@/store/agentStore";
@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { STATUS_COLORS } from "@/constants/agent";
 import { formatConversationTime } from "@/lib/date";
 import { useHotkey } from "@/hooks/useHotkey";
+import { useOnboardingStore } from "@/store/onboardingStore";
 
 export function Sidebar() {
   const { t } = useTranslation(["common", "sidebar"]);
@@ -157,7 +158,7 @@ export function Sidebar() {
           </div>
           <div className="space-y-1">
             {agents.length === 0 && (
-              <p className="px-2 py-2 text-sm text-[var(--text-muted)]">{t("sidebar:noAgents")}</p>
+              <div className="px-2 py-2"><p className="text-sm text-[var(--text-muted)]">{t("sidebar:noAgents")}</p><Button variant="ghost" size="sm" className="mt-2 w-full" onClick={() => useOnboardingStore.getState().rescan()}><Search className="mr-2 h-4 w-4" />{t("common:onboarding.rescan")}</Button></div>
             )}
             {agents.map((agent) => (
               <button

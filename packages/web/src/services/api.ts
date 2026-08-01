@@ -1,4 +1,4 @@
-import type { Agent, AgentConfig, Conversation, Message } from "@agentlink/shared";
+import type { Agent, AgentConfig, CliDetection, Conversation, Message, OnboardingStatus } from "@agentlink/shared";
 import { useUIStore } from "@/store/uiStore";
 import { getApiBaseUrl } from "./env";
 import i18n from "@/i18n";
@@ -102,4 +102,21 @@ export const api = {
     if (level && level !== "all") params.set("level", level);
     return request<ServerLogEntry[]>(`/logs?${params.toString()}`);
   },
+
+  // Onboarding
+  getOnboardingStatus: () => request<OnboardingStatus>("/onboarding/status"),
+  rescanOnboarding: () => request<OnboardingStatus>("/onboarding/rescan", { method: "POST" }),
+  selectOnboardingAgent: (detectionId: string) =>
+    request<OnboardingStatus>("/onboarding/select-agent", {
+      method: "POST",
+      body: JSON.stringify({ detectionId }),
+    }),
+  completeOnboarding: () =>
+    request<OnboardingStatus>("/onboarding/complete", { method: "POST" }),
+
+  // CLI Detections
+  getCliDetections: () => request<CliDetection[]>("/cli/detections"),
+  scanCliDetections: () => request<CliDetection[]>("/cli/detections/scan", { method: "POST" }),
+  adoptDetection: (id: string) =>
+    request<Agent>(`/cli/detections/${id}/adopt`, { method: "POST" }),
 };
