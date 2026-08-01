@@ -33,6 +33,54 @@
     "closeSidebar": "Close sidebar",
     "closeNotification": "Close notification"
   },
+  "catalog": {
+    "title": "Agent Catalog",
+    "subtitle": "Discover and install CLI tools and API connectors",
+    "addAgent": "Add Agent",
+    "install": "Install",
+    "installing": "Installing…",
+    "progress": "{{progress}}%",
+    "installed": "Installed",
+    "failed": "Installation failed",
+    "success": "Agent installed successfully",
+    "permissions": "Permissions",
+    "homepage": "Homepage",
+    "apiKey": "API key",
+    "apiKeyPlaceholder": "Enter API key",
+    "installMethod": "Install method",
+    "confirmTitle": "Confirm installation",
+    "confirmDescription": "AgentLink will run the following command. Review it before continuing.",
+    "noCommand": "No command will be run. The connector will be configured locally.",
+    "cancelInstall": "Cancel installation",
+    "back": "Back to catalog",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "enable": "Enable",
+    "disable": "Disable",
+    "deleteAgent": "Delete Agent",
+    "deleteTitle": "Delete Agent?",
+    "deleteWarning": "Agent will be removed but conversation history is preserved",
+    "noInstalled": "No installed agents",
+    "filters": {
+      "all": "All",
+      "cli": "CLI Tools",
+      "api": "API Connectors",
+      "installed": "Installed"
+    },
+    "kinds": {
+      "detected-cli": "CLI Tool",
+      "managed-cli": "Managed CLI",
+      "api-connector": "API Connector"
+    },
+    "stages": {
+      "checking": "Checking requirements…",
+      "downloading": "Downloading…",
+      "installing": "Installing…",
+      "verifying": "Verifying installation…",
+      "done": "Installation complete",
+      "error": "Installation failed"
+    }
+  },
   "onboarding": {
     "bootstrapping": "Initializing…",
     "scanning": "Detecting installed AI CLIs…",

@@ -12,11 +12,13 @@ import { STATUS_COLORS } from "@/constants/agent";
 import { formatConversationTime } from "@/lib/date";
 import { useHotkey } from "@/hooks/useHotkey";
 import { useOnboardingStore } from "@/store/onboardingStore";
+import { CatalogModal } from "@/components/catalog/CatalogModal";
 
 export function Sidebar() {
   const { t } = useTranslation(["common", "sidebar"]);
   const [conversationToDelete, setConversationToDelete] = useState<Conversation | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isCatalogOpen, setIsCatalogOpen] = useState(false);
   const conversations = useChatStore((s) => s.conversations);
   const currentConversationId = useChatStore((s) => s.currentConversationId);
   const setCurrentConversation = useChatStore((s) => s.setCurrentConversation);
@@ -85,8 +87,14 @@ export function Sidebar() {
 
         {/* Conversations */}
         <div className="flex-1 overflow-y-auto px-2 py-3">
-          <div className="mb-2 px-2 text-xs font-medium uppercase tracking-wider text-[var(--text-tertiary)]">
-            {t("sidebar:conversations")}
+          <div className="mb-2 flex items-center justify-between gap-2 px-2">
+            <span className="text-xs font-medium uppercase tracking-wider text-[var(--text-tertiary)]">
+              {t("sidebar:conversations")}
+            </span>
+            <Button variant="ghost" size="sm" className="h-7 px-2 normal-case" onClick={() => setIsCatalogOpen(true)}>
+              <Plus aria-hidden="true" className="h-3.5 w-3.5" />
+              {t("common:catalog.addAgent")}
+            </Button>
           </div>
           <div className="space-y-1">
             {conversations.length === 0 && (
@@ -202,6 +210,7 @@ export function Sidebar() {
         onCancel={() => setConversationToDelete(null)}
       />
       <AgentSettingsPanel />
+      <CatalogModal open={isCatalogOpen} onOpenChange={setIsCatalogOpen} />
     </>
   );
 }

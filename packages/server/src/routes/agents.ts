@@ -17,15 +17,16 @@ const updateAgentSchema = createAgentSchema.pick({
   description: true,
   avatar: true,
   config: true,
-}).partial().refine((value) => Object.keys(value).length > 0, "At least one field is required");
+}).partial().extend({ disabled: z.boolean().optional() })
+  .refine((value) => Object.keys(value).length > 0, "At least one field is required");
 
 export function registerAgentRoutes(app: FastifyInstance, registry: AgentRegistry): void {
-  app.get("/api/agents", async () => {
-    return registry.list();
+  app.get<{ Querystring: { includeDisabled?: string } }>("/api/agents", async (request) => {
+    return registry.list(request.query.includeDisabled === "true");
   });
 
   app.get<{ Params: { id: string } }>("/api/agents/:id", async (req, reply) => {
-    const agent = registry.get(req.params.id);
+    const agent = registry.get(req.params.id, true);
     if (!agent) {
       reply.code(404);
       return { error: "Agent not found" };
@@ -44,13 +45,22 @@ export function registerAgentRoutes(app: FastifyInstance, registry: AgentRegistr
   app.patch<{ Params: { id: string } }>("/api/agents/:id", async (req, reply) => {
     const parsed = updateAgentSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: "Invalid update", issues: parsed.error.flatten() });
-    const agent = await registry.update(req.params.id, parsed.data);
+    const { disabled, ...updates } = parsed.data;
+    let agent;
+    if (Object.keys(updates).length > 0) {
+      agent = await registry.update(req.params.id, updates);
+    }
+    if (disabled !== undefined) {
+      agent = disabled
+        ? await registry.disable(req.params.id)
+        : await registry.enable(req.params.id);
+    }
     if (!agent) return reply.code(404).send({ error: "Agent not found" });
     return agent;
   });
 
   app.delete<{ Params: { id: string } }>("/api/agents/:id", async (req, reply) => {
-    if (!registry.get(req.params.id)) return reply.code(404).send({ error: "Agent not found" });
+    if (!registry.get(req.params.id, true)) return reply.code(404).send({ error: "Agent not found" });
     return { ok: registry.unregisterAndDelete(req.params.id) };
   });
 }

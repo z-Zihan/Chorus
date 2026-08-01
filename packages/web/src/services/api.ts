@@ -2,6 +2,11 @@ import type { Agent, AgentConfig, CliDetection, Conversation, Message, Onboardin
 import { useUIStore } from "@/store/uiStore";
 import { getApiBaseUrl } from "./env";
 import i18n from "@/i18n";
+import type {
+  CatalogEntry,
+  InstallationStatus,
+  InstallOptions,
+} from "@/store/catalogStore";
 
 export interface ServerLogEntry {
   timestamp: number;
@@ -61,7 +66,8 @@ export const api = {
   health: () => request<{ ok: boolean }>("/health"),
 
   // Agents
-  getAgents: () => request<Agent[]>("/agents"),
+  getAgents: (includeDisabled = false) =>
+    request<Agent[]>(`/agents${includeDisabled ? "?includeDisabled=true" : ""}`),
   getAgent: (id: string) => request<Agent>(`/agents/${id}`),
   createAgent: (data: AgentConfig) =>
     request<Agent>("/agents", {
@@ -74,7 +80,28 @@ export const api = {
       body: JSON.stringify(data),
     }),
   deleteAgent: (id: string) =>
-    request<void>(`/agents/${id}`, { method: "DELETE" }),
+    request<{ ok: boolean }>(`/agents/${id}`, { method: "DELETE" }),
+
+  setAgentDisabled: (id: string, disabled: boolean) =>
+    request<Agent>(`/agents/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ disabled }),
+    }),
+
+  // Catalog
+  getCatalog: () => request<CatalogEntry[]>("/catalog"),
+  getCatalogEntry: (id: string) => request<CatalogEntry>(`/catalog/${id}`),
+  installCatalogEntry: (id: string, options: InstallOptions) =>
+    request<InstallationStatus>(`/catalog/${id}/install`, {
+      method: "POST",
+      body: JSON.stringify(options),
+    }),
+  getInstallation: (id: string) =>
+    request<InstallationStatus>(`/installations/${id}`),
+  cancelInstallation: (id: string) =>
+    request<InstallationStatus>(`/installations/${id}/cancel`, {
+      method: "POST",
+    }),
 
   // Conversations
   getConversations: () => request<Conversation[]>("/conversations"),
@@ -84,7 +111,7 @@ export const api = {
       body: JSON.stringify({ title }),
     }),
   deleteConversation: (id: string) =>
-    request<void>(`/conversations/${id}`, { method: "DELETE" }),
+    request<{ ok: boolean }>(`/conversations/${id}`, { method: "DELETE" }),
 
   // Messages
   getMessages: (conversationId: string) =>

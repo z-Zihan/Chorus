@@ -17,6 +17,8 @@ interface AgentState {
     data: Partial<Pick<AgentConfig, "name" | "description" | "avatar" | "config">>
   ) => Promise<Agent>;
   updateAgentStatus: (agentId: string, status: AgentStatus) => void;
+  setAgentDisabled: (agentId: string, disabled: boolean) => Promise<void>;
+  deleteAgent: (agentId: string) => Promise<void>;
   selectAgent: (agentId: string) => void;
   clearSelectedAgent: () => void;
 }
@@ -55,6 +57,20 @@ export const useAgentStore = create<AgentState>((set) => ({
         return { ...a, status };
       }),
     })),
+
+  setAgentDisabled: async (agentId, disabled) => {
+    await api.setAgentDisabled(agentId, disabled);
+    const agents = await api.getAgents();
+    set({ agents });
+  },
+
+  deleteAgent: async (agentId) => {
+    await api.deleteAgent(agentId);
+    set((state) => ({
+      agents: state.agents.filter((agent) => agent.id !== agentId),
+      selectedAgentId: state.selectedAgentId === agentId ? null : state.selectedAgentId,
+    }));
+  },
 
   selectAgent: (agentId) => set({ selectedAgentId: agentId }),
   clearSelectedAgent: () => set({ selectedAgentId: null }),

@@ -33,6 +33,54 @@
     "closeSidebar": "关闭侧栏",
     "closeNotification": "关闭通知"
   },
+  "catalog": {
+    "title": "Agent 目录",
+    "subtitle": "发现并安装 CLI 工具和 API 连接器",
+    "addAgent": "添加 Agent",
+    "install": "安装",
+    "installing": "安装中…",
+    "progress": "{{progress}}%",
+    "installed": "已安装",
+    "failed": "安装失败",
+    "success": "Agent 安装成功",
+    "permissions": "权限",
+    "homepage": "主页",
+    "apiKey": "API 密钥",
+    "apiKeyPlaceholder": "输入 API 密钥",
+    "installMethod": "安装方式",
+    "confirmTitle": "确认安装",
+    "confirmDescription": "AgentLink 将运行以下命令，请确认后继续。",
+    "noCommand": "不会运行命令，连接器将在本地完成配置。",
+    "cancelInstall": "取消安装",
+    "back": "返回目录",
+    "enabled": "已启用",
+    "disabled": "已停用",
+    "enable": "启用",
+    "disable": "停用",
+    "deleteAgent": "删除 Agent",
+    "deleteTitle": "删除 Agent？",
+    "deleteWarning": "Agent 将被移除，但会话历史会保留",
+    "noInstalled": "暂无已安装的 Agent",
+    "filters": {
+      "all": "全部",
+      "cli": "CLI 工具",
+      "api": "API 连接器",
+      "installed": "已安装"
+    },
+    "kinds": {
+      "detected-cli": "CLI 工具",
+      "managed-cli": "托管 CLI",
+      "api-connector": "API 连接器"
+    },
+    "stages": {
+      "checking": "正在检查环境…",
+      "downloading": "正在下载…",
+      "installing": "正在安装…",
+      "verifying": "正在验证安装…",
+      "done": "安装完成",
+      "error": "安装失败"
+    }
+  },
   "onboarding": {
     "bootstrapping": "正在初始化…",
     "scanning": "正在检测已安装的 AI CLI…",

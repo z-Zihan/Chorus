@@ -59,8 +59,30 @@ export class Repository {
   }
 
   deleteAgent(id: string): boolean {
-    this.context.db.delete(conversationAgents).where(eq(conversationAgents.agentId, id)).run();
-    return this.context.db.delete(agents).where(eq(agents.id, id)).run().changes > 0;
+    const agent = this.getAgentRow(id);
+    if (!agent) return false;
+    const transaction = this.context.sqlite.transaction(() => {
+      const authoredMessages = this.context.db.select().from(messages)
+        .where(eq(messages.fromId, id)).all();
+      for (const message of authoredMessages) {
+        const metadata = safeJson<Record<string, unknown>>(message.metadata, {});
+        this.context.db.update(messages).set({
+          metadata: JSON.stringify({
+            ...metadata,
+            agentSnapshot: {
+              id: agent.id,
+              name: agent.name,
+              description: agent.description ?? "",
+              avatar: agent.avatar ?? undefined,
+              type: agent.type,
+            },
+          }),
+        }).where(eq(messages.id, message.id)).run();
+      }
+      this.context.db.delete(conversationAgents).where(eq(conversationAgents.agentId, id)).run();
+      return this.context.db.delete(agents).where(eq(agents.id, id)).run().changes > 0;
+    });
+    return transaction();
   }
 
   updateAgent(id: string, input: Partial<Pick<AgentConfig, "name" | "description" | "avatar" | "config">>): boolean {

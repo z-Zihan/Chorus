@@ -32,6 +32,8 @@ export interface Agent {
   status: AgentStatus;
   model?: string;
   error?: string;
+  disabled: boolean;
+  catalogEntryId?: string;
   createdAt: number;
   updatedAt: number;
 }

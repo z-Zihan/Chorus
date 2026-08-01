@@ -29,7 +29,10 @@ export class AgentRegistry {
   }
 
   async initialize(configs: AgentConfig[]): Promise<void> {
+    const persistedAgents = this.persistence.loadPersistedAgents();
     for (const config of configs) {
+      const persisted = persistedAgents.find((agent) => agent.id === config.id);
+      if (persisted?.disabled) continue;
       await this.registerAndPersist({
         ...config,
         source: "explicit_config",
@@ -39,7 +42,7 @@ export class AgentRegistry {
       });
     }
 
-    for (const persisted of this.persistence.loadPersistedAgents()) {
+    for (const persisted of persistedAgents) {
       if (persisted.disabled || this.entries.has(persisted.id)) continue;
       await this.registerInMemory(persisted);
     }
@@ -75,20 +78,23 @@ export class AgentRegistry {
     input: Partial<Pick<AgentConfig, "name" | "description" | "avatar" | "config">>,
   ): Promise<Agent | undefined> {
     const current = this.entries.get(id);
-    if (!current) return undefined;
+    const existing = current?.persisted
+      ?? this.persistence.loadPersistedAgents().find((agent) => agent.id === id);
+    if (!existing) return undefined;
     const config: AgentConfig = {
-      ...current.config,
+      ...existing,
       ...input,
       id,
-      config: { ...current.config.config, ...input.config },
+      config: { ...existing.config, ...input.config },
     };
-    const customizedFields = new Set(current.persisted.customizedFields);
+    const customizedFields = new Set(existing.customizedFields);
     for (const key of Object.keys(input)) customizedFields.add(key);
-    return this.registerAndPersist({
-      ...current.persisted,
+    const updated = this.persistence.persistAgent({
+      ...existing,
       ...config,
       customizedFields: [...customizedFields],
     });
+    return updated.disabled ? this.toDisabledAgent(updated) : this.registerInMemory(updated);
   }
 
   getAdapter(id: string): AgentAdapter | undefined {
@@ -107,13 +113,40 @@ export class AgentRegistry {
     if (entry.adapter instanceof BaseAdapter) entry.adapter.setRuntimeStatus(status);
   }
 
-  list(): Agent[] {
-    return [...this.entries.values()].map((entry) => this.toAgent(entry));
+  list(includeDisabled = false): Agent[] {
+    const active = [...this.entries.values()].map((entry) => this.toAgent(entry));
+    if (!includeDisabled) return active;
+    const activeIds = new Set(active.map((agent) => agent.id));
+    const disabled = this.persistence
+      .loadPersistedAgents()
+      .filter((agent) => agent.disabled && !activeIds.has(agent.id))
+      .map((persisted) => this.toDisabledAgent(persisted));
+    return [...active, ...disabled];
   }
 
-  get(id: string): Agent | undefined {
+  get(id: string, includeDisabled = false): Agent | undefined {
     const entry = this.entries.get(id);
-    return entry ? this.toAgent(entry) : undefined;
+    if (entry) return this.toAgent(entry);
+    if (!includeDisabled) return undefined;
+    const persisted = this.persistence.loadPersistedAgents().find((agent) => agent.id === id);
+    return persisted?.disabled ? this.toDisabledAgent(persisted) : undefined;
+  }
+
+  async disable(id: string): Promise<Agent | undefined> {
+    const persisted = this.persistence.loadPersistedAgents().find((agent) => agent.id === id);
+    if (!persisted) return undefined;
+    const current = this.entries.get(id);
+    current?.adapter.destroy?.();
+    this.entries.delete(id);
+    const updated = this.persistence.updatePersistedAgent(id, { disabled: true });
+    return updated ? this.toDisabledAgent(updated) : undefined;
+  }
+
+  async enable(id: string): Promise<Agent | undefined> {
+    const persisted = this.persistence.loadPersistedAgents().find((agent) => agent.id === id);
+    if (!persisted) return undefined;
+    const updated = this.persistence.updatePersistedAgent(id, { disabled: false });
+    return updated ? this.registerInMemory(updated) : undefined;
   }
 
   remove(id: string): boolean {
@@ -145,6 +178,25 @@ export class AgentRegistry {
       status: entry.status,
       model: String(entry.config.config.model ?? ""),
       error: entry.error,
+      disabled: false,
+      catalogEntryId: entry.persisted.catalogEntryId,
+      createdAt: row?.createdAt ?? Date.now(),
+      updatedAt: row?.updatedAt ?? Date.now(),
+    };
+  }
+
+  private toDisabledAgent(persisted: PersistedAgentConfig): Agent {
+    const row = this.repository.getAgentRow(persisted.id);
+    return {
+      id: persisted.id,
+      name: persisted.name,
+      description: persisted.description ?? "",
+      avatar: persisted.avatar,
+      type: persisted.type,
+      status: "offline",
+      model: String(persisted.config.model ?? ""),
+      disabled: true,
+      catalogEntryId: persisted.catalogEntryId,
       createdAt: row?.createdAt ?? Date.now(),
       updatedAt: row?.updatedAt ?? Date.now(),
     };

@@ -9,6 +9,9 @@ import { registerHealthRoutes } from "./health.js";
 import { registerLogRoutes } from "./logs.js";
 import { registerDetectionRoutes } from "./detections.js";
 import { OnboardingService, registerOnboardingRoutes } from "./onboarding.js";
+import { CatalogService } from "../catalog/index.js";
+import { InstallExecutor } from "../catalog/installer.js";
+import { registerCatalogRoutes } from "./catalog.js";
 
 export function registerRoutes(
   app: FastifyInstance,
@@ -17,6 +20,8 @@ export function registerRoutes(
   runtime: AgentRuntime,
   detector = new CliDetector(),
   onboarding = new OnboardingService(repository, registry, detector),
+  catalog = new CatalogService(registry),
+  installer = new InstallExecutor(catalog, registry, detector),
 ): void {
   registerHealthRoutes(app);
   registerLogRoutes(app);
@@ -24,4 +29,5 @@ export function registerRoutes(
   registerConversationRoutes(app, repository, registry, runtime);
   registerDetectionRoutes(app, detector, registry);
   registerOnboardingRoutes(app, onboarding);
+  registerCatalogRoutes(app, catalog, installer);
 }
