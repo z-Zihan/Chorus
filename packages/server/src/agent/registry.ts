@@ -1,32 +1,65 @@
-import type { Agent, AgentAdapter, AgentConfig, AgentStatus } from "@agentlink/shared";
-import type { Repository } from "../db/repository";
-import { BaseAdapter, messageFromError } from "./adapter";
-import { CliAdapter } from "./adapters/cli";
-import { MockAdapter } from "./adapters/mock";
-import { OpenAIAdapter } from "./adapters/openai";
+import type {
+  Agent,
+  AgentAdapter,
+  AgentConfig,
+  AgentStatus,
+  PersistedAgentConfig,
+} from "@agentlink/shared";
+import type { Repository } from "../db/repository.js";
+import { BaseAdapter, messageFromError } from "./adapter.js";
+import { CliAdapter } from "./adapters/cli.js";
+import { MockAdapter } from "./adapters/mock.js";
+import { OpenAIAdapter } from "./adapters/openai.js";
+import { AgentPersistence } from "./persistence.js";
 
 interface RegistryEntry {
   adapter: AgentAdapter;
   config: AgentConfig;
+  persisted: PersistedAgentConfig;
   status: AgentStatus;
   error?: string;
 }
 
 export class AgentRegistry {
   private readonly entries = new Map<string, RegistryEntry>();
+  private readonly persistence: AgentPersistence;
 
-  constructor(private readonly repository: Repository) {}
+  constructor(private readonly repository: Repository) {
+    this.persistence = new AgentPersistence(repository);
+  }
 
   async initialize(configs: AgentConfig[]): Promise<void> {
-    for (const config of configs) await this.register(config);
+    for (const config of configs) {
+      await this.registerAndPersist({
+        ...config,
+        source: "explicit_config",
+        managed: false,
+        customizedFields: [],
+        disabled: false,
+      });
+    }
+
+    for (const persisted of this.persistence.loadPersistedAgents()) {
+      if (persisted.disabled || this.entries.has(persisted.id)) continue;
+      await this.registerInMemory(persisted);
+    }
   }
 
   async register(config: AgentConfig): Promise<Agent> {
+    return this.registerAndPersist(config);
+  }
+
+  async registerAndPersist(config: AgentConfig | PersistedAgentConfig): Promise<Agent> {
+    const persisted = this.persistence.persistAgent(config);
+    return this.registerInMemory(persisted);
+  }
+
+  private async registerInMemory(persisted: PersistedAgentConfig): Promise<Agent> {
+    const config: AgentConfig = persisted;
     this.entries.get(config.id)?.adapter.destroy?.();
     const adapter = createAdapter(config);
-    const entry: RegistryEntry = { adapter, config, status: "offline" };
+    const entry: RegistryEntry = { adapter, config, persisted, status: "offline" };
     this.entries.set(config.id, entry);
-    this.repository.upsertAgent(config);
     try {
       await adapter.init(config.config);
       entry.status = "online";
@@ -49,7 +82,13 @@ export class AgentRegistry {
       id,
       config: { ...current.config.config, ...input.config },
     };
-    return this.register(config);
+    const customizedFields = new Set(current.persisted.customizedFields);
+    for (const key of Object.keys(input)) customizedFields.add(key);
+    return this.registerAndPersist({
+      ...current.persisted,
+      ...config,
+      customizedFields: [...customizedFields],
+    });
   }
 
   getAdapter(id: string): AgentAdapter | undefined {
@@ -78,10 +117,21 @@ export class AgentRegistry {
   }
 
   remove(id: string): boolean {
+    return this.unregisterAndDelete(id);
+  }
+
+  unregisterAndDelete(id: string): boolean {
     const entry = this.entries.get(id);
     entry?.adapter.destroy?.();
     this.entries.delete(id);
-    return this.repository.deleteAgent(id);
+    return this.persistence.deletePersistedAgent(id);
+  }
+
+  findByDetectionFingerprint(fingerprint: string): Agent | undefined {
+    const entry = [...this.entries.values()].find(
+      (candidate) => candidate.persisted.detectionFingerprint === fingerprint,
+    );
+    return entry ? this.toAgent(entry) : undefined;
   }
 
   private toAgent(entry: RegistryEntry): Agent {

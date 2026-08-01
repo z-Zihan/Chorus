@@ -37,7 +37,7 @@ export function registerAgentRoutes(app: FastifyInstance, registry: AgentRegistr
     const parsed = createAgentSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: "Invalid Agent", issues: parsed.error.flatten() });
     if (registry.get(parsed.data.id)) return reply.code(409).send({ error: "Agent already exists" });
-    const agent = await registry.register(parsed.data as AgentConfig);
+    const agent = await registry.registerAndPersist(parsed.data as AgentConfig);
     return reply.code(201).send(agent);
   });
 
@@ -51,6 +51,6 @@ export function registerAgentRoutes(app: FastifyInstance, registry: AgentRegistr
 
   app.delete<{ Params: { id: string } }>("/api/agents/:id", async (req, reply) => {
     if (!registry.get(req.params.id)) return reply.code(404).send({ error: "Agent not found" });
-    return { ok: registry.remove(req.params.id) };
+    return { ok: registry.unregisterAndDelete(req.params.id) };
   });
 }

@@ -12,6 +12,17 @@ export interface AgentConfig {
   config: Record<string, unknown>;
 }
 
+export type AgentConfigSource = "explicit_config" | "user" | "auto_detected" | "catalog";
+
+export interface PersistedAgentConfig extends AgentConfig {
+  source: AgentConfigSource;
+  managed: boolean;
+  customizedFields: string[];
+  catalogEntryId?: string;
+  detectionFingerprint?: string;
+  disabled: boolean;
+}
+
 export interface Agent {
   id: string;
   name: string;

@@ -7,7 +7,19 @@ export const agents = sqliteTable("agents", {
   avatar: text("avatar"),
   type: text("type").notNull(),
   config: text("config"),
+  source: text("source").notNull().default("user"),
+  managed: integer("managed", { mode: "boolean" }).notNull().default(false),
+  customizedFields: text("customized_fields").notNull().default("[]"),
+  catalogEntryId: text("catalog_entry_id"),
+  detectionFingerprint: text("detection_fingerprint"),
+  disabled: integer("disabled", { mode: "boolean" }).notNull().default(false),
   createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+});
+
+export const appSettings = sqliteTable("app_settings", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
   updatedAt: integer("updated_at").notNull(),
 });
 

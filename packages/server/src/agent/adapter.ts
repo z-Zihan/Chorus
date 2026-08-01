@@ -1,4 +1,4 @@
-import type { AgentAdapter, AgentStatus } from "@agentlink/shared";
+import type { AgentAdapter, AgentStatus, ConversationContext, StreamChunk } from "@agentlink/shared";
 
 export abstract class BaseAdapter implements AgentAdapter {
   abstract readonly id: string;
@@ -9,7 +9,10 @@ export abstract class BaseAdapter implements AgentAdapter {
   protected status: AgentStatus = "offline";
 
   abstract init(config: Record<string, unknown>): Promise<void>;
-  abstract handleMessage: AgentAdapter["handleMessage"];
+  abstract handleMessage(
+    message: string,
+    context: ConversationContext,
+  ): AsyncGenerator<StreamChunk>;
 
   getStatus(): AgentStatus {
     return this.status;

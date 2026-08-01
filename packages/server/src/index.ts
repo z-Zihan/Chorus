@@ -15,6 +15,8 @@ import { registerWebSocket } from "./ws/handler.js";
 import { registerRoutes } from "./routes/index.js";
 import { flushAnalytics, track } from "./analytics.js";
 import { logger } from "./utils/logger.js";
+import { CliDetector } from "./cli-detector/index.js";
+import { OnboardingService } from "./routes/onboarding.js";
 
 process.on("uncaughtException", (error) => {
   logger.fatal({ err: error }, "Uncaught exception");
@@ -39,6 +41,8 @@ async function main(): Promise<void> {
 
   const events = new EventHub();
   const runtime = new AgentRuntime(repository, registry, events, config);
+  const detector = new CliDetector();
+  const onboarding = new OnboardingService(repository, registry, detector);
 
   const app = Fastify({ loggerInstance: logger as FastifyBaseLogger });
 
@@ -55,11 +59,11 @@ async function main(): Promise<void> {
   await app.register(cors, { origin: config.cors.origin });
   await app.register(websocket);
 
-  registerRoutes(app, repository, registry, runtime);
+  registerRoutes(app, repository, registry, runtime, detector, onboarding);
   registerWebSocket(app, events, runtime);
 
-  const firstAgent = config.agents[0]?.id;
-  if (firstAgent) repository.ensureDefaultConversation(firstAgent);
+  const hasAgentsAtStartup = registry.list().length > 0;
+  if (hasAgentsAtStartup) await onboarding.bootstrap();
 
   const webDist = resolve(rootDir, "packages/web/dist");
   if (existsSync(webDist)) {
@@ -82,6 +86,11 @@ async function main(): Promise<void> {
 
   await app.listen({ host: "0.0.0.0", port: config.port });
   app.log.info(`AgentLink server running on http://localhost:${config.port}`);
+  if (!hasAgentsAtStartup) {
+    void onboarding.bootstrap().catch((error) => {
+      app.log.error({ err: error }, "Automatic CLI detection failed");
+    });
+  }
 }
 
 main().catch((err) => {

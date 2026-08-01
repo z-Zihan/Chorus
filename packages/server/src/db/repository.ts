@@ -1,28 +1,50 @@
 import { randomUUID } from "node:crypto";
-import type { AgentConfig, Conversation, Message, MessageStatus } from "@agentlink/shared";
+import type {
+  AgentConfig,
+  Conversation,
+  Message,
+  MessageStatus,
+  PersistedAgentConfig,
+} from "@agentlink/shared";
 import { and, asc, desc, eq, lt } from "drizzle-orm";
 import type { DatabaseContext } from "./index";
-import { agents, conversationAgents, conversations, messages } from "./schema";
+import { agents, appSettings, conversationAgents, conversations, messages } from "./schema";
 
 export class Repository {
   constructor(private readonly context: DatabaseContext) {}
 
-  upsertAgent(agent: AgentConfig): void {
+  upsertAgent(agent: AgentConfig | PersistedAgentConfig): void {
     const now = Date.now();
+    const persisted = toPersistedAgent(agent);
     this.context.db.insert(agents).values({
-      ...agent,
-      description: agent.description ?? "",
-      config: JSON.stringify(agent.config),
+      id: persisted.id,
+      name: persisted.name,
+      description: persisted.description ?? "",
+      avatar: persisted.avatar,
+      type: persisted.type,
+      config: JSON.stringify(persisted.config),
+      source: persisted.source,
+      managed: persisted.managed,
+      customizedFields: JSON.stringify(persisted.customizedFields),
+      catalogEntryId: persisted.catalogEntryId,
+      detectionFingerprint: persisted.detectionFingerprint,
+      disabled: persisted.disabled,
       createdAt: now,
       updatedAt: now,
     }).onConflictDoUpdate({
       target: agents.id,
       set: {
-        name: agent.name,
-        description: agent.description ?? "",
-        avatar: agent.avatar,
-        type: agent.type,
-        config: JSON.stringify(agent.config),
+        name: persisted.name,
+        description: persisted.description ?? "",
+        avatar: persisted.avatar,
+        type: persisted.type,
+        config: JSON.stringify(persisted.config),
+        source: persisted.source,
+        managed: persisted.managed,
+        customizedFields: JSON.stringify(persisted.customizedFields),
+        catalogEntryId: persisted.catalogEntryId,
+        detectionFingerprint: persisted.detectionFingerprint,
+        disabled: persisted.disabled,
         updatedAt: now,
       },
     }).run();
@@ -63,9 +85,14 @@ export class Repository {
     return { id, title, type: type as Conversation["type"], agentIds: agentId ? [agentId] : [], createdAt: now, updatedAt: now };
   }
 
-  ensureDefaultConversation(agentId: string): void {
-    const current = this.context.db.select().from(conversations).limit(1).get();
-    if (!current) this.createConversation("New conversation", "dm", agentId);
+  ensureDefaultConversation(agentId: string): Conversation {
+    const existingLink = this.context.db.select().from(conversationAgents)
+      .where(eq(conversationAgents.agentId, agentId)).limit(1).get();
+    if (existingLink) {
+      const existing = this.getConversation(existingLink.conversationId);
+      if (existing) return existing;
+    }
+    return this.createConversation("New conversation", "dm", agentId);
   }
 
   listConversations(): Conversation[] {
@@ -134,9 +161,34 @@ export class Repository {
     }).where(eq(messages.id, id)).run();
   }
 
+  getSetting(key: string): string | undefined {
+    return this.context.db.select().from(appSettings).where(eq(appSettings.key, key)).get()?.value;
+  }
+
+  setSetting(key: string, value: string): void {
+    const now = Date.now();
+    this.context.db.insert(appSettings).values({ key, value, updatedAt: now }).onConflictDoUpdate({
+      target: appSettings.key,
+      set: { value, updatedAt: now },
+    }).run();
+  }
+
   private touchConversation(id: string): void {
     this.context.db.update(conversations).set({ updatedAt: Date.now() }).where(eq(conversations.id, id)).run();
   }
+}
+
+function toPersistedAgent(agent: AgentConfig | PersistedAgentConfig): PersistedAgentConfig {
+  const persisted = agent as Partial<PersistedAgentConfig>;
+  return {
+    ...agent,
+    source: persisted.source ?? "user",
+    managed: persisted.managed ?? false,
+    customizedFields: persisted.customizedFields ?? [],
+    catalogEntryId: persisted.catalogEntryId,
+    detectionFingerprint: persisted.detectionFingerprint,
+    disabled: persisted.disabled ?? false,
+  };
 }
 
 function safeJson<T>(value: string | null, fallback: T): T {

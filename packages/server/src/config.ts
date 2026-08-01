@@ -1,12 +1,24 @@
 import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { homedir } from "node:os";
 import type { AppConfig } from "@agentlink/shared";
 import { createJiti } from "jiti";
 
+export function resolveAppDataDir(): string {
+  if (process.platform === "darwin") {
+    return join(homedir(), "Library", "Application Support", "AgentLink");
+  }
+  if (process.platform === "win32") {
+    return join(process.env.APPDATA?.trim() || join(homedir(), "AppData", "Roaming"), "AgentLink");
+  }
+  return join(process.env.XDG_DATA_HOME?.trim() || join(homedir(), ".local", "share"), "agentlink");
+}
+
 const defaults: AppConfig = {
   port: 3210,
-  dbPath: "./data/agentlink.db",
+  dbPath: join(resolveAppDataDir(), "agentlink.db"),
   cors: { origin: ["http://localhost:5173", "http://127.0.0.1:5173"] },
   auth: { enabled: false },
   history: { maxMessages: 20, maxTokens: 8_000 },

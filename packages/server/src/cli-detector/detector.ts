@@ -1,0 +1,338 @@
+import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
+import { constants as fsConstants } from "node:fs";
+import { access, realpath } from "node:fs/promises";
+import { homedir } from "node:os";
+import { basename, delimiter, join, normalize } from "node:path";
+import type { CliDetection, CliDetectionSource, CliReadiness } from "@agentlink/shared";
+import { CLI_DESCRIPTORS, type CliDescriptor } from "./descriptors.js";
+
+const MAX_OUTPUT_BYTES = 64 * 1024;
+const LOGIN_SHELL_TIMEOUT_MS = 2_000;
+
+export interface ProbeResult {
+  exitCode: number | null;
+  stdout: string;
+  stderr: string;
+  timedOut: boolean;
+  errorCode?: string;
+}
+
+interface ExecutableCandidate {
+  descriptor: CliDescriptor;
+  executablePath: string;
+  resolvedPath: string;
+  source: CliDetectionSource;
+}
+
+interface SearchDirectory {
+  path: string;
+  source: Exclude<CliDetectionSource, "user_selected">;
+}
+
+export async function scanPath(signal?: AbortSignal): Promise<ExecutableCandidate[]> {
+  throwIfAborted(signal);
+  const searchDirectories = await collectSearchDirectories(signal);
+  const candidates: ExecutableCandidate[] = [];
+  const resolvedPaths = new Set<string>();
+
+  for (const descriptor of CLI_DESCRIPTORS) {
+    const names = descriptor.executableNames[process.platform] ?? [descriptor.executable];
+    for (const directory of searchDirectories) {
+      for (const name of names) {
+        for (const filename of executableFilenames(name)) {
+          throwIfAborted(signal);
+          const executablePath = join(directory.path, filename);
+          try {
+            await access(
+              executablePath,
+              process.platform === "win32" ? fsConstants.F_OK : fsConstants.X_OK,
+            );
+            const resolvedPath = await realpath(executablePath);
+            const dedupeKey = normalizeForComparison(resolvedPath);
+            if (resolvedPaths.has(dedupeKey)) continue;
+            resolvedPaths.add(dedupeKey);
+            candidates.push({ descriptor, executablePath, resolvedPath, source: directory.source });
+          } catch {
+            // Missing and inaccessible candidates are expected during a scan.
+          }
+        }
+      }
+    }
+  }
+
+  return candidates;
+}
+
+export async function probeExecutable(
+  executablePath: string,
+  descriptor: CliDescriptor,
+  signal?: AbortSignal,
+): Promise<ProbeResult> {
+  throwIfAborted(signal);
+  return new Promise<ProbeResult>((resolve, reject) => {
+    let stdout: Buffer<ArrayBufferLike> = Buffer.alloc(0);
+    let stderr: Buffer<ArrayBufferLike> = Buffer.alloc(0);
+    let timedOut = false;
+    let settled = false;
+    let spawnErrorCode: string | undefined;
+
+    const child = spawn(executablePath, descriptor.versionProbe.args, {
+      shell: false,
+      stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
+    });
+
+    const finish = (exitCode: number | null) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", abortHandler);
+      resolve({
+        exitCode,
+        stdout: stdout.toString("utf8"),
+        stderr: stderr.toString("utf8"),
+        timedOut,
+        errorCode: spawnErrorCode,
+      });
+    };
+
+    const abortHandler = () => {
+      child.kill();
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      reject(abortError());
+    };
+
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill();
+    }, descriptor.versionProbe.timeoutMs);
+
+    signal?.addEventListener("abort", abortHandler, { once: true });
+    child.stdout?.on("data", (chunk: Buffer) => {
+      stdout = appendLimited(stdout, chunk);
+    });
+    child.stderr?.on("data", (chunk: Buffer) => {
+      stderr = appendLimited(stderr, chunk);
+    });
+    child.once("error", (error: NodeJS.ErrnoException) => {
+      spawnErrorCode = error.code;
+    });
+    child.once("close", finish);
+  });
+}
+
+export async function detect(signal?: AbortSignal): Promise<CliDetection[]> {
+  const candidates = await scanPath(signal);
+  return mapWithConcurrency(candidates, 3, (candidate) => probeCandidate(candidate, signal), signal);
+}
+
+export async function detectSelectedExecutable(
+  executablePath: string,
+  descriptor: CliDescriptor,
+  signal?: AbortSignal,
+): Promise<CliDetection> {
+  throwIfAborted(signal);
+  await access(executablePath, process.platform === "win32" ? fsConstants.F_OK : fsConstants.X_OK);
+  const resolvedPath = await realpath(executablePath);
+  return probeCandidate(
+    { descriptor, executablePath, resolvedPath, source: "user_selected" },
+    signal,
+  );
+}
+
+export function descriptorForExecutablePath(executablePath: string): CliDescriptor | undefined {
+  const filename = basename(executablePath).toLowerCase().replace(/\.(exe|cmd|bat)$/u, "");
+  return CLI_DESCRIPTORS.find((descriptor) => {
+    const names = descriptor.executableNames[process.platform] ?? [descriptor.executable];
+    return names.some((name) => name.toLowerCase() === filename);
+  });
+}
+
+async function probeCandidate(
+  candidate: ExecutableCandidate,
+  signal?: AbortSignal,
+): Promise<CliDetection> {
+  const probe = await probeExecutable(candidate.executablePath, candidate.descriptor, signal);
+  const combinedOutput = `${probe.stdout}\n${probe.stderr}`.trim();
+  const status = readinessFromProbe(probe, combinedOutput);
+  const version = probe.exitCode === 0 ? firstOutputLine(combinedOutput) : undefined;
+  const fingerprint = createHash("sha256")
+    .update(`${normalizeForComparison(candidate.resolvedPath)}\0${version ?? ""}`)
+    .digest("hex");
+
+  return {
+    id: fingerprint.slice(0, 16),
+    descriptorId: candidate.descriptor.id,
+    displayName: candidate.descriptor.displayName,
+    executablePath: candidate.executablePath,
+    resolvedPath: candidate.resolvedPath,
+    version,
+    status,
+    source: candidate.source,
+    diagnosticsCode: diagnosticsFromProbe(probe, status),
+    detectedAt: Date.now(),
+    fingerprint,
+  };
+}
+
+function readinessFromProbe(probe: ProbeResult, output: string): CliReadiness {
+  if (probe.timedOut) return "error";
+  if (probe.exitCode === 0) return "ready";
+  if (/auth(?:entication)? required|not logged in|login required|unauthorized/iu.test(output)) {
+    return "needs_auth";
+  }
+  if (/unsupported|requires? (?:node|version)|version too old/iu.test(output)) return "unsupported";
+  return "error";
+}
+
+function diagnosticsFromProbe(probe: ProbeResult, status: CliReadiness): string | undefined {
+  if (probe.timedOut) return "PROBE_TIMEOUT";
+  if (probe.errorCode === "EACCES" || probe.errorCode === "EPERM") return "PERMISSION_DENIED";
+  if (probe.errorCode === "ENOENT") return "CLI_NOT_FOUND";
+  if (status === "needs_auth") return "AUTH_REQUIRED";
+  if (status === "unsupported") return "VERSION_UNSUPPORTED";
+  if (status === "error") return "PROBE_FAILED";
+  return undefined;
+}
+
+async function collectSearchDirectories(signal?: AbortSignal): Promise<SearchDirectory[]> {
+  const result: SearchDirectory[] = [];
+  addPathEntries(result, process.env.PATH, "process_path");
+
+  const loginPath = await readLoginShellPath(signal);
+  addPathEntries(result, loginPath, "login_shell");
+
+  const userHome = homedir();
+  const known = new Set<string>();
+  for (const descriptor of CLI_DESCRIPTORS) {
+    for (const directory of descriptor.knownInstallDirs[process.platform] ?? []) known.add(directory);
+  }
+  if (process.platform === "darwin") {
+    known.add("/opt/homebrew/bin");
+    known.add("/usr/local/bin");
+    known.add(join(userHome, ".local", "bin"));
+  } else if (process.platform === "linux") {
+    known.add(join(userHome, ".local", "bin"));
+    known.add(join(userHome, ".local", "share", "pnpm"));
+  } else if (process.platform === "win32") {
+    if (process.env.LOCALAPPDATA) known.add(join(process.env.LOCALAPPDATA, "Programs"));
+    if (process.env.APPDATA) known.add(join(process.env.APPDATA, "npm"));
+  }
+  for (const path of known) result.push({ path, source: "known_dir" });
+
+  const deduplicated = new Map<string, SearchDirectory>();
+  for (const directory of result) {
+    if (!directory.path.trim()) continue;
+    const key = normalizeForComparison(directory.path);
+    if (!deduplicated.has(key)) deduplicated.set(key, directory);
+  }
+  return [...deduplicated.values()];
+}
+
+function addPathEntries(
+  target: SearchDirectory[],
+  value: string | undefined,
+  source: SearchDirectory["source"],
+): void {
+  for (const path of value?.split(delimiter) ?? []) {
+    if (path.trim()) target.push({ path: path.trim(), source });
+  }
+}
+
+async function readLoginShellPath(signal?: AbortSignal): Promise<string | undefined> {
+  if (process.platform === "win32") return undefined;
+  const shell = process.env.SHELL?.trim();
+  if (!shell) return undefined;
+
+  return new Promise<string | undefined>((resolve) => {
+    let output: Buffer<ArrayBufferLike> = Buffer.alloc(0);
+    let settled = false;
+    const child = spawn(shell, ["-l", "-c", "printf '%s' \"$PATH\""], {
+      shell: false,
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", abortHandler);
+      resolve(output.toString("utf8").trim() || undefined);
+    };
+    const abortHandler = () => {
+      child.kill();
+      finish();
+    };
+    const timer = setTimeout(() => {
+      child.kill();
+      finish();
+    }, LOGIN_SHELL_TIMEOUT_MS);
+    signal?.addEventListener("abort", abortHandler, { once: true });
+    child.stdout?.on("data", (chunk: Buffer) => {
+      output = appendLimited(output, chunk);
+    });
+    child.once("error", finish);
+    child.once("close", finish);
+  });
+}
+
+function executableFilenames(name: string): string[] {
+  if (process.platform !== "win32") return [name];
+  if (/\.[^.]+$/u.test(name)) return [name];
+  const extensions = (process.env.PATHEXT ?? ".EXE;.CMD;.BAT")
+    .split(";")
+    .map((extension) => extension.trim().toLowerCase())
+    .filter((extension) => [".exe", ".cmd", ".bat"].includes(extension));
+  return [...new Set(extensions.length ? extensions : [".exe", ".cmd", ".bat"])]
+    .map((extension) => `${name}${extension}`);
+}
+
+async function mapWithConcurrency<T, R>(
+  values: T[],
+  concurrency: number,
+  mapper: (value: T) => Promise<R>,
+  signal?: AbortSignal,
+): Promise<R[]> {
+  const results = new Array<R>(values.length);
+  let nextIndex = 0;
+  const workers = Array.from({ length: Math.min(concurrency, values.length) }, async () => {
+    while (nextIndex < values.length) {
+      throwIfAborted(signal);
+      const index = nextIndex++;
+      const value = values[index];
+      if (value !== undefined) results[index] = await mapper(value);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+
+function appendLimited(
+  current: Buffer<ArrayBufferLike>,
+  chunk: Buffer<ArrayBufferLike>,
+): Buffer<ArrayBufferLike> {
+  if (current.length >= MAX_OUTPUT_BYTES) return current;
+  return Buffer.concat([current, chunk.subarray(0, MAX_OUTPUT_BYTES - current.length)]);
+}
+
+function firstOutputLine(output: string): string | undefined {
+  const line = output.split(/\r?\n/u).find((candidate) => candidate.trim());
+  return line?.trim().slice(0, 240);
+}
+
+function normalizeForComparison(path: string): string {
+  const normalized = normalize(path);
+  return process.platform === "win32" ? normalized.toLowerCase() : normalized;
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) throw abortError();
+}
+
+function abortError(): Error {
+  const error = new Error("CLI detection aborted");
+  error.name = "AbortError";
+  return error;
+}

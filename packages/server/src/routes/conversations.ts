@@ -33,6 +33,7 @@ export function registerConversationRoutes(
     if (!parsed.success) return reply.code(400).send({ error: "Invalid conversation", issues: parsed.error.flatten() });
     const fallbackAgentId = registry.list().find((agent) => agent.status !== "offline")?.id;
     const agentId = parsed.data.agentId ?? fallbackAgentId;
+    if (!agentId) return reply.code(409).send({ error: "NO_AGENT_AVAILABLE" });
     if (agentId && !registry.get(agentId)) return reply.code(400).send({ error: "Agent not found" });
     const conversation = repository.createConversation(
       parsed.data.title ?? "新会话",
