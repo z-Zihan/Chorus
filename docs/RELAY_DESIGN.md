@@ -2,6 +2,8 @@
 
 > 版本: v1.0 | 日期: 2026-08-01
 
+> 实现状态：`packages/relay` 已包含可构建的 Relay Server、Docker Compose、Hub 注册、WebSocket 路由、离线消息和 Room 基础。桌面端 Hub Client、P2P、端到端加密接入和最终用户群聊仍是设计/待集成状态。部署 Relay 服务本身不会自动解锁当前桌面客户端的跨设备功能。
+
 ## 1. 架构总览
 
 ### 三种通信模式

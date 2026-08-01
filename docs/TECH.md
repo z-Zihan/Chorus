@@ -1,6 +1,8 @@
 # AgentLink — 技术设计文档
 
-> 版本: v1.1 | 日期: 2026-08-01
+> 版本: v1.2 | 日期: 2026-08-01
+>
+> 状态约定：本文同时包含已实现和目标设计。未标注的旧章节可能是架构预留；新增 §8.1–8.3 为下一迭代 P0/P1 设计，当前代码尚未实现。产品状态以 [产品审计](PRODUCT_AUDIT.md) 为准。
 
 ## 1. 系统架构
 
@@ -568,7 +570,7 @@ ws.on("message", (data) => {
 | 认证 | MVP 单用户：user id 固定为 "user"，不启用认证；多用户场景启用 Bearer Token |
 | CORS | 仅允许 localhost |
 | 输入校验 | Zod schema 验证所有输入 |
-| API Key 存储 | 加密存数据库，不明文返回 |
+| API Key 存储 | **当前缺口：** 配置 JSON 会直接存入 SQLite，尚未加密；UI 不应宣称已安全保管。目标是系统钥匙串 + 数据库仅存引用 |
 | SQL 注入 | Drizzle ORM 参数化查询 |
 
 ### 7.1 认证策略
@@ -661,7 +663,336 @@ interface AgentConfig {
 }
 ```
 
-配置文件：`agentlink.config.ts`（项目根目录，TS 格式，类型安全）
+当前配置入口：`agentlink.config.ts`（项目根目录，TS 格式，类型安全）。
+
+**目标变更：** 配置文件将降级为高级覆盖和可重复部署入口，不再是首次使用的前置条件。常规用户配置存入 OS 应用数据目录；敏感信息存入系统钥匙串。
+
+### 8.1 CLI 自动检测（P0，待实现）
+
+#### 8.1.1 目标与非目标
+
+目标：
+
+- 在 macOS、Windows、Linux 发现受支持的 AI CLI，即使桌面进程没有继承用户的 shell PATH。
+- 返回稳定的真实路径、版本、来源、可用性状态和推荐 Adapter 配置。
+- 扫描只读、可取消、有超时，不会触发登录、网络计费请求或修改用户文件。
+
+非目标：
+
+- 不枚举并执行所有 PATH 文件。
+- 不通过 shell 拼接用户输入命令。
+- 检测阶段不自动安装、升级或登录 CLI。
+
+#### 8.1.2 Descriptor 清单
+
+每个受支持 CLI 由内置、可版本化的 Descriptor 描述，检测器不接受 Catalog 直接下发任意探测命令。
+
+```typescript
+type CliReadiness =
+  | "ready"
+  | "installed"
+  | "needs_auth"
+  | "unsupported"
+  | "error";
+
+interface CliDescriptor {
+  id: "claude-code" | "codex" | "copilot-cli" | string;
+  displayName: string;
+  executableNames: Partial<Record<NodeJS.Platform, string[]>>;
+  knownInstallDirs: Partial<Record<NodeJS.Platform, string[]>>;
+  versionProbe: {
+    args: string[];
+    timeoutMs: number;       // 默认 2000
+    parse: "semver" | "text";
+  };
+  readinessProbe?: {
+    // 只能引用代码中已审核的 probe id，不是远程命令
+    id: string;
+    timeoutMs: number;
+  };
+  minimumVersion?: string;
+  adapterTemplate: {
+    input: "stdin" | "argument";
+    output: "jsonl" | "codex-json" | "plain" | "json";
+    args: string[];
+  };
+}
+
+interface CliDetection {
+  descriptorId: string;
+  executablePath: string;
+  resolvedPath: string;
+  version?: string;
+  readiness: CliReadiness;
+  source: "process_path" | "login_shell" | "known_dir" | "user_selected";
+  diagnosticsCode?: string; // 例如 AUTH_REQUIRED、VERSION_TOO_OLD
+  detectedAt: number;
+  fingerprint: string;      // resolvedPath + version，用于去重/缓存
+}
+```
+
+首批支持表必须经过真机 fixture 固定，不在设计文档中猜测未验证参数：
+
+| CLI | 候选命令 | 结构化输出目标 | 状态 |
+|-----|------------|--------------------|------|
+| Claude Code | `claude` | stream JSON | 首批 |
+| Codex | `codex` | `exec --json` 事件 | 首批 |
+| GitHub Copilot CLI | `copilot`，并兼容已验证别名 | 结构化/可稳定解析输出 | 首批，参数需 fixture 确认 |
+
+#### 8.1.3 PATH 和候选路径
+
+```text
+1. 读取当前进程 PATH
+2. 尝试获取用户登录 shell PATH（有超时，不加载互动配置）
+3. 补充平台常见目录
+4. 按 Descriptor 的确切文件名查找
+5. 解析 symlink / Windows shim，验证可执行性
+6. 按 resolvedPath 去重
+7. 有界并发执行版本探测
+```
+
+平台注意：
+
+- macOS 从 Finder 启动的 Tauri App 通常不继承 zsh 中的 PATH。需要合并 login-shell 结果和 `/opt/homebrew/bin`、`/usr/local/bin` 等常见路径，同时提供“选择可执行文件”兜底。
+- Windows 按 `PATHEXT` 检查 `.exe/.cmd/.bat` shim，使用 `spawn(file, args, { shell: false })` 进行探测，避免字符串 shell 注入。
+- Linux 不假设桌面会话加载 `.bashrc`/`.zshrc`，优先 XDG 配置和用户显式选择。
+
+#### 8.1.4 安全探测器
+
+```typescript
+interface ProbeResult {
+  exitCode: number | null;
+  stdout: string; // 最多 64 KiB
+  stderr: string; // 最多 64 KiB，日志前脱敏
+  timedOut: boolean;
+}
+
+async function probeExecutable(
+  executablePath: string,
+  descriptor: CliDescriptor,
+  signal: AbortSignal,
+): Promise<CliDetection> {
+  // 禁止 shell；参数来自内置 descriptor；限制时间、输出和并发数。
+  // 版本探测成功不等于已登录，readiness 单独判定。
+  throw new Error("design placeholder");
+}
+```
+
+不能通过真实聊天请求检测登录，因为这可能产生费用、历史和网络数据。如工具没有无副作用的 auth status 命令，标记为 `installed`，在用户确认启用后再通过第一次调用进入 `ready` 或 `needs_auth`。
+
+#### 8.1.5 服务和 API
+
+```text
+GET  /api/cli/detections
+POST /api/cli/detections/scan       # 启动或重新扫描
+POST /api/cli/detections/:id/adopt  # 用户确认添加为 Agent
+POST /api/cli/detections/locate     # 用户选择自定义可执行路径
+```
+
+扫描事件通过 WebSocket/SSE 逐步返回，不阻塞 UI：
+
+```typescript
+type DetectionEvent =
+  | { type: "detection_scan_started"; scanId: string }
+  | { type: "detection_found"; scanId: string; detection: CliDetection }
+  | { type: "detection_scan_finished"; scanId: string; durationMs: number }
+  | { type: "detection_scan_failed"; scanId: string; code: string };
+```
+
+缓存只用于快速首屏，后台仍重新验证。当 PATH 或 Catalog 版本变化、用户点击重扫、已管理 CLI 启动失败时，缓存失效。
+
+### 8.2 Agent Catalog 与端内安装（P1，待实现）
+
+#### 8.2.1 产品语义
+
+“安装 Agent”有三种不同操作，UI 不得混为一个按钮：
+
+1. **添加已安装 CLI**：使用检测到的本机命令，不修改系统。
+2. **安装 CLI**：调用受信安装方式，会修改本机，必须明确确认。
+3. **配置 Connector**：连接 OpenAI-compatible 等 API，涉及密钥和网络边界。
+
+#### 8.2.2 Catalog Schema
+
+首版使用随应用发布的本地 Catalog，先不开放任意远程源。远程 Catalog 必须等签名、审核、回滚和信任策略完成后再开放。
+
+```typescript
+interface CatalogEntry {
+  schemaVersion: 1;
+  id: string;
+  name: string;
+  summary: string;
+  publisher: {
+    name: string;
+    url: string;
+    verified: boolean;
+  };
+  kind: "detected-cli" | "managed-cli" | "api-connector";
+  platforms: Array<"darwin" | "win32" | "linux">;
+  capabilities: string[];
+  permissions: Array<"network" | "filesystem" | "process" | "credentials">;
+  homepage: string;
+  license?: string;
+  descriptorId?: string;
+  install?: Partial<Record<NodeJS.Platform, InstallRecipe[]>>;
+  uninstall?: Partial<Record<NodeJS.Platform, InstallRecipe[]>>;
+  adapterTemplate: Record<string, unknown>;
+  integrity?: {
+    algorithm: "sha256";
+    digest: string;
+  };
+}
+
+interface InstallRecipe {
+  method: "brew" | "winget" | "npm" | "download";
+  executable: string;
+  args: string[];
+  requiresElevation: boolean;
+}
+```
+
+Catalog 中的安装配方先映射到代码内审核过的 installer，不直接交给 shell 解析。
+
+#### 8.2.3 安装状态机
+
+```text
+idle
+ → checking_compatibility
+ → awaiting_confirmation   # 展示发布者、命令、权限、安装位置
+ → downloading/installing
+ → verifying               # 完整性 + CLI 自动检测 + Adapter 健康检查
+ → installed
+ └→ failed → rolling_back → idle/failed
+```
+
+安装 API：
+
+```text
+GET    /api/catalog
+GET    /api/catalog/:id
+POST   /api/catalog/:id/install
+POST   /api/installations/:id/cancel
+DELETE /api/agents/:id?removeManagedBinary=false
+```
+
+安装任务必须记录结构化事件，但不记录 token、API Key、完整本地环境变量或聊天正文。
+
+#### 8.2.4 Agent 持久化与合并
+
+当前 `AgentRegistry.initialize()` 只读取 `config.agents`，通过 API 注册到 SQLite 的 Agent 在重启时不会重新进入内存 Registry。端内安装之前必须先修复这一点。
+
+目标记录：
+
+```typescript
+interface PersistedAgentConfig extends AgentConfig {
+  source: "explicit_config" | "user" | "auto_detected" | "catalog";
+  managed: boolean;          // AgentLink 是否管理二进制生命周期
+  customizedFields: string[];
+  catalogEntryId?: string;
+  detectionFingerprint?: string;
+  disabled: boolean;
+}
+```
+
+合并顺序从高到低：
+
+```text
+显式管理策略 / agentlink.config.ts
+  > 用户在 UI 中确认且修改的持久记录
+  > 新的自动检测候选
+  > Catalog 默认模板
+```
+
+自动检测只能更新未被用户自定义的字段。显式禁用的 Agent 即使再次检测到也不能自动启用。
+
+#### 8.2.5 密钥存储
+
+- Tauri 桌面端使用 macOS Keychain / Windows Credential Manager / Linux Secret Service。
+- SQLite 仅存 `credentialRef`，REST API 永不返回原始密钥。
+- Web 开发模式在无钥匙串时，默认只允许从环境变量或当次内存读取，并明确标记“不持久化”。
+- 迁移时检测现有 SQLite/config 明文密钥，经用户确认后移入钥匙串，再删除原值。
+
+### 8.3 零配置 Onboarding 技术流（P0，待实现）
+
+#### 8.3.1 首启状态机
+
+```typescript
+type OnboardingState =
+  | { step: "bootstrapping" }
+  | { step: "scanning"; scanId: string }
+  | { step: "choose_agent"; detections: CliDetection[] }
+  | { step: "needs_auth"; detection: CliDetection }
+  | { step: "none_found" }
+  | { step: "creating_workspace"; agentId: string }
+  | { step: "completed"; conversationId: string }
+  | { step: "error"; code: string; recoverable: boolean };
+```
+
+状态保存在 app-data 中，用户关闭应用后可恢复。完成标记不应阻止以后自动发现新 CLI；新候选以非阻塞通知呈现。
+
+#### 8.3.2 启动顺序
+
+```text
+Tauri 启动
+  → resolveAppDataDir()
+  → 打开 SQLite / 执行 migration
+  → load explicit config if present（可选，错误不能静默吞掉）
+  → load persisted agents
+  → start Fastify（UI 可用）
+  → start async CLI scan
+  → merge detections without overwriting user fields
+  → initialize ready adapters
+  → if exactly one ready agent and no conversation: create default DM
+  → emit onboarding state
+```
+
+与当前逻辑的关键差异：
+
+- 不再用 `process.cwd()` 作为终端用户的默认数据根目录。
+- `config.agents[0]` 不再是创建默认会话的唯一来源。
+- 只有 `ready` Agent 能绑定首个会话；没有 Agent 时不创建空会话。
+- 运行时启动与 CLI 扫描解耦，扫描慢不应导致白屏。
+
+#### 8.3.3 Onboarding API
+
+```text
+GET  /api/onboarding/status
+POST /api/onboarding/rescan
+POST /api/onboarding/select-agent
+POST /api/onboarding/complete
+POST /api/onboarding/reset        # 仅重置引导，不删除历史/Agent
+```
+
+`select-agent` 是幂等操作：确认检测结果、持久化 Agent、初始化 Adapter、创建/返回首个会话。任一步失败时返回结构化错误和可重试阶段，不留下一半注册的 Registry 状态。
+
+#### 8.3.4 错误码与恢复动作
+
+| 错误码 | 用户文案语义 | 恢复动作 |
+|----------|----------------|----------|
+| `CLI_NOT_FOUND` | 未发现该 CLI | 打开 Catalog / 选择文件 / 重扫 |
+| `AUTH_REQUIRED` | CLI 已安装，需要登录 | 显示厂商官方登录命令，打开终端，完成后重扫 |
+| `VERSION_UNSUPPORTED` | 版本低于兼容线 | 显示当前/最低版本和升级方式 |
+| `PERMISSION_DENIED` | 可执行文件不可访问 | 重新选择路径或查看权限指引 |
+| `PROBE_TIMEOUT` | CLI 探测超时 | 重试，保留已检测的其他 Agent |
+| `ADAPTER_INIT_FAILED` | CLI 已发现但无法启动 | 展开脱敏诊断，修正配置后重试 |
+
+后端只返回稳定 code 和已脱敏 metadata，前端负责 i18n 文案。原始 stderr 只能进本地诊断日志，且必须过滤 token、用户目录和环境变量。
+
+#### 8.3.5 可观测性与验收
+
+事件只记录产品路径，默认保存在本地：
+
+```text
+onboarding_started
+cli_scan_completed { durationMs, resultCount, readyCount }
+cli_detection_recovery_clicked { code, action }
+agent_adopted { descriptorId, source }
+first_message_sent { elapsedMs }
+first_response_completed { elapsedMs, success }
+```
+
+禁止上报：消息正文、API Key、完整可执行路径、项目路径、环境变量和 CLI 原始输出。
+
+验收必须使用新用户干净环境测试，而不是只在开发者已存在的 `agentlink.config.ts` 上测试。
 
 ## 9. 部署
 
