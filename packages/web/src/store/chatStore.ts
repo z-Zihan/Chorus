@@ -2,6 +2,7 @@ import { create } from "zustand";
 import type { ClientEvent, Conversation, Message } from "@agentlink/shared";
 import { api } from "@/services/api";
 import { useAgentStore } from "@/store/agentStore";
+import { StreamManager } from "@/store/streamManager";
 import { useUIStore } from "@/store/uiStore";
 import i18n from "@/i18n";
 import { track } from "@/utils/analytics";
@@ -10,7 +11,6 @@ import { logger } from "@/utils/logger";
 export type { Conversation, Message } from "@agentlink/shared";
 
 type WebSocketSend = (event: ClientEvent) => boolean;
-const STREAM_TIMEOUT_MS = 60_000;
 
 interface ChatState {
   conversations: Conversation[];
@@ -21,17 +21,13 @@ interface ChatState {
   streamingMessageId: string | null;
   webSocketSend: WebSocketSend | null;
 
-  // Actions
   fetchConversations: () => Promise<void>;
   setCurrentConversation: (id: string) => void;
   fetchMessages: (conversationId: string) => Promise<void>;
   sendMessage: (content: string) => Promise<void>;
   appendStreamChunk: (messageId: string, chunk: string) => void;
   noteStreamActivity: (messageId: string) => void;
-  setMessageStatus: (
-    messageId: string,
-    status: Message["status"]
-  ) => void;
+  setMessageStatus: (messageId: string, status: Message["status"]) => void;
   addMessage: (message: Message) => void;
   cancelStream: () => void;
   setWebSocketSend: (send: WebSocketSend | null) => void;
@@ -40,54 +36,8 @@ interface ChatState {
 }
 
 export const useChatStore = create<ChatState>((set, get) => {
-  let streamTimer: ReturnType<typeof setTimeout> | null = null;
-  let timeoutMessageId: string | null = null;
-  let fallbackController: AbortController | null = null;
   let messagesRequestId = 0;
-
-  const clearStreamTimer = () => {
-    if (streamTimer) clearTimeout(streamTimer);
-    streamTimer = null;
-    timeoutMessageId = null;
-  };
-
-  const armStreamTimer = (messageId: string) => {
-    clearStreamTimer();
-    timeoutMessageId = messageId;
-    streamTimer = setTimeout(() => {
-      const state = get();
-      if (!state.isStreaming) {
-        clearStreamTimer();
-        return;
-      }
-
-      const targetId = state.streamingMessageId ?? timeoutMessageId;
-      if (state.streamingMessageId) {
-        state.webSocketSend?.({
-          type: "cancel",
-          messageId: state.streamingMessageId,
-        });
-      }
-      fallbackController?.abort();
-      fallbackController = null;
-
-      set((current) => ({
-        messages: targetId
-          ? current.messages.map((message) =>
-              message.id === targetId
-                ? { ...message, status: "error" as const }
-                : message
-            )
-          : current.messages,
-        isStreaming: false,
-        streamingMessageId: null,
-      }));
-      useUIStore.getState().addToast(i18n.t("errors:agentTimeout"), "error");
-      logger.error("Agent response timed out", { messageId: targetId });
-      track("error_occurred", { message: "Agent response timed out", source: "chat_store", lineno: 0 });
-      clearStreamTimer();
-    }, STREAM_TIMEOUT_MS);
-  };
+  const streamManager = new StreamManager(get, set);
 
   return {
     conversations: [],
@@ -174,7 +124,7 @@ export const useChatStore = create<ChatState>((set, get) => {
       isStreaming: true,
     }));
     track("message_sent", { conversationId: convId, transport: get().webSocketSend ? "websocket" : "http" });
-    armStreamTimer(userMsg.id);
+    streamManager.armStreamTimer(userMsg.id);
 
     const sent = get().webSocketSend?.({
       type: "message",
@@ -185,105 +135,30 @@ export const useChatStore = create<ChatState>((set, get) => {
 
     // Keep sending functional while the socket is still connecting/reconnecting.
     const controller = new AbortController();
-    fallbackController = controller;
+    streamManager.setFallbackController(controller);
     try {
       await api.sendMessage(convId, trimmedContent, controller.signal);
-      clearStreamTimer();
+      streamManager.clearStreamTimer();
       await get().fetchMessages(convId);
       set({ isStreaming: false, streamingMessageId: null });
     } catch (error) {
       if (!(error instanceof DOMException && error.name === "AbortError")) {
         logger.error("Failed to send message", error);
         track("error_occurred", { message: "Failed to send message", source: "chat_store", lineno: 0 });
-        clearStreamTimer();
+        streamManager.clearStreamTimer();
         get().setMessageStatus(userMsg.id, "error");
         set({ isStreaming: false, streamingMessageId: null });
       }
     } finally {
-      if (fallbackController === controller) fallbackController = null;
+      streamManager.clearFallbackController(controller);
     }
   },
 
-  addMessage: (message) =>
-    set((state) => {
-      const existingIndex = state.messages.findIndex((item) => item.id === message.id);
-      const optimisticIndex = message.fromType === "user"
-        ? state.messages.findIndex((item) =>
-            item.fromType === "user" &&
-            item.status === "sending" &&
-            item.conversationId === message.conversationId &&
-            item.content === message.content
-          )
-        : -1;
-      const replaceIndex = existingIndex >= 0 ? existingIndex : optimisticIndex;
-      const messages = [...state.messages];
-      if (replaceIndex >= 0) messages[replaceIndex] = message;
-      else messages.push(message);
-
-      if (message.fromType !== "agent" || message.threadId) return { messages };
-      if (message.status === "thinking" || message.status === "streaming") {
-        return { messages, isStreaming: true, streamingMessageId: message.id };
-      }
-      if (
-        state.streamingMessageId === message.id &&
-        (message.status === "done" || message.status === "partial" || message.status === "error")
-      ) {
-        clearStreamTimer();
-        return { messages, isStreaming: false, streamingMessageId: null };
-      }
-      return { messages };
-    }),
-
-  appendStreamChunk: (messageId, chunk) =>
-    set((state) => {
-      const target = state.messages.find((message) => message.id === messageId);
-      return {
-        messages: state.messages.map((m) =>
-        m.id === messageId
-          ? { ...m, content: m.content + chunk, status: "streaming" }
-          : m
-        ),
-        ...(target && !target.threadId
-          ? { isStreaming: true, streamingMessageId: messageId }
-          : {}),
-      };
-    }),
-
-  noteStreamActivity: (messageId) => {
-    const target = get().messages.find((message) => message.id === messageId);
-    if (target?.fromType === "agent" && !target.threadId) {
-      armStreamTimer(messageId);
-    }
-  },
-
-  setMessageStatus: (messageId, status) =>
-    set((state) => {
-      const target = state.messages.find((message) => message.id === messageId);
-      const isTerminal = status === "done" || status === "error" || status === "partial";
-      const isPrimaryStream = Boolean(target?.fromType === "agent" && !target.threadId);
-      if (isPrimaryStream && isTerminal) clearStreamTimer();
-      return {
-        messages: state.messages.map((m) =>
-        m.id === messageId ? { ...m, status } : m
-        ),
-        isStreaming: isPrimaryStream ? !isTerminal : state.isStreaming,
-        streamingMessageId: isPrimaryStream
-          ? (isTerminal ? null : messageId)
-          : state.streamingMessageId,
-      };
-    }),
-
-  cancelStream: () => {
-    clearStreamTimer();
-    fallbackController?.abort();
-    fallbackController = null;
-    const mid = get().streamingMessageId;
-    if (mid) {
-      get().webSocketSend?.({ type: "cancel", messageId: mid });
-      get().setMessageStatus(mid, "partial");
-    }
-    set({ isStreaming: false, streamingMessageId: null });
-  },
+  addMessage: (message) => streamManager.addMessage(message),
+  appendStreamChunk: (messageId, chunk) => streamManager.appendStreamChunk(messageId, chunk),
+  noteStreamActivity: (messageId) => streamManager.noteStreamActivity(messageId),
+  setMessageStatus: (messageId, status) => streamManager.setMessageStatus(messageId, status),
+  cancelStream: () => streamManager.cancelStream(),
 
   setWebSocketSend: (webSocketSend) => set({ webSocketSend }),
 
@@ -307,21 +182,16 @@ export const useChatStore = create<ChatState>((set, get) => {
         await api.deleteConversation(id);
         track("conversation_deleted", { conversationId: id });
         const state = get();
-        const deletedIndex = state.conversations.findIndex(
-          (conversation) => conversation.id === id
-        );
-        const conversations = state.conversations.filter(
-          (conversation) => conversation.id !== id
-        );
+        const deletedIndex = state.conversations.findIndex((conversation) => conversation.id === id);
+        const conversations = state.conversations.filter((conversation) => conversation.id !== id);
 
         if (state.currentConversationId !== id) {
           set({ conversations });
           return true;
         }
 
-        clearStreamTimer();
-        fallbackController?.abort();
-        fallbackController = null;
+        streamManager.clearStreamTimer();
+        streamManager.abortFallback();
         messagesRequestId += 1;
         const nextConversation =
           conversations[deletedIndex] ?? conversations[deletedIndex - 1] ?? null;

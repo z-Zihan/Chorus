@@ -64,3 +64,5 @@ export class CliDetector {
 
 export * from "./descriptors.js";
 export * from "./detector.js";
+export * from "./path-scanner.js";
+export * from "./probe.js";
