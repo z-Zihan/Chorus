@@ -11,6 +11,7 @@ import { logger } from "../utils/logger";
 
 export class AgentRuntime {
   private readonly controllers = new Map<string, AbortController>();
+  private readonly a2aResults = new Map<string, string>();
   private readonly a2aBus: A2ABus;
 
   constructor(
@@ -33,8 +34,18 @@ export class AgentRuntime {
     const content = rawContent.trim();
     if (!content || content.length > 32_000) throw new Error("Message must contain 1–32000 characters");
 
-    const parsed = parseMentions(content);
-    const mentions = [...new Set([...explicitMentions, ...parsed.mentionedAgents])];
+    const parsed = parseMentions(content, conversation.agentIds);
+    const mentionedByName = parsed.mentionedAgentNames.flatMap((name) =>
+      conversation.agentIds.filter((id) => {
+        const agent = this.registry.get(id);
+        return agent ? mentionKey(agent.name) === mentionKey(name) : false;
+      }),
+    );
+    const mentions = [...new Set([
+      ...explicitMentions,
+      ...parsed.mentionedAgents,
+      ...mentionedByName,
+    ])].filter((id) => conversation.agentIds.includes(id));
     if (explicitAgentId && !conversation.agentIds.includes(explicitAgentId)) {
       throw new Error("Agent is not assigned to this conversation");
     }
@@ -87,7 +98,9 @@ export class AgentRuntime {
   }
 
   cancel(messageId: string): void {
-    this.controllers.get(messageId)?.abort();
+    const controller = this.controllers.get(messageId);
+    if (controller) controller.abort();
+    else this.a2aBus.cancel(messageId);
   }
 
   private async streamReply(
@@ -120,8 +133,10 @@ export class AgentRuntime {
         conversationId: reply.conversationId,
         history,
         mentionedAgents,
+        availableAgentIds: this.repository.getConversation(reply.conversationId)?.agentIds ?? [adapter.id],
         a2aBus: this.a2aBus,
         callStack: [adapter.id],
+        parentMessageId: reply.id,
         signal: controller.signal,
       })) {
         chunks.push(chunk);
@@ -178,17 +193,54 @@ export class AgentRuntime {
   private publishA2A(conversationId: string, from: string, request: string, chunk: StreamChunk): void {
     if (!chunk.threadId) return;
     if (chunk.type === "tool_call") {
+      const to = String(chunk.metadata?.to ?? chunk.sourceAgentId ?? "agent");
+      const message = String(chunk.metadata?.request ?? request);
+      this.a2aResults.set(chunk.threadId, "");
       this.events.publish(conversationId, {
         type: "a2a_call",
         from,
-        to: String(chunk.metadata?.to ?? chunk.sourceAgentId ?? "agent"),
-        message: String(chunk.metadata?.request ?? request),
+        to,
+        message,
         threadId: chunk.threadId,
+      });
+      this.events.publish(conversationId, {
+        type: "tool_call_start",
+        threadId: chunk.threadId,
+        from,
+        to,
+        message,
       });
       return;
     }
     this.events.publish(conversationId, { type: "a2a_response", threadId: chunk.threadId, chunk });
+
+    const chunkType = String(chunk.metadata?.chunkType ?? chunk.type);
+    if (chunk.content && chunkType !== "thinking") {
+      this.a2aResults.set(
+        chunk.threadId,
+        (this.a2aResults.get(chunk.threadId) ?? "") + chunk.content,
+      );
+    }
+    if (chunkType === "error" || chunk.metadata?.status === "error") {
+      this.events.publish(conversationId, {
+        type: "tool_call_error",
+        threadId: chunk.threadId,
+        error: chunk.content || "Agent call failed",
+      });
+      this.a2aResults.delete(chunk.threadId);
+    } else if (chunkType === "done" || chunk.metadata?.status === "done") {
+      this.events.publish(conversationId, {
+        type: "tool_call_result",
+        threadId: chunk.threadId,
+        result: this.a2aResults.get(chunk.threadId) ?? "",
+      });
+      this.a2aResults.delete(chunk.threadId);
+    }
   }
+}
+
+function mentionKey(value: string): string {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
 function createMessage(input: Omit<Message, "id" | "timestamp">): Message {

@@ -18,6 +18,11 @@
   "collapseMessage": "Show less",
   "partialMessage": "Incomplete message (stream interrupted)",
   "a2aChain": "A2A call chain",
+  "a2aRunning": "Running",
+  "a2aCompleted": "Completed",
+  "a2aFailed": "Failed",
+  "a2aCancel": "Cancel call",
+  "a2aCancelled": "A2A call cancelled",
   "a2aMessages_one": "{{count}} message",
   "a2aMessages_other": "{{count}} messages"
 }

@@ -19,6 +19,9 @@ export type ServerEvent =
   | { type: "stream"; eventId: string; messageId: string; chunk: StreamChunk }
   | { type: "a2a_call"; eventId: string; from: string; to: string; message: string; threadId: string }
   | { type: "a2a_response"; eventId: string; threadId: string; chunk: StreamChunk }
+  | { type: "tool_call_start"; eventId: string; threadId: string; from: string; to: string; message: string }
+  | { type: "tool_call_result"; eventId: string; threadId: string; result: string }
+  | { type: "tool_call_error"; eventId: string; threadId: string; error: string }
   | { type: "agent_status"; eventId: string; agentId: string; status: AgentStatus; error?: string }
   | { type: "agent_status_batch"; eventId: string; statuses: AgentStatusSnapshot[] }
   | { type: "typing"; eventId: string; agentId: string; conversationId: string; isTyping: boolean }

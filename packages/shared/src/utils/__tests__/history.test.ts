@@ -52,18 +52,34 @@ describe("truncateHistory", () => {
 });
 
 describe("parseMentions", () => {
-  it("extracts unique agent ids and removes mentions from the text", () => {
+  it("extracts unique agent ids", () => {
     expect(parseMentions("Please ask @code-reviewer and @security then @code-reviewer again"))
       .toEqual({
-        text: "Please ask and then again",
         mentionedAgents: ["code-reviewer", "security"],
+        mentionedAgentNames: [],
+      });
+  });
+
+  it("separates known agent ids from mention-safe agent names", () => {
+    expect(parseMentions("Ask @reviewer-id and @Security-Reviewer", ["reviewer-id"]))
+      .toEqual({
+        mentionedAgents: ["reviewer-id"],
+        mentionedAgentNames: ["Security-Reviewer"],
+      });
+  });
+
+  it("supports alphanumeric and hyphenated IDs but not underscores", () => {
+    expect(parseMentions("@agent-42 @Agent7 @not_an_id"))
+      .toEqual({
+        mentionedAgents: ["agent-42", "Agent7"],
+        mentionedAgentNames: [],
       });
   });
 
   it("returns the original text when there are no mentions", () => {
     expect(parseMentions("A message without mentions")).toEqual({
-      text: "A message without mentions",
       mentionedAgents: [],
+      mentionedAgentNames: [],
     });
   });
 });

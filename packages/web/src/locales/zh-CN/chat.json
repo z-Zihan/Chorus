@@ -18,6 +18,11 @@
   "collapseMessage": "收起",
   "partialMessage": "消息不完整（流式中断）",
   "a2aChain": "A2A 调用链",
+  "a2aRunning": "运行中",
+  "a2aCompleted": "已完成",
+  "a2aFailed": "失败",
+  "a2aCancel": "取消调用",
+  "a2aCancelled": "A2A 调用已取消",
   "a2aMessages_one": "{{count}} 条消息",
   "a2aMessages_other": "{{count}} 条消息"
 }

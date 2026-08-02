@@ -51,8 +51,11 @@ export interface ConversationContext {
   conversationId: string;
   history: Message[];
   mentionedAgents?: string[];
+  availableAgentIds?: string[];
   a2aBus?: A2ABusLike;
   callStack?: string[];
+  a2aThreadId?: string;
+  parentMessageId?: string;
   difyConversationId?: string;
   signal?: AbortSignal;
 }

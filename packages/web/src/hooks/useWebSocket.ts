@@ -23,6 +23,9 @@ export function useWebSocket() {
   const appendStreamChunk = useChatStore((s) => s.appendStreamChunk);
   const noteStreamActivity = useChatStore((s) => s.noteStreamActivity);
   const setMessageStatus = useChatStore((s) => s.setMessageStatus);
+  const startA2AThread = useChatStore((s) => s.startA2AThread);
+  const completeA2AThread = useChatStore((s) => s.completeA2AThread);
+  const failA2AThread = useChatStore((s) => s.failA2AThread);
   const setWebSocketSend = useChatStore((s) => s.setWebSocketSend);
   const currentConversationId = useChatStore((s) => s.currentConversationId);
   const updateAgentStatus = useAgentStore((s) => s.updateAgentStatus);
@@ -158,6 +161,24 @@ export function useWebSocket() {
           }
           break;
 
+        case "tool_call_start":
+          startA2AThread({
+            threadId: event.threadId,
+            conversationId: useChatStore.getState().currentConversationId ?? "",
+            from: event.from,
+            to: event.to,
+            message: event.message,
+          });
+          break;
+
+        case "tool_call_result":
+          completeA2AThread(event.threadId, event.result);
+          break;
+
+        case "tool_call_error":
+          failA2AThread(event.threadId, event.error);
+          break;
+
         case "agent_status":
           if (event.agentId && event.status) {
             updateAgentStatus(event.agentId, event.status, event.error);
@@ -239,6 +260,9 @@ export function useWebSocket() {
     appendStreamChunk,
     noteStreamActivity,
     setMessageStatus,
+    startA2AThread,
+    completeA2AThread,
+    failA2AThread,
     setWebSocketSend,
     currentConversationId,
     updateAgentStatus,

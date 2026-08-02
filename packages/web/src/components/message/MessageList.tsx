@@ -32,6 +32,7 @@ function MessageSkeletons({ label }: { label: string }) {
 export function MessageList() {
   const { t } = useTranslation("chat");
   const messages = useChatStore((s) => s.messages);
+  const a2aThreads = useChatStore((s) => s.a2aThreads);
   const isLoadingMessages = useChatStore((s) => s.isLoadingMessages);
   const isStreaming = useChatStore((s) => s.isStreaming);
   const currentConversationId = useChatStore((s) => s.currentConversationId);
@@ -71,7 +72,7 @@ export function MessageList() {
     } else {
       setShowNewMessages(true);
     }
-  }, [messages, isStreaming, scrollToBottom]);
+  }, [messages, a2aThreads, isStreaming, scrollToBottom]);
 
   useEffect(() => {
     if (!targetMessageId || isLoadingMessages) return;
@@ -96,7 +97,13 @@ export function MessageList() {
     if (msg.threadId && !seenThreads.has(msg.threadId)) {
       seenThreads.add(msg.threadId);
       const threadMessages = messages.filter((m) => m.threadId === msg.threadId);
-      rendered.push(<A2AThread key={`thread-${msg.threadId}`} messages={threadMessages} />);
+      rendered.push(
+        <A2AThread
+          key={`thread-${msg.threadId}`}
+          messages={threadMessages}
+          thread={a2aThreads[msg.threadId]}
+        />,
+      );
       continue;
     }
 
@@ -111,6 +118,14 @@ export function MessageList() {
         agentName={agent?.name}
         agentAvatar={agent?.avatar}
       />,
+    );
+  }
+
+  for (const thread of Object.values(a2aThreads)) {
+    if (seenThreads.has(thread.threadId)) continue;
+    seenThreads.add(thread.threadId);
+    rendered.push(
+      <A2AThread key={`thread-${thread.threadId}`} messages={[]} thread={thread} />,
     );
   }
 
@@ -131,7 +146,7 @@ export function MessageList() {
         <div className="mx-auto flex max-w-4xl flex-col gap-4">
           {isLoadingMessages && messages.length === 0 ? (
             <MessageSkeletons label={t("loadingMessages")} />
-          ) : messages.length === 0 && !isStreaming ? (
+          ) : messages.length === 0 && Object.keys(a2aThreads).length === 0 && !isStreaming ? (
             <div className="flex flex-col items-center justify-center py-24 text-center">
               <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--bg-surface)] text-[var(--accent-hover)] ring-1 ring-[var(--border-color)]">
                 <MessageSquare aria-hidden="true" className="h-7 w-7" />

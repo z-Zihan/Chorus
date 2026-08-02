@@ -12,6 +12,18 @@ export type { Conversation, Message } from "@agentlink/shared";
 
 type WebSocketSend = (event: ClientEvent) => boolean;
 
+export interface A2AThreadState {
+  threadId: string;
+  conversationId: string;
+  from: string;
+  to: string;
+  message: string;
+  result: string;
+  error?: string;
+  status: "running" | "completed" | "error";
+  startedAt: number;
+}
+
 interface ChatState {
   conversations: Conversation[];
   archivedConversations: Conversation[];
@@ -21,6 +33,7 @@ interface ChatState {
   isLoadingMessages: boolean;
   isStreaming: boolean;
   streamingMessageId: string | null;
+  a2aThreads: Record<string, A2AThreadState>;
   webSocketSend: WebSocketSend | null;
 
   fetchConversations: (includeArchived?: boolean) => Promise<void>;
@@ -34,6 +47,10 @@ interface ChatState {
   setMessageStatus: (messageId: string, status: Message["status"]) => void;
   addMessage: (message: Message) => void;
   cancelStream: () => void;
+  startA2AThread: (thread: Omit<A2AThreadState, "result" | "status" | "startedAt">) => void;
+  completeA2AThread: (threadId: string, result: string) => void;
+  failA2AThread: (threadId: string, error: string) => void;
+  cancelA2AThread: (threadId: string) => void;
   setWebSocketSend: (send: WebSocketSend | null) => void;
   createConversation: (title?: string) => Promise<void>;
   renameConversation: (id: string, title: string) => Promise<boolean>;
@@ -60,6 +77,7 @@ export const useChatStore = create<ChatState>((set, get) => {
     isLoadingMessages: false,
     isStreaming: false,
     streamingMessageId: null,
+    a2aThreads: {},
     webSocketSend: null,
 
     fetchConversations: async (includeArchived = true) => {
@@ -83,7 +101,7 @@ export const useChatStore = create<ChatState>((set, get) => {
 
   setCurrentConversation: (id) => {
     if (get().currentConversationId === id) return;
-    set({ currentConversationId: id, messages: [], isLoadingMessages: true });
+    set({ currentConversationId: id, messages: [], a2aThreads: {}, isLoadingMessages: true });
     get().fetchMessages(id);
   },
 
@@ -196,6 +214,45 @@ export const useChatStore = create<ChatState>((set, get) => {
   setMessageStatus: (messageId, status) => streamManager.setMessageStatus(messageId, status),
   cancelStream: () => streamManager.cancelStream(),
 
+  startA2AThread: (thread) => set((state) => ({
+    a2aThreads: {
+      ...state.a2aThreads,
+      [thread.threadId]: {
+        ...thread,
+        result: "",
+        status: "running",
+        startedAt: Date.now(),
+      },
+    },
+  })),
+
+  completeA2AThread: (threadId, result) => set((state) => {
+    const thread = state.a2aThreads[threadId];
+    if (!thread) return {};
+    return {
+      a2aThreads: {
+        ...state.a2aThreads,
+        [threadId]: { ...thread, result, error: undefined, status: "completed" },
+      },
+    };
+  }),
+
+  failA2AThread: (threadId, error) => set((state) => {
+    const thread = state.a2aThreads[threadId];
+    if (!thread) return {};
+    return {
+      a2aThreads: {
+        ...state.a2aThreads,
+        [threadId]: { ...thread, error, status: "error" },
+      },
+    };
+  }),
+
+  cancelA2AThread: (threadId) => {
+    get().webSocketSend?.({ type: "cancel", messageId: threadId });
+    get().failA2AThread(threadId, i18n.t("chat:a2aCancelled"));
+  },
+
   setWebSocketSend: (webSocketSend) => set({ webSocketSend }),
 
     createConversation: async (title) => {
@@ -307,6 +364,7 @@ export const useChatStore = create<ChatState>((set, get) => {
           archivedConversations,
           currentConversationId: nextConversation?.id ?? null,
           messages: [],
+          a2aThreads: {},
           isLoadingMessages: Boolean(nextConversation),
           isStreaming: false,
           streamingMessageId: null,
@@ -345,6 +403,7 @@ export const useChatStore = create<ChatState>((set, get) => {
           archivedConversations,
           currentConversationId: nextConversation?.id ?? null,
           messages: [],
+          a2aThreads: {},
           isLoadingMessages: Boolean(nextConversation),
           isStreaming: false,
           streamingMessageId: null,

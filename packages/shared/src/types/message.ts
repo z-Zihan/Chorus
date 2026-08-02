@@ -10,6 +10,7 @@ export type StreamChunkType =
   | "text"
   | "thinking"
   | "tool_call"
+  | "a2a_response"
   | "file"
   | "task"
   | "task_step"
