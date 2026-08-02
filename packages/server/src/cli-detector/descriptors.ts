@@ -8,7 +8,9 @@ export interface CliDescriptor {
     | "gemini-cli"
     | "aider"
     | "qwen-code"
-    | "cursor-cli";
+    | "cursor-cli"
+    | "kilo-cli"
+    | "opencode";
   displayName: string;
   executable: string;
   executableNames: Partial<Record<NodeJS.Platform, string[]>>;
@@ -119,6 +121,30 @@ export const CLI_DESCRIPTORS: CliDescriptor[] = [
     },
     versionProbe: { args: ["--version"], timeoutMs: 2_000, output: "text" },
     adapterTemplate: { input: "argument", output: "jsonl", args: ["--json"] },
+  },
+  {
+    id: "kilo-cli",
+    displayName: "Kilo CLI",
+    executable: "kilo",
+    executableNames: { darwin: ["kilo"], linux: ["kilo"], win32: ["kilo"] },
+    knownInstallDirs: {
+      darwin: commonUnixDirs,
+      linux: ["/usr/local/bin", "/usr/bin"],
+    },
+    versionProbe: { args: ["--version"], timeoutMs: 2_000, output: "text" },
+    adapterTemplate: { input: "argument", output: "jsonl", args: ["--json"] },
+  },
+  {
+    id: "opencode",
+    displayName: "OpenCode",
+    executable: "opencode",
+    executableNames: { darwin: ["opencode"], linux: ["opencode"], win32: ["opencode"] },
+    knownInstallDirs: {
+      darwin: commonUnixDirs,
+      linux: ["/usr/local/bin", "/usr/bin"],
+    },
+    versionProbe: { args: ["--version"], timeoutMs: 2_000, output: "text" },
+    adapterTemplate: { input: "argument", output: "plain", args: ["run"] },
   },
 ];
 
