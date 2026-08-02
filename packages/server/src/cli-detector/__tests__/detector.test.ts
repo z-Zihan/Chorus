@@ -8,7 +8,7 @@ import {
 } from "../index.js";
 
 describe("CLI descriptor contract", () => {
-  it("defines exactly the nine supported CLIs", () => {
+  it("defines exactly the fourteen supported CLIs", () => {
     expect(CLI_DESCRIPTORS.map((descriptor) => descriptor.id)).toEqual([
       "claude-code",
       "codex",
@@ -19,6 +19,11 @@ describe("CLI descriptor contract", () => {
       "cursor-cli",
       "kilo-cli",
       "opencode",
+      "hermes-agent",
+      "cline",
+      "codebuff",
+      "trae-agent",
+      "iflow-cli",
     ]);
   });
 

@@ -114,6 +114,11 @@ AgentLink 统一不同 Agent 的消息格式、流式输出与状态管理。CLI
 | CLI | Cursor CLI | 本机自动检测 |
 | CLI | Kilo CLI | 本机自动检测 |
 | CLI | OpenCode | 本机自动检测 |
+| CLI | Hermes Agent | 本机自动检测 |
+| CLI | Cline | 本机自动检测 |
+| CLI | Codebuff | 本机自动检测 |
+| CLI | Trae Agent | 本机自动检测 |
+| CLI | iFlow CLI | 本机自动检测 |
 | API Connector | OpenAI API | OpenAI-compatible API |
 | API Connector | DeepSeek API | OpenAI-compatible API |
 | API Connector | GLM API | OpenAI-compatible API |

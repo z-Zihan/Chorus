@@ -10,7 +10,12 @@ export interface CliDescriptor {
     | "qwen-code"
     | "cursor-cli"
     | "kilo-cli"
-    | "opencode";
+    | "opencode"
+    | "hermes-agent"
+    | "cline"
+    | "codebuff"
+    | "trae-agent"
+    | "iflow-cli";
   displayName: string;
   executable: string;
   executableNames: Partial<Record<NodeJS.Platform, string[]>>;
@@ -145,6 +150,66 @@ export const CLI_DESCRIPTORS: CliDescriptor[] = [
     },
     versionProbe: { args: ["--version"], timeoutMs: 2_000, output: "text" },
     adapterTemplate: { input: "argument", output: "plain", args: ["run"] },
+  },
+  {
+    id: "hermes-agent",
+    displayName: "Hermes Agent",
+    executable: "hermes",
+    executableNames: { darwin: ["hermes"], linux: ["hermes"], win32: ["hermes"] },
+    knownInstallDirs: {
+      darwin: commonUnixDirs,
+      linux: ["/usr/local/bin", "/usr/bin"],
+    },
+    versionProbe: { args: ["--version"], timeoutMs: 2_000, output: "text" },
+    adapterTemplate: { input: "argument", output: "jsonl", args: ["--json"] },
+  },
+  {
+    id: "cline",
+    displayName: "Cline",
+    executable: "cline",
+    executableNames: { darwin: ["cline"], linux: ["cline"], win32: ["cline"] },
+    knownInstallDirs: {
+      darwin: commonUnixDirs,
+      linux: ["/usr/local/bin", "/usr/bin"],
+    },
+    versionProbe: { args: ["--version"], timeoutMs: 2_000, output: "text" },
+    adapterTemplate: { input: "argument", output: "jsonl", args: ["--json"] },
+  },
+  {
+    id: "codebuff",
+    displayName: "Codebuff",
+    executable: "codebuff",
+    executableNames: { darwin: ["codebuff"], linux: ["codebuff"], win32: ["codebuff"] },
+    knownInstallDirs: {
+      darwin: commonUnixDirs,
+      linux: ["/usr/local/bin", "/usr/bin"],
+    },
+    versionProbe: { args: ["--version"], timeoutMs: 2_000, output: "text" },
+    adapterTemplate: { input: "argument", output: "plain", args: [] },
+  },
+  {
+    id: "trae-agent",
+    displayName: "Trae Agent",
+    executable: "trae",
+    executableNames: { darwin: ["trae"], linux: ["trae"], win32: ["trae"] },
+    knownInstallDirs: {
+      darwin: commonUnixDirs,
+      linux: ["/usr/local/bin", "/usr/bin"],
+    },
+    versionProbe: { args: ["--version"], timeoutMs: 2_000, output: "text" },
+    adapterTemplate: { input: "argument", output: "plain", args: ["run"] },
+  },
+  {
+    id: "iflow-cli",
+    displayName: "iFlow CLI",
+    executable: "iflow",
+    executableNames: { darwin: ["iflow"], linux: ["iflow"], win32: ["iflow"] },
+    knownInstallDirs: {
+      darwin: commonUnixDirs,
+      linux: ["/usr/local/bin", "/usr/bin"],
+    },
+    versionProbe: { args: ["--version"], timeoutMs: 2_000, output: "text" },
+    adapterTemplate: { input: "argument", output: "plain", args: [] },
   },
 ];
 
