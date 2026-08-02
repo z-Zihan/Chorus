@@ -75,6 +75,18 @@ export class OpenAIAdapter extends BaseAdapter {
     this.status = "online";
   }
 
+  override async healthCheck(): Promise<boolean> {
+    const endpoint = String(this.config.endpoint ?? "https://api.openai.com/v1").replace(/\/$/, "");
+    try {
+      const response = await fetch(`${endpoint}/models`, {
+        headers: { Authorization: `Bearer ${String(this.config.apiKey)}` },
+      });
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
+
   async *handleMessage(message: string, context: ConversationContext): AsyncGenerator<StreamChunk> {
     yield* this.handleWithSystemPrompt(message, context);
   }

@@ -36,7 +36,7 @@ export interface AppConfig {
   port: number;
   dbPath: string;
   cors: { origin: string[] };
-  auth: { enabled: boolean; token?: string };
+  auth: { enabled: boolean; tokens: Record<string, string> };
   history: HistoryTruncationConfig;
   agents: AgentConfig[];
   /** 跨 Hub 通信配置 */

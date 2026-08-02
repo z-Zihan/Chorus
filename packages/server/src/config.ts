@@ -21,7 +21,7 @@ function defaultConfig(): AppConfig {
     port: 3210,
     dbPath: join(resolveAppDataDir(), "agentlink.db"),
     cors: { origin: ["http://localhost:5173", "http://127.0.0.1:5173"] },
-    auth: { enabled: false },
+    auth: { enabled: false, tokens: {} },
     history: { maxMessages: 20, maxTokens: 8_000 },
     agents: [],
   };
@@ -56,14 +56,9 @@ export type LoadedConfig = {
   source: "explicit_config" | "defaults";
 };
 
-export async function loadConfig(): Promise<LoadedConfig> {
+export async function loadConfigFile(configPath: string): Promise<LoadedConfig> {
   const defaults = defaultConfig();
-  const configPath = locateConfig();
-  if (!configPath) {
-    return { config: applyEnvOverrides(defaults), rootDir: process.cwd(), source: "defaults" };
-  }
-
-  const jiti = createJiti(import.meta.url, { interopDefault: true });
+  const jiti = createJiti(import.meta.url, { interopDefault: true, moduleCache: false });
   const userConfig = (await jiti.import(configPath, { default: true })) as Partial<AppConfig>;
   const config: AppConfig = {
     ...defaults,
@@ -78,4 +73,14 @@ export async function loadConfig(): Promise<LoadedConfig> {
     rootDir: dirname(configPath),
     source: "explicit_config",
   };
+}
+
+export async function loadConfig(): Promise<LoadedConfig> {
+  const defaults = defaultConfig();
+  const configPath = locateConfig();
+  if (!configPath) {
+    return { config: applyEnvOverrides(defaults), rootDir: process.cwd(), source: "defaults" };
+  }
+
+  return loadConfigFile(configPath);
 }

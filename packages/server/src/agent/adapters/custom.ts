@@ -42,6 +42,19 @@ export class CustomAdapter extends BaseAdapter {
     this.status = "online";
   }
 
+  override async healthCheck(): Promise<boolean> {
+    const config = this.config as unknown as CustomAdapterConfig;
+    try {
+      const response = await fetch(config.endpoint, {
+        method: "HEAD",
+        headers: config.headers,
+      });
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
+
   async *handleMessage(message: string, context: ConversationContext): AsyncGenerator<StreamChunk> {
     const config = this.config as unknown as CustomAdapterConfig;
     const body = renderBody(config.bodyTemplate, {

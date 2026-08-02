@@ -12,7 +12,7 @@ const testConfig: AppConfig = {
   port: 0,
   dbPath: ":memory:",
   cors: { origin: [] },
-  auth: { enabled: false },
+  auth: { enabled: false, tokens: {} },
   history: { maxMessages: 20, maxTokens: 8_000 },
   agents: [
     {

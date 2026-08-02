@@ -17,6 +17,7 @@ import { registerExportRoutes } from "./export.js";
 import { registerSearchRoutes } from "./search.js";
 import type { Scheduler } from "../scheduler/index.js";
 import { registerSchedulerRoutes } from "./scheduler.js";
+import { registerMetricsRoutes } from "./metrics.js";
 
 export function registerRoutes(
   app: FastifyInstance,
@@ -32,6 +33,7 @@ export function registerRoutes(
   registerHealthRoutes(app);
   registerLogRoutes(app);
   registerAgentRoutes(app, registry);
+  registerMetricsRoutes(app, registry, runtime);
   registerConversationRoutes(app, repository, registry, runtime);
   registerCleanupRoutes(app, repository);
   registerExportRoutes(app, repository);

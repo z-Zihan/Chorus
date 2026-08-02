@@ -1,7 +1,7 @@
 import type { Message, StreamChunk } from "./message";
 
 export type AgentStatus = "online" | "offline" | "busy" | "error";
-export type AgentType = "openai" | "openclaw" | "dify" | "cli" | "mock" | "custom";
+export type AgentType = "openai" | "openclaw" | "dify" | "cli" | "mock" | "custom" | "langchain";
 
 export interface AgentConfig {
   id: string;
@@ -76,5 +76,6 @@ export interface AgentAdapter {
     context: ConversationContext,
   ): AsyncGenerator<StreamChunk>;
   getStatus(): AgentStatus;
+  healthCheck?(): Promise<boolean>;
   destroy?(): void;
 }

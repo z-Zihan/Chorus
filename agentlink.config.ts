@@ -6,7 +6,7 @@ export default {
   cors: {
     origin: ["http://localhost:5173", "http://127.0.0.1:5173"],
   },
-  auth: { enabled: false },
+  auth: { enabled: false, tokens: {} },
   history: { maxMessages: 20, maxTokens: 8_000 },
   agents: [
     {

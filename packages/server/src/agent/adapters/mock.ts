@@ -27,6 +27,10 @@ export class MockAdapter extends BaseAdapter {
     this.status = "online";
   }
 
+  override async healthCheck(): Promise<boolean> {
+    return true;
+  }
+
   async *handleMessage(message: string, context: ConversationContext): AsyncGenerator<StreamChunk> {
     const delay = Number(this.config.delayMs ?? 24);
     yield { type: "thinking", content: "理解问题并规划回复" };

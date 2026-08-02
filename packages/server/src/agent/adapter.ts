@@ -18,6 +18,10 @@ export abstract class BaseAdapter implements AgentAdapter {
     return this.status;
   }
 
+  async healthCheck(): Promise<boolean> {
+    return this.status === "online";
+  }
+
   setRuntimeStatus(status: AgentStatus): void {
     this.status = status;
   }

@@ -5,6 +5,7 @@ import type { Repository } from "../db/repository";
 import type { EventHub } from "../ws/events";
 import { messageFromError } from "./adapter";
 import { A2ABus } from "./a2a-bus";
+import { AdapterMetrics, type AgentMetrics } from "./metrics";
 import type { AgentRegistry } from "./registry";
 import { track } from "../analytics";
 import { logger } from "../utils/logger";
@@ -13,6 +14,7 @@ export class AgentRuntime {
   private readonly controllers = new Map<string, AbortController>();
   private readonly a2aResults = new Map<string, string>();
   private readonly a2aBus: A2ABus;
+  private readonly metrics = new AdapterMetrics();
 
   constructor(
     private readonly repository: Repository,
@@ -128,6 +130,12 @@ export class AgentRuntime {
     else this.a2aBus.cancel(messageId);
   }
 
+  getMetrics(): Record<string, AgentMetrics>;
+  getMetrics(agentId: string): AgentMetrics;
+  getMetrics(agentId?: string): AgentMetrics | Record<string, AgentMetrics> {
+    return agentId ? this.metrics.getMetrics(agentId) : this.metrics.getAllMetrics();
+  }
+
   private async streamReply(
     reply: Message,
     content: string,
@@ -170,6 +178,7 @@ export class AgentRuntime {
         this.publishA2A(reply.conversationId, reply.id, adapter.id, content, chunk);
       }
       this.finish(reply, output, "done", chunks, startedAt, adapter.id);
+      this.metrics.recordInvocation(adapter.id, Date.now() - startedAt, true);
     } catch (error) {
       const cancelled = controller.signal.aborted || (error instanceof DOMException && error.name === "AbortError");
       const status: MessageStatus = output ? "partial" : "error";
@@ -182,6 +191,7 @@ export class AgentRuntime {
       chunks.push(errorChunk);
       this.events.publish(reply.conversationId, { type: "stream", messageId: reply.id, chunk: errorChunk });
       this.finish(reply, output || detail, status, chunks, startedAt, adapter.id);
+      this.metrics.recordInvocation(adapter.id, Date.now() - startedAt, false);
     } finally {
       this.controllers.delete(reply.id);
       this.events.publish(reply.conversationId, {

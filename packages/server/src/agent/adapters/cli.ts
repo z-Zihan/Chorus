@@ -1,4 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import { constants } from "node:fs";
+import { access } from "node:fs/promises";
+import { delimiter, isAbsolute, resolve } from "node:path";
 import type { ConversationContext, StreamChunk } from "@agentlink/shared";
 import { BaseAdapter } from "../adapter";
 
@@ -149,6 +152,30 @@ export class CliAdapter extends BaseAdapter {
         : 300_000,
     } satisfies CliAdapterConfig;
     this.status = "online";
+  }
+
+  override async healthCheck(): Promise<boolean> {
+    const config = this.config as unknown as CliAdapterConfig;
+    const executable = config.command;
+    const environment = { ...process.env, ...config.env };
+    const candidates = executable.includes("/") || executable.includes("\\")
+      ? [isAbsolute(executable) ? executable : resolve(config.cwd ?? process.cwd(), executable)]
+      : (environment.PATH ?? "").split(delimiter).filter(Boolean).flatMap((directory) => {
+          if (process.platform !== "win32") return [resolve(directory, executable)];
+          const extensions = executable.includes(".")
+            ? [""]
+            : (environment.PATHEXT ?? ".EXE;.CMD;.BAT;.COM").split(";");
+          return extensions.map((extension) => resolve(directory, `${executable}${extension}`));
+        });
+    for (const candidate of candidates) {
+      try {
+        await access(candidate, process.platform === "win32" ? constants.F_OK : constants.X_OK);
+        return true;
+      } catch {
+        // Try the next PATH entry.
+      }
+    }
+    return false;
   }
 
   async *handleMessage(message: string, context: ConversationContext): AsyncGenerator<StreamChunk> {

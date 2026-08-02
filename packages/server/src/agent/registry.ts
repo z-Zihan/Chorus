@@ -1,4 +1,6 @@
+import { isDeepStrictEqual } from "node:util";
 import type {
+  AppConfig,
   Agent,
   AgentAdapter,
   AgentConfig,
@@ -7,11 +9,14 @@ import type {
   PersistedAgentConfig,
 } from "@agentlink/shared";
 import type { Repository } from "../db/repository.js";
+import { ConfigWatcher } from "../config-watcher.js";
+import { logger } from "../utils/logger.js";
 import { BaseAdapter, messageFromError } from "./adapter.js";
 import { CliAdapter } from "./adapters/cli.js";
 import { CustomAdapter } from "./adapters/custom.js";
 import { DifyAdapter } from "./adapters/dify.js";
 import { MockAdapter } from "./adapters/mock.js";
+import { LangChainAdapter } from "./adapters/langchain.js";
 import { OpenClawAdapter } from "./adapters/openclaw.js";
 import { OpenAIAdapter } from "./adapters/openai.js";
 import { AgentPersistence } from "./persistence.js";
@@ -29,6 +34,11 @@ export class AgentRegistry {
   readonly friends = new Map<string, Set<string>>();
   private readonly statusListeners = new Set<(status: AgentStatusSnapshot) => void>();
   private readonly persistence: AgentPersistence;
+  private readonly configuredAgents = new Map<string, AgentConfig>();
+  private readonly healthCheckFailures = new Set<string>();
+  private configWatcher?: ConfigWatcher;
+  private healthCheckTimer?: NodeJS.Timeout;
+  private healthCheckRunning = false;
 
   constructor(private readonly repository: Repository) {
     this.persistence = new AgentPersistence(repository);
@@ -37,6 +47,8 @@ export class AgentRegistry {
 
   async initialize(configs: AgentConfig[]): Promise<void> {
     this.loadFriends();
+    this.configuredAgents.clear();
+    for (const config of configs) this.configuredAgents.set(config.id, config);
     const persistedAgents = this.persistence.loadPersistedAgents();
     for (const config of configs) {
       const persisted = persistedAgents.find((agent) => agent.id === config.id);
@@ -148,6 +160,34 @@ export class AgentRegistry {
   subscribeStatusChanges(listener: (status: AgentStatusSnapshot) => void): () => void {
     this.statusListeners.add(listener);
     return () => this.statusListeners.delete(listener);
+  }
+
+  watchConfig(path: string): void {
+    this.stopWatchingConfig();
+    if (process.env.HOT_RELOAD?.toLowerCase() !== "true") return;
+    this.configWatcher = new ConfigWatcher(
+      path,
+      async (config) => this.reloadConfiguredAgents(config),
+      (error) => logger.error({ err: error, path }, "Agent config hot reload failed"),
+    );
+  }
+
+  stopWatchingConfig(): void {
+    this.configWatcher?.destroy();
+    this.configWatcher = undefined;
+  }
+
+  startHealthChecks(intervalMs = 60_000): void {
+    this.stopHealthChecks();
+    this.healthCheckTimer = setInterval(() => {
+      void this.runHealthChecks();
+    }, intervalMs);
+    this.healthCheckTimer.unref();
+  }
+
+  stopHealthChecks(): void {
+    if (this.healthCheckTimer) clearInterval(this.healthCheckTimer);
+    this.healthCheckTimer = undefined;
   }
 
   broadcastStatus(id?: string, status?: AgentStatus, error?: string): void {
@@ -279,6 +319,53 @@ export class AgentRegistry {
     friendIds.add(friendId);
     this.friends.set(agentId, friendIds);
   }
+
+  private async reloadConfiguredAgents(config: AppConfig): Promise<void> {
+    const nextAgents = new Map(config.agents.map((agent) => [agent.id, agent]));
+    for (const agentId of this.configuredAgents.keys()) {
+      if (!nextAgents.has(agentId)) this.unregisterAndDelete(agentId);
+    }
+    for (const [agentId, next] of nextAgents) {
+      const previous = this.configuredAgents.get(agentId);
+      if (!previous || !isDeepStrictEqual(previous, next)) {
+        await this.registerAndPersist({
+          ...next,
+          source: "explicit_config",
+          managed: false,
+          customizedFields: [],
+          disabled: false,
+        });
+      }
+    }
+    this.configuredAgents.clear();
+    for (const [agentId, agent] of nextAgents) this.configuredAgents.set(agentId, agent);
+  }
+
+  private async runHealthChecks(): Promise<void> {
+    if (this.healthCheckRunning) return;
+    this.healthCheckRunning = true;
+    try {
+      await Promise.all([...this.entries].map(async ([agentId, entry]) => {
+        if (entry.status === "busy") return;
+        try {
+          const healthy = entry.adapter.healthCheck
+            ? await entry.adapter.healthCheck()
+            : entry.adapter.getStatus() === "online";
+          if (!healthy) {
+            this.healthCheckFailures.add(agentId);
+            this.setStatus(agentId, "error", "Agent health check failed");
+          } else if (this.healthCheckFailures.delete(agentId)) {
+            this.setStatus(agentId, "online");
+          }
+        } catch (error) {
+          this.healthCheckFailures.add(agentId);
+          this.setStatus(agentId, "error", `Agent health check failed: ${messageFromError(error)}`);
+        }
+      }));
+    } finally {
+      this.healthCheckRunning = false;
+    }
+  }
 }
 
 function createAdapter(config: AgentConfig): AgentAdapter {
@@ -296,6 +383,9 @@ function createAdapter(config: AgentConfig): AgentAdapter {
   }
   if (config.type === "dify") {
     return new DifyAdapter(config.id, config.name, config.description);
+  }
+  if (config.type === "langchain") {
+    return new LangChainAdapter(config.id, config.name, config.description);
   }
   return new MockAdapter(config.id, config.name, config.description);
 }

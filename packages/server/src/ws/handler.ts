@@ -1,4 +1,4 @@
-import type { ClientEvent } from "@agentlink/shared";
+import type { AppConfig, ClientEvent } from "@agentlink/shared";
 import type { FastifyInstance } from "fastify";
 import type WebSocket from "ws";
 import { z } from "zod";
@@ -6,6 +6,7 @@ import type { AgentRuntime } from "../agent/runtime";
 import type { AgentRegistry } from "../agent/registry";
 import type { EventHub } from "./events";
 import { track } from "../analytics.js";
+import { isValidAuthToken } from "../middleware/auth.js";
 
 const eventSchema = z.discriminatedUnion("type", [
   z.object({
@@ -30,14 +31,22 @@ export function registerWebSocket(
   events: EventHub,
   runtime: AgentRuntime,
   registry: AgentRegistry,
+  auth: AppConfig["auth"] = { enabled: false, tokens: {} },
 ): void {
   const unsubscribe = registry.subscribeStatusChanges((status) => {
     events.broadcastStatus(status);
   });
   app.addHook("onClose", async () => unsubscribe());
 
-  app.get("/ws", { websocket: true }, (socket) => {
+  app.get("/ws", { websocket: true }, (socket, request) => {
     const ws = socket as WebSocket;
+    if (auth.enabled) {
+      const token = new URL(request.url, "http://localhost").searchParams.get("token");
+      if (!token || !isValidAuthToken(token, auth.tokens)) {
+        ws.close(1008, "Unauthorized");
+        return;
+      }
+    }
     events.add(ws);
     events.sendStatusBatch(
       ws,

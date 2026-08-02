@@ -3,7 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { AgentRegistry } from "../agent/registry.js";
 
-const agentTypeSchema = z.enum(["openai", "openclaw", "dify", "cli", "mock", "custom"]);
+const agentTypeSchema = z.enum(["openai", "openclaw", "dify", "cli", "mock", "custom", "langchain"]);
 const createAgentSchema = z.object({
   id: z.string().trim().min(1).max(64).regex(/^[\w-]+$/),
   name: z.string().trim().min(1).max(100),

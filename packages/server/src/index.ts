@@ -18,6 +18,8 @@ import { logger } from "./utils/logger.js";
 import { CliDetector } from "./cli-detector/index.js";
 import { OnboardingService } from "./routes/onboarding.js";
 import { Scheduler } from "./scheduler/index.js";
+import { authMiddleware } from "./middleware/auth.js";
+import { PluginLoader } from "./plugins/index.js";
 
 process.on("uncaughtException", (error) => {
   logger.fatal({ err: error }, "Uncaught exception");
@@ -39,8 +41,13 @@ async function main(): Promise<void> {
   const repository = new Repository({ sqlite, db });
   const registry = new AgentRegistry(repository);
   await registry.initialize(config.agents);
+  registry.startHealthChecks();
+  registry.watchConfig(resolve(rootDir, "agentlink.config.ts"));
 
   const events = new EventHub();
+  const pluginLoader = new PluginLoader();
+  await pluginLoader.loadPlugins(resolve(rootDir, "plugins"));
+  await pluginLoader.initPlugins({ registry, repository, events, logger });
   const runtime = new AgentRuntime(repository, registry, events, config);
   const scheduler = new Scheduler(repository, runtime);
   scheduler.initialize();
@@ -58,12 +65,13 @@ async function main(): Promise<void> {
       "Request completed",
     );
   });
+  if (config.auth.enabled) app.addHook("onRequest", authMiddleware(config.auth));
 
   await app.register(cors, { origin: config.cors.origin });
   await app.register(websocket);
 
   registerRoutes(app, repository, registry, runtime, scheduler, detector, onboarding);
-  registerWebSocket(app, events, runtime, registry);
+  registerWebSocket(app, events, runtime, registry, config.auth);
 
   const hasAgentsAtStartup = registry.list().length > 0;
   if (hasAgentsAtStartup) await onboarding.bootstrap();
@@ -82,6 +90,9 @@ async function main(): Promise<void> {
   const close = async () => {
     await app.close();
     scheduler.destroy();
+    registry.stopHealthChecks();
+    registry.stopWatchingConfig();
+    pluginLoader.destroyPlugins();
     for (const agent of registry.list()) registry.getAdapter(agent.id)?.destroy?.();
     sqlite.close();
   };
