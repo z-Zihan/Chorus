@@ -170,7 +170,12 @@ export class OpenAIAdapter extends BaseAdapter {
       if (!line.startsWith("data: ")) return;
       const payload = line.slice(6).trim();
       if (!payload || payload === "[DONE]") return;
-      const data = JSON.parse(payload) as OpenAIStreamResponse;
+      let data: OpenAIStreamResponse;
+      try {
+        data = JSON.parse(payload) as OpenAIStreamResponse;
+      } catch {
+        return;
+      }
       if (data.error?.message) throw new Error(data.error.message);
       if (data.usage?.total_tokens) tokensUsed = data.usage.total_tokens;
 

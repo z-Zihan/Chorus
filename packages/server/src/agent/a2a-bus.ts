@@ -70,8 +70,9 @@ export class A2ABus implements A2ABusLike {
     const startedAt = Date.now();
     logger.info({ fromAgentId, toAgentId, threadId }, "A2A call started");
     track("a2a_call_start", { fromAgentId, toAgentId, threadId });
+    let stream: AsyncGenerator<StreamChunk> | null = null;
     try {
-      const stream = adapter.handleA2ACall(fromAgentId, message, {
+      stream = adapter.handleA2ACall(fromAgentId, message, {
         ...context,
         callStack: nextStack,
         a2aThreadId: undefined,
@@ -88,6 +89,8 @@ export class A2ABus implements A2ABusLike {
       track("error", { message: error instanceof Error ? error.message : String(error), source: "a2a_bus" });
       throw error;
     } finally {
+      // Ensure the adapter generator is closed even when we bailed on abort/timeout
+      stream?.return(undefined).catch(() => {});
       const durationMs = Date.now() - startedAt;
       logger.info({ fromAgentId, toAgentId, threadId, durationMs }, "A2A call ended");
       track("a2a_call_end", { fromAgentId, toAgentId, threadId, durationMs });
