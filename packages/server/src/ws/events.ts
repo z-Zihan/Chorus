@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { ServerEvent } from "@agentlink/shared";
+import type { AgentStatusSnapshot, ServerEvent } from "@agentlink/shared";
 import type WebSocket from "ws";
 
 type EventPayload<T> = T extends { eventId: string } ? Omit<T, "eventId"> : never;
@@ -50,6 +50,14 @@ export class EventHub {
 
   sendDirect(socket: WebSocket, payload: ServerEventPayload): void {
     this.send(socket, { ...payload, eventId: randomUUID() } as ServerEvent);
+  }
+
+  broadcastStatus(status: AgentStatusSnapshot): void {
+    this.publish(undefined, { type: "agent_status", ...status });
+  }
+
+  sendStatusBatch(socket: WebSocket, statuses: AgentStatusSnapshot[]): void {
+    this.sendDirect(socket, { type: "agent_status_batch", statuses });
   }
 
   private send(socket: WebSocket, event: ServerEvent): void {

@@ -43,6 +43,7 @@ export function Sidebar() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isCatalogOpen, setIsCatalogOpen] = useState(false);
   const [isArchivedOpen, setIsArchivedOpen] = useState(false);
+  const [isAgentsOpen, setIsAgentsOpen] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -61,9 +62,17 @@ export function Sidebar() {
   const deleteConversations = useChatStore((s) => s.deleteConversations);
   const agents = useAgentStore((s) => s.agents);
   const selectAgent = useAgentStore((s) => s.selectAgent);
+  const conversationAgentFilter = useAgentStore((s) => s.conversationAgentFilter);
+  const filterByAgent = useAgentStore((s) => s.filterByAgent);
   const isSidebarOpen = useUIStore((s) => s.isSidebarOpen);
   const closeSidebar = useUIStore((s) => s.closeSidebar);
   const allConversations = [...conversations, ...archivedConversations];
+  const visibleConversations = conversationAgentFilter
+    ? conversations.filter((conversation) => conversation.agentIds.includes(conversationAgentFilter))
+    : conversations;
+  const visibleArchivedConversations = conversationAgentFilter
+    ? archivedConversations.filter((conversation) => conversation.agentIds.includes(conversationAgentFilter))
+    : archivedConversations;
 
   const handleSelectConversation = (id: string) => {
     if (isSelectMode) {
@@ -256,6 +265,57 @@ export function Sidebar() {
         </div>
 
         <div className="flex-1 overflow-y-auto px-2 py-3">
+          <div className="mb-4 border-b border-[var(--border-color)] pb-3">
+            <button
+              type="button"
+              onClick={() => setIsAgentsOpen((open) => !open)}
+              aria-expanded={isAgentsOpen}
+              className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-xs font-medium uppercase tracking-wider text-[var(--text-tertiary)] hover:bg-[var(--bg-hover)]"
+            >
+              <span className="flex-1 text-left">{t("sidebar:agents")}</span>
+              <span>{agents.length}</span>
+              <ChevronDown aria-hidden="true" className={`h-3.5 w-3.5 transition-transform ${isAgentsOpen ? "rotate-180" : ""}`} />
+            </button>
+            {isAgentsOpen && (
+              <div className="mt-1 space-y-1">
+                {agents.length === 0 && (
+                  <p className="px-3 py-2 text-sm text-[var(--text-muted)]">{t("sidebar:noAgents")}</p>
+                )}
+                {agents.map((agent) => {
+                  const isActive = conversationAgentFilter === agent.id;
+                  return (
+                    <button
+                      type="button"
+                      key={agent.id}
+                      onClick={() => filterByAgent(isActive ? null : agent.id)}
+                      aria-pressed={isActive}
+                      aria-label={t("sidebar:filterByAgent", { name: agent.name })}
+                      className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors ${
+                        isActive
+                          ? "bg-[var(--bg-active)] text-[var(--text-primary)]"
+                          : "text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]"
+                      }`}
+                    >
+                      <span className="relative shrink-0">
+                        <AgentAvatar name={agent.name} src={agent.avatar} size="sm" />
+                        <span
+                          aria-label={t(`common:status.${agent.status}`)}
+                          className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-[var(--bg-surface)] ${STATUS_COLORS[agent.status]}`}
+                        />
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-sm font-medium">{agent.name}</span>
+                    </button>
+                  );
+                })}
+                {conversationAgentFilter && (
+                  <Button variant="ghost" size="sm" className="mt-1 w-full" onClick={() => filterByAgent(null)}>
+                    {t("sidebar:showAllConversations")}
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
+
           <div className="mb-2 flex items-center justify-between gap-1 px-2">
             <span className="text-xs font-medium uppercase tracking-wider text-[var(--text-tertiary)]">{t("sidebar:conversations")}</span>
             <div className="flex items-center">
@@ -295,7 +355,7 @@ export function Sidebar() {
           )}
 
           <div className="space-y-1">
-            {conversations.length === 0 && (
+            {visibleConversations.length === 0 && (
               <div className="rounded-lg border border-dashed border-[var(--border-color)] px-4 py-6 text-center">
                 <p className="text-sm text-[var(--text-tertiary)]">{t("sidebar:noConversations")}</p>
                 <Button onClick={() => void handleCreateConversation()} size="sm" className="mt-3">
@@ -304,10 +364,10 @@ export function Sidebar() {
                 </Button>
               </div>
             )}
-            {conversations.map(renderConversation)}
+            {visibleConversations.map(renderConversation)}
           </div>
 
-          {archivedConversations.length > 0 && (
+          {visibleArchivedConversations.length > 0 && (
             <div className="mt-4 border-t border-[var(--border-color)] pt-2">
               <button
                 type="button"
@@ -316,10 +376,10 @@ export function Sidebar() {
               >
                 <Archive aria-hidden="true" className="h-3.5 w-3.5" />
                 <span className="flex-1 text-left">{t("sidebar:archived")}</span>
-                <span>{archivedConversations.length}</span>
+                <span>{visibleArchivedConversations.length}</span>
                 <ChevronDown aria-hidden="true" className={`h-3.5 w-3.5 transition-transform ${isArchivedOpen ? "rotate-180" : ""}`} />
               </button>
-              {isArchivedOpen && <div className="mt-1 space-y-1">{archivedConversations.map(renderConversation)}</div>}
+              {isArchivedOpen && <div className="mt-1 space-y-1">{visibleArchivedConversations.map(renderConversation)}</div>}
             </div>
           )}
         </div>

@@ -1,5 +1,13 @@
 {
   "chooseConversation": "Select a conversation to start chatting",
+  "participatingAgents": "Participating agents",
+  "agentSelector": {
+    "label": "Choose an agent",
+    "all": "All",
+    "allAgents": "All Agents",
+    "search": "Search agents…",
+    "noAgents": "No online agents"
+  },
   "defaultConversationTitle": "Direct message: My Agent",
   "inputPlaceholder": "Type a message… (Enter to send, Shift+Enter for a new line)",
   "loadingMessages": "Loading messages",

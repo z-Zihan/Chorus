@@ -15,5 +15,5 @@ export interface Conversation {
 export interface CreateConversationInput {
   title?: string;
   type?: ConversationType;
-  agentId?: string;
+  agentIds?: string[];
 }

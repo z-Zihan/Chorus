@@ -6,6 +6,7 @@ import { useChatStore } from "@/store/chatStore";
 import { useAgentStore } from "@/store/agentStore";
 import { useUIStore } from "@/store/uiStore";
 import { STATUS_COLORS } from "@/constants/agent";
+import { AgentAvatar } from "@/components/agent/AgentAvatar";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { api } from "@/services/api";
@@ -20,7 +21,9 @@ export function ChatArea() {
   const openSidebar = useUIStore((s) => s.openSidebar);
   const currentConv = [...conversations, ...archivedConversations]
     .find((c) => c.id === currentConversationId);
-  const currentAgent = agents.find((agent) => agent.id === currentConv?.agentIds[0]);
+  const currentAgents = currentConv?.agentIds
+    .map((agentId) => agents.find((agent) => agent.id === agentId))
+    .filter((agent): agent is NonNullable<typeof agent> => Boolean(agent)) ?? [];
 
   const handleExport = async (format: "markdown" | "json") => {
     if (!currentConv) return;
@@ -58,12 +61,18 @@ export function ChatArea() {
             <h2 className="truncate font-semibold text-[var(--text-primary)]">
               {currentConv?.title ?? t("chat:defaultConversationTitle")}
             </h2>
-            {currentAgent && (
-              <div className="mt-0.5 flex items-center gap-1.5 text-xs text-[var(--text-secondary)]">
-                <span
-                  className={`h-1.5 w-1.5 rounded-full ${STATUS_COLORS[currentAgent.status]}`}
-                />
-                {t(`common:status.${currentAgent.status}`)}
+            {currentAgents.length > 0 && (
+              <div className="mt-1 flex -space-x-1" aria-label={t("chat:participatingAgents")}>
+                {currentAgents.map((agent) => (
+                  <span key={agent.id} className="relative" title={`${agent.name} · ${t(`common:status.${agent.status}`)}`}>
+                    <span className="block rounded-full ring-2 ring-[var(--bg-base)]">
+                      <AgentAvatar name={agent.name} src={agent.avatar} size="xs" />
+                    </span>
+                    <span
+                      className={`absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-[var(--bg-base)] ${STATUS_COLORS[agent.status]}`}
+                    />
+                  </span>
+                ))}
               </div>
             )}
           </div>

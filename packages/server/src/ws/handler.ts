@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import type WebSocket from "ws";
 import { z } from "zod";
 import type { AgentRuntime } from "../agent/runtime";
+import type { AgentRegistry } from "../agent/registry";
 import type { EventHub } from "./events";
 import { track } from "../analytics.js";
 
@@ -11,6 +12,7 @@ const eventSchema = z.discriminatedUnion("type", [
     type: z.literal("message"),
     conversationId: z.string().min(1),
     content: z.string().min(1).max(32_000),
+    agentId: z.string().min(1).optional(),
     mentionedAgents: z.array(z.string()).optional(),
   }),
   z.object({ type: z.literal("typing"), conversationId: z.string(), isTyping: z.boolean() }),
@@ -27,10 +29,24 @@ export function registerWebSocket(
   app: FastifyInstance,
   events: EventHub,
   runtime: AgentRuntime,
+  registry: AgentRegistry,
 ): void {
+  const unsubscribe = registry.subscribeStatusChanges((status) => {
+    events.broadcastStatus(status);
+  });
+  app.addHook("onClose", async () => unsubscribe());
+
   app.get("/ws", { websocket: true }, (socket) => {
     const ws = socket as WebSocket;
     events.add(ws);
+    events.sendStatusBatch(
+      ws,
+      registry.list().map((agent) => ({
+        agentId: agent.id,
+        status: agent.status,
+        error: agent.error,
+      })),
+    );
     app.log.info("WebSocket client connected");
     track("ws_connect");
 
@@ -80,7 +96,12 @@ function handleEvent(
   } else if (event.type === "cancel") {
     runtime.cancel(event.messageId);
   } else if (event.type === "message") {
-    void runtime.handleUserMessage(event.conversationId, event.content, event.mentionedAgents)
+    void runtime.handleUserMessage(
+      event.conversationId,
+      event.content,
+      event.mentionedAgents,
+      event.agentId,
+    )
       .catch((error: unknown) => {
         app.log.error({ err: error }, "Agent runtime failed while handling WebSocket message");
         events.sendDirect(socket, {

@@ -3,6 +3,7 @@ import type {
   AgentAdapter,
   AgentConfig,
   AgentStatus,
+  AgentStatusSnapshot,
   PersistedAgentConfig,
 } from "@agentlink/shared";
 import type { Repository } from "../db/repository.js";
@@ -22,6 +23,7 @@ interface RegistryEntry {
 
 export class AgentRegistry {
   private readonly entries = new Map<string, RegistryEntry>();
+  private readonly statusListeners = new Set<(status: AgentStatusSnapshot) => void>();
   private readonly persistence: AgentPersistence;
 
   constructor(private readonly repository: Repository) {
@@ -70,6 +72,7 @@ export class AgentRegistry {
       entry.status = "error";
       entry.error = messageFromError(error);
     }
+    this.broadcastStatus(config.id);
     return this.toAgent(entry);
   }
 
@@ -108,9 +111,30 @@ export class AgentRegistry {
   setStatus(id: string, status: AgentStatus, error?: string): void {
     const entry = this.entries.get(id);
     if (!entry) return;
+    if (entry.status === status && entry.error === error) return;
     entry.status = status;
     entry.error = error;
     if (entry.adapter instanceof BaseAdapter) entry.adapter.setRuntimeStatus(status);
+    this.broadcastStatus(id);
+  }
+
+  subscribeStatusChanges(listener: (status: AgentStatusSnapshot) => void): () => void {
+    this.statusListeners.add(listener);
+    return () => this.statusListeners.delete(listener);
+  }
+
+  broadcastStatus(id?: string, status?: AgentStatus, error?: string): void {
+    if (!id) {
+      for (const agentId of this.entries.keys()) this.broadcastStatus(agentId);
+      return;
+    }
+    const entry = this.entries.get(id);
+    const snapshot: AgentStatusSnapshot = {
+      agentId: id,
+      status: status ?? entry?.status ?? "offline",
+      error: error ?? entry?.error,
+    };
+    for (const listener of this.statusListeners) listener(snapshot);
   }
 
   list(includeDisabled = false): Agent[] {
@@ -122,6 +146,12 @@ export class AgentRegistry {
       .filter((agent) => agent.disabled && !activeIds.has(agent.id))
       .map((persisted) => this.toDisabledAgent(persisted));
     return [...active, ...disabled];
+  }
+
+  getOnlineAgents(): Agent[] {
+    return [...this.entries.values()]
+      .filter((entry) => entry.status === "online")
+      .map((entry) => this.toAgent(entry));
   }
 
   get(id: string, includeDisabled = false): Agent | undefined {
@@ -138,6 +168,7 @@ export class AgentRegistry {
     const current = this.entries.get(id);
     current?.adapter.destroy?.();
     this.entries.delete(id);
+    this.broadcastStatus(id, "offline");
     const updated = this.persistence.updatePersistedAgent(id, { disabled: true });
     return updated ? this.toDisabledAgent(updated) : undefined;
   }
@@ -157,6 +188,7 @@ export class AgentRegistry {
     const entry = this.entries.get(id);
     entry?.adapter.destroy?.();
     this.entries.delete(id);
+    if (entry) this.broadcastStatus(id, "offline");
     return this.persistence.deletePersistedAgent(id);
   }
 

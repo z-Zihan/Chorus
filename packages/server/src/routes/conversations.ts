@@ -7,10 +7,12 @@ import type { Repository } from "../db/repository.js";
 const createConversationSchema = z.object({
   title: z.string().trim().min(1).max(120).optional(),
   type: z.enum(["dm", "channel", "group"]).default("dm"),
+  agentIds: z.array(z.string().trim().min(1)).max(20).optional(),
   agentId: z.string().trim().min(1).optional(),
 });
 const messageSchema = z.object({
   content: z.string().trim().min(1).max(32_000),
+  agentId: z.string().trim().min(1).optional(),
   mentionedAgents: z.array(z.string().min(1)).max(20).optional(),
 });
 const messageQuerySchema = z.object({
@@ -51,18 +53,44 @@ export function registerConversationRoutes(
   app.post("/api/conversations", async (req, reply) => {
     const parsed = createConversationSchema.safeParse(req.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: "Invalid conversation", issues: parsed.error.flatten() });
-    const fallbackAgentId = registry.list().find((agent) => agent.status !== "offline")?.id;
-    const agentId = parsed.data.agentId ?? fallbackAgentId;
-    if (!agentId) return reply.code(409).send({ error: "NO_AGENT_AVAILABLE" });
-    if (agentId && !registry.get(agentId)) return reply.code(400).send({ error: "Agent not found" });
+    const requestedAgentIds = parsed.data.agentIds ?? (parsed.data.agentId ? [parsed.data.agentId] : undefined);
+    const fallbackAgentId = registry.getOnlineAgents()[0]?.id;
+    const agentIds = [...new Set(requestedAgentIds?.length ? requestedAgentIds : fallbackAgentId ? [fallbackAgentId] : [])];
+    if (agentIds.length === 0) return reply.code(409).send({ error: "NO_AGENT_AVAILABLE" });
+    if (agentIds.some((agentId) => !registry.get(agentId))) {
+      return reply.code(400).send({ error: "Agent not found" });
+    }
     const conversation = repository.createConversation(
       parsed.data.title ?? "新会话",
       parsed.data.type,
-      agentId,
+      agentIds,
     );
     reply.code(201);
     return conversation;
   });
+
+  app.post<{ Params: { id: string; agentId: string } }>(
+    "/api/conversations/:id/agents/:agentId",
+    async (req, reply) => {
+      if (!repository.getConversation(req.params.id)) {
+        return reply.code(404).send({ error: "Conversation not found" });
+      }
+      if (!registry.get(req.params.agentId)) {
+        return reply.code(404).send({ error: "Agent not found" });
+      }
+      const conversation = repository.addAgentToConversation(req.params.id, req.params.agentId);
+      return reply.code(201).send(conversation);
+    },
+  );
+
+  app.delete<{ Params: { id: string; agentId: string } }>(
+    "/api/conversations/:id/agents/:agentId",
+    async (req, reply) => {
+      const conversation = repository.removeAgentFromConversation(req.params.id, req.params.agentId);
+      if (!conversation) return reply.code(404).send({ error: "Conversation not found" });
+      return conversation;
+    },
+  );
 
   app.delete<{ Params: { id: string } }>("/api/conversations/:id", async (req, reply) => {
     const deleted = repository.deleteConversation(req.params.id);
@@ -84,7 +112,12 @@ export function registerConversationRoutes(
     if (!repository.getConversation(req.params.id)) return reply.code(404).send({ error: "Conversation not found" });
     const parsed = messageSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: "Invalid message", issues: parsed.error.flatten() });
-    await runtime.handleUserMessage(req.params.id, parsed.data.content, parsed.data.mentionedAgents);
+    await runtime.handleUserMessage(
+      req.params.id,
+      parsed.data.content,
+      parsed.data.mentionedAgents,
+      parsed.data.agentId,
+    );
     const latest = repository.listMessages(req.params.id, 1)[0];
     return reply.code(201).send(latest);
   });

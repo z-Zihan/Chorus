@@ -26,6 +26,7 @@ export function useWebSocket() {
   const setWebSocketSend = useChatStore((s) => s.setWebSocketSend);
   const currentConversationId = useChatStore((s) => s.currentConversationId);
   const updateAgentStatus = useAgentStore((s) => s.updateAgentStatus);
+  const updateAgentStatuses = useAgentStore((s) => s.updateAgentStatuses);
 
   useEffect(() => {
     let mounted = true;
@@ -159,8 +160,12 @@ export function useWebSocket() {
 
         case "agent_status":
           if (event.agentId && event.status) {
-            updateAgentStatus(event.agentId, event.status);
+            updateAgentStatus(event.agentId, event.status, event.error);
           }
+          break;
+
+        case "agent_status_batch":
+          updateAgentStatuses(event.statuses);
           break;
 
         case "pong":
@@ -237,5 +242,6 @@ export function useWebSocket() {
     setWebSocketSend,
     currentConversationId,
     updateAgentStatus,
+    updateAgentStatuses,
   ]);
 }

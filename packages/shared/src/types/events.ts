@@ -1,8 +1,14 @@
 import type { AgentStatus } from "./agent";
 import type { Message, StreamChunk } from "./message";
 
+export interface AgentStatusSnapshot {
+  agentId: string;
+  status: AgentStatus;
+  error?: string;
+}
+
 export type ClientEvent =
-  | { type: "message"; conversationId: string; content: string; mentionedAgents?: string[] }
+  | { type: "message"; conversationId: string; content: string; agentId?: string; mentionedAgents?: string[] }
   | { type: "typing"; conversationId: string; isTyping: boolean }
   | { type: "subscribe"; conversationId: string; lastEventId?: string }
   | { type: "cancel"; messageId: string }
@@ -14,6 +20,7 @@ export type ServerEvent =
   | { type: "a2a_call"; eventId: string; from: string; to: string; message: string; threadId: string }
   | { type: "a2a_response"; eventId: string; threadId: string; chunk: StreamChunk }
   | { type: "agent_status"; eventId: string; agentId: string; status: AgentStatus; error?: string }
+  | { type: "agent_status_batch"; eventId: string; statuses: AgentStatusSnapshot[] }
   | { type: "typing"; eventId: string; agentId: string; conversationId: string; isTyping: boolean }
   | { type: "error"; eventId: string; message: string }
   | { type: "pong"; eventId: string };

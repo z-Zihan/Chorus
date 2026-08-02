@@ -28,7 +28,7 @@ interface ChatState {
   navigateToMessage: (conversationId: string, messageId: string) => void;
   clearTargetMessage: () => void;
   fetchMessages: (conversationId: string) => Promise<void>;
-  sendMessage: (content: string) => Promise<void>;
+  sendMessage: (content: string, agentId?: string) => Promise<void>;
   appendStreamChunk: (messageId: string, chunk: string) => void;
   noteStreamActivity: (messageId: string) => void;
   setMessageStatus: (messageId: string, status: Message["status"]) => void;
@@ -120,7 +120,7 @@ export const useChatStore = create<ChatState>((set, get) => {
     }
   },
 
-  sendMessage: async (content) => {
+  sendMessage: async (content, agentId) => {
     const convId = get().currentConversationId;
     if (!convId) return;
 
@@ -129,7 +129,11 @@ export const useChatStore = create<ChatState>((set, get) => {
 
     const conversation = [...get().conversations, ...get().archivedConversations]
       .find((item) => item.id === convId);
-    const activeAgentId = conversation?.agentIds[0];
+    const activeAgentId = agentId ?? conversation?.agentIds[0];
+    if (agentId && !conversation?.agentIds.includes(agentId)) {
+      useUIStore.getState().addToast(i18n.t("errors:agentUnavailable"), "error");
+      return;
+    }
     const activeAgent = useAgentStore
       .getState()
       .agents.find((agent) => agent.id === activeAgentId);
@@ -143,6 +147,8 @@ export const useChatStore = create<ChatState>((set, get) => {
       conversationId: convId,
       fromType: "user",
       fromId: "user",
+      toType: "agent",
+      toId: activeAgentId,
       content: trimmedContent,
       timestamp: Date.now(),
       status: "sending",
@@ -159,6 +165,7 @@ export const useChatStore = create<ChatState>((set, get) => {
       type: "message",
       conversationId: convId,
       content: trimmedContent,
+      agentId: activeAgentId,
     });
     if (sent) return;
 
@@ -166,7 +173,7 @@ export const useChatStore = create<ChatState>((set, get) => {
     const controller = new AbortController();
     streamManager.setFallbackController(controller);
     try {
-      await api.sendMessage(convId, trimmedContent, controller.signal);
+      await api.sendMessage(convId, trimmedContent, controller.signal, activeAgentId);
       streamManager.clearStreamTimer();
       await get().fetchMessages(convId);
       set({ isStreaming: false, streamingMessageId: null });

@@ -60,7 +60,7 @@ async function main(): Promise<void> {
   await app.register(websocket);
 
   registerRoutes(app, repository, registry, runtime, detector, onboarding);
-  registerWebSocket(app, events, runtime);
+  registerWebSocket(app, events, runtime, registry);
 
   const hasAgentsAtStartup = registry.list().length > 0;
   if (hasAgentsAtStartup) await onboarding.bootstrap();

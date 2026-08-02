@@ -1,27 +1,47 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { Send, Square } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { useChatStore } from "@/store/chatStore";
+import { useAgentStore } from "@/store/agentStore";
+import { AgentSelector } from "@/components/chat/AgentSelector";
 
 export function InputBar() {
   const { t } = useTranslation(["common", "chat"]);
   const [input, setInput] = useState("");
+  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const sendMessage = useChatStore((s) => s.sendMessage);
   const isStreaming = useChatStore((s) => s.isStreaming);
   const cancelStream = useChatStore((s) => s.cancelStream);
   const currentConversationId = useChatStore((s) => s.currentConversationId);
+  const conversations = useChatStore((s) => s.conversations);
+  const archivedConversations = useChatStore((s) => s.archivedConversations);
+  const agents = useAgentStore((s) => s.agents);
+  const currentConversation = [...conversations, ...archivedConversations]
+    .find((conversation) => conversation.id === currentConversationId);
+
+  useEffect(() => {
+    setSelectedAgentId(null);
+  }, [currentConversationId]);
+
+  useEffect(() => {
+    if (!selectedAgentId) return;
+    const selectedAgent = agents.find((agent) => agent.id === selectedAgentId);
+    if (!currentConversation?.agentIds.includes(selectedAgentId) || selectedAgent?.status !== "online") {
+      setSelectedAgentId(null);
+    }
+  }, [agents, currentConversation, selectedAgentId]);
 
   const handleSend = useCallback(() => {
     const trimmed = input.trim();
     if (!trimmed || !currentConversationId || isStreaming) return;
-    sendMessage(trimmed);
+    sendMessage(trimmed, selectedAgentId ?? undefined);
     setInput("");
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
     }
-  }, [input, currentConversationId, isStreaming, sendMessage]);
+  }, [input, currentConversationId, isStreaming, sendMessage, selectedAgentId]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -42,6 +62,13 @@ export function InputBar() {
     <div className="border-t border-[var(--border-color)] bg-[var(--bg-surface)] px-4 py-3">
       <div className="flex items-end gap-3">
         <div className="flex flex-1 items-end rounded-xl border border-[var(--border-color)] bg-[var(--bg-elevated)] px-4 py-2.5 focus-within:border-[var(--accent-color)]">
+          <AgentSelector
+            agentIds={currentConversation?.agentIds ?? []}
+            value={selectedAgentId}
+            onValueChange={setSelectedAgentId}
+            disabled={isStreaming || !currentConversationId}
+          />
+          <div className="mx-2 h-6 w-px shrink-0 bg-[var(--border-color)]" />
           <textarea
             ref={textareaRef}
             value={input}

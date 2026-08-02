@@ -99,16 +99,24 @@ export class Repository {
     return result.changes > 0;
   }
 
-  createConversation(title: string, type = "dm", agentId?: string): Conversation {
+  createConversation(title: string, type = "dm", agentIds: string[] = []): Conversation {
     const id = randomUUID();
     const now = Date.now();
-    this.context.db.insert(conversations).values({ id, title, type, createdAt: now, updatedAt: now }).run();
-    if (agentId) this.context.db.insert(conversationAgents).values({ conversationId: id, agentId }).run();
+    const uniqueAgentIds = [...new Set(agentIds)];
+    const transaction = this.context.sqlite.transaction(() => {
+      this.context.db.insert(conversations).values({ id, title, type, createdAt: now, updatedAt: now }).run();
+      if (uniqueAgentIds.length > 0) {
+        this.context.db.insert(conversationAgents).values(
+          uniqueAgentIds.map((agentId) => ({ conversationId: id, agentId })),
+        ).run();
+      }
+    });
+    transaction();
     return {
       id,
       title,
       type: type as Conversation["type"],
-      agentIds: agentId ? [agentId] : [],
+      agentIds: uniqueAgentIds,
       pinned: false,
       archived: false,
       createdAt: now,
@@ -123,7 +131,25 @@ export class Repository {
       const existing = this.getConversation(existingLink.conversationId);
       if (existing) return existing;
     }
-    return this.createConversation("New conversation", "dm", agentId);
+    return this.createConversation("New conversation", "dm", [agentId]);
+  }
+
+  addAgentToConversation(conversationId: string, agentId: string): Conversation | undefined {
+    if (!this.getConversation(conversationId) || !this.getAgentRow(agentId)) return undefined;
+    this.context.db.insert(conversationAgents).values({ conversationId, agentId })
+      .onConflictDoNothing().run();
+    this.touchConversation(conversationId);
+    return this.getConversation(conversationId);
+  }
+
+  removeAgentFromConversation(conversationId: string, agentId: string): Conversation | undefined {
+    if (!this.getConversation(conversationId)) return undefined;
+    this.context.db.delete(conversationAgents).where(and(
+      eq(conversationAgents.conversationId, conversationId),
+      eq(conversationAgents.agentId, agentId),
+    )).run();
+    this.touchConversation(conversationId);
+    return this.getConversation(conversationId);
   }
 
   listConversations(filter: { archived?: boolean } = {}): Conversation[] {

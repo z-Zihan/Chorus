@@ -1,4 +1,4 @@
-import type { Agent, AgentConfig, CliDetection, Conversation, Message, OnboardingStatus } from "@agentlink/shared";
+import type { Agent, AgentConfig, CliDetection, Conversation, CreateConversationInput, Message, OnboardingStatus } from "@agentlink/shared";
 import { useUIStore } from "@/store/uiStore";
 import { getApiBaseUrl } from "./env";
 import i18n from "@/i18n";
@@ -131,11 +131,15 @@ export const api = {
   // Conversations
   getConversations: (archived = false) =>
     request<Conversation[]>(`/conversations${archived ? "?archived=true" : ""}`),
-  createConversation: (title?: string) =>
+  createConversation: (title?: string, agentIds?: string[]) =>
     request<Conversation>("/conversations", {
       method: "POST",
-      body: JSON.stringify({ title }),
+      body: JSON.stringify({ title, agentIds } satisfies CreateConversationInput),
     }),
+  addAgentToConversation: (conversationId: string, agentId: string) =>
+    request<Conversation>(`/conversations/${conversationId}/agents/${agentId}`, { method: "POST" }),
+  removeAgentFromConversation: (conversationId: string, agentId: string) =>
+    request<Conversation>(`/conversations/${conversationId}/agents/${agentId}`, { method: "DELETE" }),
   deleteConversation: (id: string) =>
     request<{ ok: boolean }>(`/conversations/${id}`, { method: "DELETE" }),
   updateConversation: (
@@ -156,10 +160,10 @@ export const api = {
   // Messages
   getMessages: (conversationId: string) =>
     request<Message[]>(`/conversations/${conversationId}/messages`),
-  sendMessage: (conversationId: string, content: string, signal?: AbortSignal) =>
+  sendMessage: (conversationId: string, content: string, signal?: AbortSignal, agentId?: string) =>
     request<Message>(`/conversations/${conversationId}/messages`, {
       method: "POST",
-      body: JSON.stringify({ content }),
+      body: JSON.stringify({ content, agentId }),
       signal,
     }),
   searchMessages: (query: string, filters: SearchFilters = {}) => {

@@ -26,6 +26,7 @@ export class AgentRuntime {
     conversationId: string,
     rawContent: string,
     explicitMentions: string[] = [],
+    explicitAgentId?: string,
   ): Promise<void> {
     const conversation = this.repository.getConversation(conversationId);
     if (!conversation) throw new Error("Conversation not found");
@@ -34,7 +35,12 @@ export class AgentRuntime {
 
     const parsed = parseMentions(content);
     const mentions = [...new Set([...explicitMentions, ...parsed.mentionedAgents])];
-    const agentId = mentions.find((id) => conversation.agentIds.includes(id)) ?? conversation.agentIds[0];
+    if (explicitAgentId && !conversation.agentIds.includes(explicitAgentId)) {
+      throw new Error("Agent is not assigned to this conversation");
+    }
+    const agentId = explicitAgentId
+      ?? mentions.find((id) => conversation.agentIds.includes(id))
+      ?? conversation.agentIds[0];
     if (!agentId) throw new Error("No Agent is assigned to this conversation");
 
     const userMessage = createMessage({
@@ -98,7 +104,6 @@ export class AgentRuntime {
     this.registry.setStatus(adapter.id, "busy");
     logger.info({ agentId: adapter.id, conversationId: reply.conversationId }, "Agent invocation started");
     track("agent_invoke_start", { agentId: adapter.id, conversationId: reply.conversationId });
-    this.events.publish(undefined, { type: "agent_status", agentId: adapter.id, status: "busy" });
     this.events.publish(reply.conversationId, {
       type: "typing",
       agentId: adapter.id,
@@ -168,7 +173,6 @@ export class AgentRuntime {
     logger.info({ agentId, conversationId: reply.conversationId, status, durationMs }, "Agent invocation ended");
     track("agent_invoke_end", { agentId, conversationId: reply.conversationId, status, durationMs });
     this.registry.setStatus(agentId, "online");
-    this.events.publish(undefined, { type: "agent_status", agentId, status: "online" });
   }
 
   private publishA2A(conversationId: string, from: string, request: string, chunk: StreamChunk): void {

@@ -1,8 +1,8 @@
 import type { AgentStatus } from "@agentlink/shared";
 
 export const STATUS_COLORS: Record<AgentStatus, string> = {
-  online: "bg-green-500",
-  offline: "bg-[var(--text-tertiary)]",
-  busy: "bg-yellow-500",
-  error: "bg-red-500",
+  online: "bg-[var(--status-online)]",
+  offline: "bg-[var(--status-offline)]",
+  busy: "bg-[var(--status-busy)]",
+  error: "bg-[var(--status-error)]",
 };

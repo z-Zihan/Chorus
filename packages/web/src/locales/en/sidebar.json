@@ -1,5 +1,8 @@
 {
   "conversations": "Conversations",
+  "agents": "Agents",
+  "filterByAgent": "Filter conversations by {{name}}",
+  "showAllConversations": "Show all conversations",
   "noConversations": "No conversations yet",
   "createConversation": "Create conversation",
   "untitledConversation": "Untitled conversation",

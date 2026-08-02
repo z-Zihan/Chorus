@@ -1,5 +1,8 @@
 {
   "conversations": "会话",
+  "agents": "Agents",
+  "filterByAgent": "按 {{name}} 筛选会话",
+  "showAllConversations": "显示全部会话",
   "noConversations": "还没有会话",
   "createConversation": "创建新会话",
   "untitledConversation": "未命名会话",

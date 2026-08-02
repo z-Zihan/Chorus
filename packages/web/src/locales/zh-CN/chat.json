@@ -1,5 +1,13 @@
 {
   "chooseConversation": "选择一个会话开始对话",
+  "participatingAgents": "参与会话的 Agents",
+  "agentSelector": {
+    "label": "选择 Agent",
+    "all": "全部",
+    "allAgents": "全部 Agents",
+    "search": "搜索 Agents…",
+    "noAgents": "暂无在线 Agent"
+  },
   "defaultConversationTitle": "私聊：我的 Agent",
   "inputPlaceholder": "输入消息…（Enter 发送，Shift+Enter 换行）",
   "loadingMessages": "正在加载消息",
