@@ -12,6 +12,9 @@ import { OnboardingService, registerOnboardingRoutes } from "./onboarding.js";
 import { CatalogService } from "../catalog/index.js";
 import { InstallExecutor } from "../catalog/installer.js";
 import { registerCatalogRoutes } from "./catalog.js";
+import { registerCleanupRoutes } from "./cleanup.js";
+import { registerExportRoutes } from "./export.js";
+import { registerSearchRoutes } from "./search.js";
 
 export function registerRoutes(
   app: FastifyInstance,
@@ -27,6 +30,9 @@ export function registerRoutes(
   registerLogRoutes(app);
   registerAgentRoutes(app, registry);
   registerConversationRoutes(app, repository, registry, runtime);
+  registerCleanupRoutes(app, repository);
+  registerExportRoutes(app, repository);
+  registerSearchRoutes(app, repository.context, repository);
   registerDetectionRoutes(app, detector, registry);
   registerOnboardingRoutes(app, onboarding);
   registerCatalogRoutes(app, catalog, installer);

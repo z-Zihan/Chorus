@@ -100,7 +100,10 @@ export function MessageBubble({ message, agentName, agentAvatar }: Props) {
   }
 
   return (
-    <div className={`flex gap-3 message-enter ${isUser ? "flex-row-reverse" : "flex-row"}`}>
+    <div
+      data-message-id={message.id}
+      className={`flex gap-3 message-enter ${isUser ? "flex-row-reverse" : "flex-row"}`}
+    >
       {/* Avatar */}
       {!isUser && (
         <div className="mt-0.5 flex-shrink-0">

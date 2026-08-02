@@ -33,6 +33,22 @@
     "closeSidebar": "关闭侧栏",
     "closeNotification": "关闭通知"
   },
+  "search": {
+    "title": "搜索消息",
+    "description": "搜索全部会话历史，并跳转到匹配的消息。",
+    "placeholder": "搜索会话历史…",
+    "searching": "正在搜索",
+    "allAgents": "全部 Agent",
+    "startDate": "开始日期",
+    "endDate": "结束日期",
+    "hint": "输入关键词搜索消息。",
+    "noResults": "未找到匹配的消息。"
+  },
+  "export": {
+    "title": "导出",
+    "markdown": "导出为 Markdown",
+    "json": "导出为 JSON"
+  },
   "catalog": {
     "title": "Agent 目录",
     "subtitle": "发现并安装 CLI 工具和 API 连接器",

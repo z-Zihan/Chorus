@@ -35,6 +35,8 @@ export function MessageList() {
   const isLoadingMessages = useChatStore((s) => s.isLoadingMessages);
   const isStreaming = useChatStore((s) => s.isStreaming);
   const currentConversationId = useChatStore((s) => s.currentConversationId);
+  const targetMessageId = useChatStore((s) => s.targetMessageId);
+  const clearTargetMessage = useChatStore((s) => s.clearTargetMessage);
   const agents = useAgentStore((s) => s.agents);
   const scrollRef = useRef<HTMLDivElement>(null);
   const isAtBottomRef = useRef(true);
@@ -70,6 +72,18 @@ export function MessageList() {
       setShowNewMessages(true);
     }
   }, [messages, isStreaming, scrollToBottom]);
+
+  useEffect(() => {
+    if (!targetMessageId || isLoadingMessages) return;
+    const frame = window.requestAnimationFrame(() => {
+      const target = document.querySelector<HTMLElement>(
+        `[data-message-id="${targetMessageId}"], [data-message-ids~="${targetMessageId}"]`,
+      );
+      target?.scrollIntoView({ behavior: "smooth", block: "center" });
+      clearTargetMessage();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [targetMessageId, isLoadingMessages, messages, clearTargetMessage]);
 
   // Group messages by threadId for A2A display
   const rendered: React.ReactNode[] = [];

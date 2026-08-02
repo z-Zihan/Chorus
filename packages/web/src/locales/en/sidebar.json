@@ -8,5 +8,21 @@
   "deleteConversation": "Delete conversation",
   "deleteConversationAria": "Delete conversation {{title}}",
   "deleteDialogTitle": "Delete conversation?",
-  "deleteDialogMessage": "“{{title}}” and all its messages will be permanently deleted. This cannot be undone."
+  "deleteDialogMessage": "“{{title}}” and all its messages will be permanently deleted. This cannot be undone.",
+  "rename": "Rename",
+  "renameConversation": "Rename conversation",
+  "pin": "Pin",
+  "unpin": "Unpin",
+  "pinned": "Pinned",
+  "archive": "Archive",
+  "unarchive": "Unarchive",
+  "archived": "Archived",
+  "conversationActions": "Actions for {{title}}",
+  "select": "Select",
+  "cancelSelect": "Cancel",
+  "selectConversation": "Select conversation {{title}}",
+  "selectAll": "Select all",
+  "deleteSelected": "Delete selected ({{count}})",
+  "batchDeleteTitle": "Delete selected conversations?",
+  "batchDeleteMessage": "Delete {{count}} conversations? This action cannot be undone."
 }

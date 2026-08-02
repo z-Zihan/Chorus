@@ -8,6 +8,21 @@ import type {
   InstallOptions,
 } from "@/store/catalogStore";
 
+export interface SearchFilters {
+  conversationId?: string;
+  agentId?: string;
+  startDate?: number;
+  endDate?: number;
+  limit?: number;
+}
+
+export interface MessageSearchResult {
+  message: Message;
+  conversation: Conversation;
+  before: Message | null;
+  after: Message | null;
+}
+
 export interface ServerLogEntry {
   timestamp: number;
   level: "debug" | "info" | "warn" | "error";
@@ -61,6 +76,16 @@ async function request<T>(
   return res.json();
 }
 
+async function requestBlob(path: string): Promise<Blob> {
+  const res = await fetch(`${getApiBaseUrl()}${path}`);
+  if (!res.ok) {
+    const message = await res.text() || i18n.t("errors:requestFailed", { status: res.status });
+    useUIStore.getState().addToast(message, "error");
+    throw new Error(message);
+  }
+  return res.blob();
+}
+
 export const api = {
   // Health
   health: () => request<{ ok: boolean }>("/health"),
@@ -104,7 +129,8 @@ export const api = {
     }),
 
   // Conversations
-  getConversations: () => request<Conversation[]>("/conversations"),
+  getConversations: (archived = false) =>
+    request<Conversation[]>(`/conversations${archived ? "?archived=true" : ""}`),
   createConversation: (title?: string) =>
     request<Conversation>("/conversations", {
       method: "POST",
@@ -112,6 +138,20 @@ export const api = {
     }),
   deleteConversation: (id: string) =>
     request<{ ok: boolean }>(`/conversations/${id}`, { method: "DELETE" }),
+  updateConversation: (
+    id: string,
+    data: Partial<Pick<Conversation, "title" | "pinned" | "archived">>,
+  ) => request<Conversation>(`/conversations/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  }),
+  deleteConversations: (ids: string[]) =>
+    request<{ count: number }>("/conversations/batch", {
+      method: "DELETE",
+      body: JSON.stringify({ ids }),
+    }),
+  exportConversation: (id: string, format: "markdown" | "json") =>
+    requestBlob(`/conversations/${encodeURIComponent(id)}/export?format=${format}`),
 
   // Messages
   getMessages: (conversationId: string) =>
@@ -122,6 +162,15 @@ export const api = {
       body: JSON.stringify({ content }),
       signal,
     }),
+  searchMessages: (query: string, filters: SearchFilters = {}) => {
+    const params = new URLSearchParams({ q: query });
+    if (filters.conversationId) params.set("conversation_id", filters.conversationId);
+    if (filters.agentId) params.set("agent_id", filters.agentId);
+    if (filters.startDate !== undefined) params.set("start_date", String(filters.startDate));
+    if (filters.endDate !== undefined) params.set("end_date", String(filters.endDate));
+    if (filters.limit !== undefined) params.set("limit", String(filters.limit));
+    return request<MessageSearchResult[]>(`/messages/search?${params.toString()}`);
+  },
 
   // Diagnostics
   getLogs: (level?: string, limit = 500) => {

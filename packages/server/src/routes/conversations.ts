@@ -17,6 +17,14 @@ const messageQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(500).default(200),
   before: z.coerce.number().int().positive().optional(),
 });
+const updateConversationSchema = z.object({
+  title: z.string().trim().min(1).max(120).optional(),
+  pinned: z.boolean().optional(),
+  archived: z.boolean().optional(),
+}).refine((value) => Object.keys(value).length > 0, "At least one field is required");
+const conversationQuerySchema = z.object({
+  archived: z.enum(["true", "false"]).optional().transform((value) => value === "true"),
+});
 
 export function registerConversationRoutes(
   app: FastifyInstance,
@@ -24,8 +32,20 @@ export function registerConversationRoutes(
   registry: AgentRegistry,
   runtime: AgentRuntime,
 ): void {
-  app.get("/api/conversations", async () => {
-    return repository.listConversations();
+  app.get("/api/conversations", async (request, reply) => {
+    const parsed = conversationQuerySchema.safeParse(request.query);
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid query" });
+    return repository.listConversations({ archived: parsed.data.archived });
+  });
+
+  app.patch<{ Params: { id: string } }>("/api/conversations/:id", async (request, reply) => {
+    const parsed = updateConversationSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: "Invalid update", issues: parsed.error.flatten() });
+    }
+    const conversation = repository.updateConversation(request.params.id, parsed.data);
+    if (!conversation) return reply.code(404).send({ error: "Conversation not found" });
+    return conversation;
   });
 
   app.post("/api/conversations", async (req, reply) => {

@@ -18,7 +18,10 @@ export function A2AThread({ messages }: Props) {
   const getAgentName = (id: string) => agents.find((a) => a.id === id)?.name ?? id;
 
   return (
-    <div className="message-enter rounded-xl border border-[var(--border-color)] bg-[var(--bg-surface)]">
+    <div
+      data-message-ids={messages.map((message) => message.id).join(" ")}
+      className="message-enter rounded-xl border border-[var(--border-color)] bg-[var(--bg-surface)]"
+    >
       {/* Header — clickable to expand/collapse */}
       <button
         onClick={() => setExpanded(!expanded)}

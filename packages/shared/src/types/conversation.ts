@@ -5,6 +5,8 @@ export interface Conversation {
   title: string;
   type: ConversationType;
   agentIds: string[];
+  pinned: boolean;
+  archived: boolean;
   lastMessage?: string;
   createdAt: number;
   updatedAt: number;

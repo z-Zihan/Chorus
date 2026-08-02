@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Menu } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Sidebar } from "@/components/layout/Sidebar";
@@ -13,7 +13,7 @@ import { OnboardingFlow } from "@/components/onboarding/OnboardingFlow";
 import { useOnboardingStore } from "@/store/onboardingStore";
 import { useUIStore } from "@/store/uiStore";
 import { useHotkeys } from "@/hooks/useHotkey";
-import { logger } from "@/utils/logger";
+import { SearchPanel } from "@/components/search/SearchPanel";
 
 export default function App() {
   const { t } = useTranslation(["common", "chat", "errors"]);
@@ -28,13 +28,14 @@ export default function App() {
   const selectedAgentId = useAgentStore((s) => s.selectedAgentId);
   const selectAgent = useAgentStore((s) => s.selectAgent);
   const clearSelectedAgent = useAgentStore((s) => s.clearSelectedAgent);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
 
   useWebSocket();
   const onboardingStatus = useOnboardingStore((s) => s.status);
 
   useHotkeys(
     [
-      { key: "Ctrl+K", callback: () => logger.info("Search shortcut invoked") },
+      { key: "Ctrl+K", callback: () => setIsSearchOpen(true) },
       {
         key: "Ctrl+,",
         callback: () => {
@@ -113,6 +114,7 @@ export default function App() {
       </div>
       {onboardingStatus && onboardingStatus.step !== "completed" && <OnboardingFlow />}
       <ToastContainer />
+      <SearchPanel open={isSearchOpen} onOpenChange={setIsSearchOpen} />
     </div>
   );
 }

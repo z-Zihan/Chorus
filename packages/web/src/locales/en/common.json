@@ -33,6 +33,22 @@
     "closeSidebar": "Close sidebar",
     "closeNotification": "Close notification"
   },
+  "search": {
+    "title": "Search messages",
+    "description": "Search across conversation history and jump to a matching message.",
+    "placeholder": "Search conversation history…",
+    "searching": "Searching",
+    "allAgents": "All Agents",
+    "startDate": "Start date",
+    "endDate": "End date",
+    "hint": "Enter a keyword to search your messages.",
+    "noResults": "No matching messages found."
+  },
+  "export": {
+    "title": "Export",
+    "markdown": "Export as Markdown",
+    "json": "Export as JSON"
+  },
   "catalog": {
     "title": "Agent Catalog",
     "subtitle": "Discover and install CLI tools and API connectors",

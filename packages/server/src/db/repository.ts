@@ -11,7 +11,7 @@ import type { DatabaseContext } from "./index";
 import { agents, appSettings, conversationAgents, conversations, messages } from "./schema";
 
 export class Repository {
-  constructor(private readonly context: DatabaseContext) {}
+  constructor(readonly context: DatabaseContext) {}
 
   upsertAgent(agent: AgentConfig | PersistedAgentConfig): void {
     const now = Date.now();
@@ -104,7 +104,16 @@ export class Repository {
     const now = Date.now();
     this.context.db.insert(conversations).values({ id, title, type, createdAt: now, updatedAt: now }).run();
     if (agentId) this.context.db.insert(conversationAgents).values({ conversationId: id, agentId }).run();
-    return { id, title, type: type as Conversation["type"], agentIds: agentId ? [agentId] : [], createdAt: now, updatedAt: now };
+    return {
+      id,
+      title,
+      type: type as Conversation["type"],
+      agentIds: agentId ? [agentId] : [],
+      pinned: false,
+      archived: false,
+      createdAt: now,
+      updatedAt: now,
+    };
   }
 
   ensureDefaultConversation(agentId: string): Conversation {
@@ -117,27 +126,29 @@ export class Repository {
     return this.createConversation("New conversation", "dm", agentId);
   }
 
-  listConversations(): Conversation[] {
-    const rows = this.context.db.select().from(conversations).orderBy(desc(conversations.updatedAt)).all();
-    return rows.map((row) => {
-      const links = this.context.db.select().from(conversationAgents)
-        .where(eq(conversationAgents.conversationId, row.id)).all();
-      const latest = this.context.db.select().from(messages)
-        .where(eq(messages.conversationId, row.id)).orderBy(desc(messages.createdAt)).limit(1).get();
-      return {
-        id: row.id,
-        title: row.title ?? "Untitled",
-        type: row.type as Conversation["type"],
-        agentIds: links.map((link) => link.agentId),
-        lastMessage: latest?.content,
-        createdAt: row.createdAt,
-        updatedAt: row.updatedAt,
-      };
-    });
+  listConversations(filter: { archived?: boolean } = {}): Conversation[] {
+    const archived = filter.archived ?? false;
+    const rows = this.context.db.select().from(conversations)
+      .where(eq(conversations.archived, archived))
+      .orderBy(desc(conversations.pinned), desc(conversations.updatedAt)).all();
+    return rows.map((row) => this.toConversation(row));
   }
 
   getConversation(id: string): Conversation | undefined {
-    return this.listConversations().find((conversation) => conversation.id === id);
+    const row = this.context.db.select().from(conversations).where(eq(conversations.id, id)).get();
+    return row ? this.toConversation(row) : undefined;
+  }
+
+  updateConversation(
+    id: string,
+    input: { title?: string; pinned?: boolean; archived?: boolean },
+  ): Conversation | undefined {
+    if (!this.getConversation(id)) return undefined;
+    this.context.db.update(conversations).set({
+      ...input,
+      updatedAt: Date.now(),
+    }).where(eq(conversations.id, id)).run();
+    return this.getConversation(id);
   }
 
   deleteConversation(id: string): boolean {
@@ -149,12 +160,30 @@ export class Repository {
     return transaction();
   }
 
+  deleteConversations(ids: string[]): number {
+    const uniqueIds = [...new Set(ids)];
+    const transaction = this.context.sqlite.transaction(() => {
+      let deleted = 0;
+      for (const id of uniqueIds) {
+        if (this.deleteConversation(id)) deleted += 1;
+      }
+      return deleted;
+    });
+    return transaction();
+  }
+
   listMessages(conversationId: string, limit = 200, before?: number): Message[] {
     const conditions = [eq(messages.conversationId, conversationId)];
     if (before) conditions.push(lt(messages.createdAt, before));
     const rows = this.context.db.select().from(messages)
       .where(and(...conditions)).orderBy(desc(messages.createdAt)).limit(Math.min(Math.max(limit, 1), 500)).all();
     return rows.reverse().map(toMessage);
+  }
+
+  listAllMessages(conversationId: string): Message[] {
+    return this.context.db.select().from(messages)
+      .where(eq(messages.conversationId, conversationId))
+      .orderBy(asc(messages.createdAt)).all().map(toMessage);
   }
 
   saveMessage(message: Message): void {
@@ -197,6 +226,24 @@ export class Repository {
 
   private touchConversation(id: string): void {
     this.context.db.update(conversations).set({ updatedAt: Date.now() }).where(eq(conversations.id, id)).run();
+  }
+
+  private toConversation(row: typeof conversations.$inferSelect): Conversation {
+    const links = this.context.db.select().from(conversationAgents)
+      .where(eq(conversationAgents.conversationId, row.id)).all();
+    const latest = this.context.db.select().from(messages)
+      .where(eq(messages.conversationId, row.id)).orderBy(desc(messages.createdAt)).limit(1).get();
+    return {
+      id: row.id,
+      title: row.title ?? "Untitled",
+      type: row.type as Conversation["type"],
+      agentIds: links.map((link) => link.agentId),
+      pinned: row.pinned,
+      archived: row.archived,
+      lastMessage: latest?.content,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+    };
   }
 }
 

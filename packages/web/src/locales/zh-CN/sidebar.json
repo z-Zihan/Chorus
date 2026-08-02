@@ -8,5 +8,21 @@
   "deleteConversation": "删除会话",
   "deleteConversationAria": "删除会话 {{title}}",
   "deleteDialogTitle": "删除会话？",
-  "deleteDialogMessage": "“{{title}}”及其中的消息将被永久删除，此操作无法撤销。"
+  "deleteDialogMessage": "“{{title}}”及其中的消息将被永久删除，此操作无法撤销。",
+  "rename": "重命名",
+  "renameConversation": "重命名会话",
+  "pin": "置顶",
+  "unpin": "取消置顶",
+  "pinned": "已置顶",
+  "archive": "归档",
+  "unarchive": "取消归档",
+  "archived": "已归档",
+  "conversationActions": "{{title}} 的操作",
+  "select": "选择",
+  "cancelSelect": "取消",
+  "selectConversation": "选择会话 {{title}}",
+  "selectAll": "全选",
+  "deleteSelected": "删除选中（{{count}}）",
+  "batchDeleteTitle": "删除选中的会话？",
+  "batchDeleteMessage": "确定删除 {{count}} 个会话？此操作不可逆"
 }

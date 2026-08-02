@@ -15,6 +15,13 @@
       "when": 1785565140912,
       "tag": "0001_free_vulture",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1785649088140,
+      "tag": "0002_magical_shinko_yamashiro",
+      "breakpoints": true
     }
   ]
 }
