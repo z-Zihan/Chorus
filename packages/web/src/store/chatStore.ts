@@ -26,6 +26,7 @@ export interface A2AThreadState {
 
 interface ChatState {
   conversations: Conversation[];
+  groupConversations: Conversation[];
   archivedConversations: Conversation[];
   currentConversationId: string | null;
   targetMessageId: string | null;
@@ -70,6 +71,7 @@ export const useChatStore = create<ChatState>((set, get) => {
 
   return {
     conversations: [],
+    groupConversations: [],
     archivedConversations: [],
     currentConversationId: null,
     targetMessageId: null,
@@ -82,17 +84,20 @@ export const useChatStore = create<ChatState>((set, get) => {
 
     fetchConversations: async (includeArchived = true) => {
       try {
-        const [data, archived] = await Promise.all([
-          api.getConversations(),
+        const [data, groups, archived] = await Promise.all([
+          api.getConversations(false, "dm"),
+          api.getConversations(false, "group"),
           includeArchived ? api.getConversations(true) : Promise.resolve([]),
         ]);
         set({
           conversations: sortConversations(data),
+          groupConversations: sortConversations(groups),
           archivedConversations: sortConversations(archived),
         });
         // Auto-select first conversation if none selected
-        if (!get().currentConversationId && data.length > 0) {
-          get().setCurrentConversation(data[0].id);
+        const firstConversation = data[0] ?? groups[0];
+        if (!get().currentConversationId && firstConversation) {
+          get().setCurrentConversation(firstConversation.id);
         }
       } catch (e) {
         logger.error("Failed to fetch conversations", e);
@@ -145,7 +150,7 @@ export const useChatStore = create<ChatState>((set, get) => {
     const trimmedContent = content.trim();
     if (!trimmedContent) return;
 
-    const conversation = [...get().conversations, ...get().archivedConversations]
+    const conversation = [...get().conversations, ...get().groupConversations, ...get().archivedConversations]
       .find((item) => item.id === convId);
     const activeAgentId = agentId ?? conversation?.agentIds[0];
     if (agentId && !conversation?.agentIds.includes(agentId)) {
@@ -277,6 +282,7 @@ export const useChatStore = create<ChatState>((set, get) => {
         const updated = await api.updateConversation(id, { title: trimmed });
         set((state) => ({
           conversations: state.conversations.map((item) => item.id === id ? updated : item),
+          groupConversations: state.groupConversations.map((item) => item.id === id ? updated : item),
           archivedConversations: state.archivedConversations.map((item) => item.id === id ? updated : item),
         }));
         return true;
@@ -288,13 +294,14 @@ export const useChatStore = create<ChatState>((set, get) => {
 
     togglePin: async (id) => {
       const state = get();
-      const conversation = [...state.conversations, ...state.archivedConversations]
+      const conversation = [...state.conversations, ...state.groupConversations, ...state.archivedConversations]
         .find((item) => item.id === id);
       if (!conversation) return;
       try {
         const updated = await api.updateConversation(id, { pinned: !conversation.pinned });
         set((current) => ({
           conversations: sortConversations(current.conversations.map((item) => item.id === id ? updated : item)),
+          groupConversations: sortConversations(current.groupConversations.map((item) => item.id === id ? updated : item)),
           archivedConversations: sortConversations(current.archivedConversations.map((item) => item.id === id ? updated : item)),
         }));
       } catch (error) {
@@ -304,7 +311,7 @@ export const useChatStore = create<ChatState>((set, get) => {
 
     toggleArchive: async (id) => {
       const state = get();
-      const conversation = [...state.conversations, ...state.archivedConversations]
+      const conversation = [...state.conversations, ...state.groupConversations, ...state.archivedConversations]
         .find((item) => item.id === id);
       if (!conversation) return;
       try {
@@ -312,17 +319,22 @@ export const useChatStore = create<ChatState>((set, get) => {
         const current = get();
         const conversations = sortConversations([
           ...current.conversations.filter((item) => item.id !== id),
-          ...(!updated.archived ? [updated] : []),
+          ...(!updated.archived && updated.type === "dm" ? [updated] : []),
+        ]);
+        const groupConversations = sortConversations([
+          ...current.groupConversations.filter((item) => item.id !== id),
+          ...(!updated.archived && updated.type === "group" ? [updated] : []),
         ]);
         const archivedConversations = sortConversations([
           ...current.archivedConversations.filter((item) => item.id !== id),
           ...(updated.archived ? [updated] : []),
         ]);
         if (updated.archived && current.currentConversationId === id) {
-          const nextConversation = conversations[0] ?? null;
+          const nextConversation = conversations[0] ?? groupConversations[0] ?? null;
           messagesRequestId += 1;
           set({
             conversations,
+            groupConversations,
             archivedConversations,
             currentConversationId: nextConversation?.id ?? null,
             messages: [],
@@ -331,7 +343,7 @@ export const useChatStore = create<ChatState>((set, get) => {
           });
           if (nextConversation) await get().fetchMessages(nextConversation.id);
         } else {
-          set({ conversations, archivedConversations });
+          set({ conversations, groupConversations, archivedConversations });
         }
       } catch (error) {
         logger.error("Failed to archive conversation", error);
@@ -343,24 +355,27 @@ export const useChatStore = create<ChatState>((set, get) => {
         await api.deleteConversation(id);
         track("conversation_deleted", { conversationId: id });
         const state = get();
-        const allConversations = [...state.conversations, ...state.archivedConversations];
+        const allConversations = [...state.conversations, ...state.groupConversations, ...state.archivedConversations];
         const deletedIndex = allConversations.findIndex((conversation) => conversation.id === id);
         const conversations = state.conversations.filter((conversation) => conversation.id !== id);
+        const groupConversations = state.groupConversations.filter((conversation) => conversation.id !== id);
         const archivedConversations = state.archivedConversations.filter((conversation) => conversation.id !== id);
 
         if (state.currentConversationId !== id) {
-          set({ conversations, archivedConversations });
+          set({ conversations, groupConversations, archivedConversations });
           return true;
         }
 
         streamManager.clearStreamTimer();
         streamManager.abortFallback();
         messagesRequestId += 1;
+        const activeConversations = [...conversations, ...groupConversations];
         const nextConversation =
-          conversations[deletedIndex] ?? conversations[deletedIndex - 1] ?? conversations[0] ?? null;
+          activeConversations[deletedIndex] ?? activeConversations[deletedIndex - 1] ?? activeConversations[0] ?? null;
 
         set({
           conversations,
+          groupConversations,
           archivedConversations,
           currentConversationId: nextConversation?.id ?? null,
           messages: [],
@@ -386,20 +401,22 @@ export const useChatStore = create<ChatState>((set, get) => {
         const deletedIds = new Set(ids);
         const state = get();
         const conversations = state.conversations.filter((item) => !deletedIds.has(item.id));
+        const groupConversations = state.groupConversations.filter((item) => !deletedIds.has(item.id));
         const archivedConversations = state.archivedConversations.filter((item) => !deletedIds.has(item.id));
         const currentWasDeleted = state.currentConversationId
           ? deletedIds.has(state.currentConversationId)
           : false;
         if (!currentWasDeleted) {
-          set({ conversations, archivedConversations });
+          set({ conversations, groupConversations, archivedConversations });
           return count;
         }
         streamManager.clearStreamTimer();
         streamManager.abortFallback();
         messagesRequestId += 1;
-        const nextConversation = conversations[0] ?? null;
+        const nextConversation = conversations[0] ?? groupConversations[0] ?? null;
         set({
           conversations,
+          groupConversations,
           archivedConversations,
           currentConversationId: nextConversation?.id ?? null,
           messages: [],

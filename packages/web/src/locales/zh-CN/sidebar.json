@@ -1,5 +1,7 @@
 {
   "conversations": "会话",
+  "dmConversations": "私聊",
+  "groupConversations": "群聊",
   "agents": "Agents",
   "filterByAgent": "按 {{name}} 筛选会话",
   "showAllConversations": "显示全部会话",

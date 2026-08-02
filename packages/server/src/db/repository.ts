@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type {
   AgentConfig,
   Conversation,
+  ConversationType,
   Message,
   MessageStatus,
   PersistedAgentConfig,
@@ -152,10 +153,12 @@ export class Repository {
     return this.getConversation(conversationId);
   }
 
-  listConversations(filter: { archived?: boolean } = {}): Conversation[] {
+  listConversations(filter: { archived?: boolean; type?: ConversationType } = {}): Conversation[] {
     const archived = filter.archived ?? false;
+    const conditions = [eq(conversations.archived, archived)];
+    if (filter.type) conditions.push(eq(conversations.type, filter.type));
     const rows = this.context.db.select().from(conversations)
-      .where(eq(conversations.archived, archived))
+      .where(and(...conditions))
       .orderBy(desc(conversations.pinned), desc(conversations.updatedAt)).all();
     return rows.map((row) => this.toConversation(row));
   }

@@ -16,9 +16,10 @@ export function InputBar() {
   const cancelStream = useChatStore((s) => s.cancelStream);
   const currentConversationId = useChatStore((s) => s.currentConversationId);
   const conversations = useChatStore((s) => s.conversations);
+  const groupConversations = useChatStore((s) => s.groupConversations);
   const archivedConversations = useChatStore((s) => s.archivedConversations);
   const agents = useAgentStore((s) => s.agents);
-  const currentConversation = [...conversations, ...archivedConversations]
+  const currentConversation = [...conversations, ...groupConversations, ...archivedConversations]
     .find((conversation) => conversation.id === currentConversationId);
 
   useEffect(() => {

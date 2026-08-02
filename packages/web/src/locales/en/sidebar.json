@@ -1,5 +1,7 @@
 {
   "conversations": "Conversations",
+  "dmConversations": "Direct Messages",
+  "groupConversations": "Group Chats",
   "agents": "Agents",
   "filterByAgent": "Filter conversations by {{name}}",
   "showAllConversations": "Show all conversations",

@@ -1,4 +1,4 @@
-import type { Agent, AgentConfig, CliDetection, Conversation, CreateConversationInput, Message, OnboardingStatus } from "@agentlink/shared";
+import type { Agent, AgentConfig, CliDetection, Conversation, ConversationType, CreateConversationInput, Message, OnboardingStatus } from "@agentlink/shared";
 import { useUIStore } from "@/store/uiStore";
 import { getApiBaseUrl } from "./env";
 import i18n from "@/i18n";
@@ -129,8 +129,13 @@ export const api = {
     }),
 
   // Conversations
-  getConversations: (archived = false) =>
-    request<Conversation[]>(`/conversations${archived ? "?archived=true" : ""}`),
+  getConversations: (archived = false, type?: ConversationType) => {
+    const params = new URLSearchParams();
+    if (archived) params.set("archived", "true");
+    if (type) params.set("type", type);
+    const query = params.toString();
+    return request<Conversation[]>(`/conversations${query ? `?${query}` : ""}`);
+  },
   createConversation: (title?: string, agentIds?: string[]) =>
     request<Conversation>("/conversations", {
       method: "POST",

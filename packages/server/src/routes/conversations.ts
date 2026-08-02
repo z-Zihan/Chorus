@@ -26,6 +26,7 @@ const updateConversationSchema = z.object({
 }).refine((value) => Object.keys(value).length > 0, "At least one field is required");
 const conversationQuerySchema = z.object({
   archived: z.enum(["true", "false"]).optional().transform((value) => value === "true"),
+  type: z.enum(["dm", "channel", "group"]).optional(),
 });
 
 export function registerConversationRoutes(
@@ -37,7 +38,7 @@ export function registerConversationRoutes(
   app.get("/api/conversations", async (request, reply) => {
     const parsed = conversationQuerySchema.safeParse(request.query);
     if (!parsed.success) return reply.code(400).send({ error: "Invalid query" });
-    return repository.listConversations({ archived: parsed.data.archived });
+    return repository.listConversations({ archived: parsed.data.archived, type: parsed.data.type });
   });
 
   app.patch<{ Params: { id: string } }>("/api/conversations/:id", async (request, reply) => {

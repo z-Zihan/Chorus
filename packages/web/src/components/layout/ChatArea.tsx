@@ -16,10 +16,11 @@ export function ChatArea() {
   const { t } = useTranslation(["common", "chat"]);
   const currentConversationId = useChatStore((s) => s.currentConversationId);
   const conversations = useChatStore((s) => s.conversations);
+  const groupConversations = useChatStore((s) => s.groupConversations);
   const archivedConversations = useChatStore((s) => s.archivedConversations);
   const agents = useAgentStore((s) => s.agents);
   const openSidebar = useUIStore((s) => s.openSidebar);
-  const currentConv = [...conversations, ...archivedConversations]
+  const currentConv = [...conversations, ...groupConversations, ...archivedConversations]
     .find((c) => c.id === currentConversationId);
   const currentAgents = currentConv?.agentIds
     .map((agentId) => agents.find((agent) => agent.id === agentId))

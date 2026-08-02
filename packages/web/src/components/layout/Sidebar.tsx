@@ -13,6 +13,7 @@ import {
   Search,
   Settings,
   Trash2,
+  Users,
   X,
 } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
@@ -43,6 +44,7 @@ export function Sidebar() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isCatalogOpen, setIsCatalogOpen] = useState(false);
   const [isArchivedOpen, setIsArchivedOpen] = useState(false);
+  const [isGroupsOpen, setIsGroupsOpen] = useState(true);
   const [isAgentsOpen, setIsAgentsOpen] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
@@ -51,6 +53,7 @@ export function Sidebar() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showBatchConfirmation, setShowBatchConfirmation] = useState(false);
   const conversations = useChatStore((s) => s.conversations);
+  const groupConversations = useChatStore((s) => s.groupConversations);
   const archivedConversations = useChatStore((s) => s.archivedConversations);
   const currentConversationId = useChatStore((s) => s.currentConversationId);
   const setCurrentConversation = useChatStore((s) => s.setCurrentConversation);
@@ -66,10 +69,13 @@ export function Sidebar() {
   const filterByAgent = useAgentStore((s) => s.filterByAgent);
   const isSidebarOpen = useUIStore((s) => s.isSidebarOpen);
   const closeSidebar = useUIStore((s) => s.closeSidebar);
-  const allConversations = [...conversations, ...archivedConversations];
+  const allConversations = [...conversations, ...groupConversations, ...archivedConversations];
   const visibleConversations = conversationAgentFilter
     ? conversations.filter((conversation) => conversation.agentIds.includes(conversationAgentFilter))
     : conversations;
+  const visibleGroupConversations = conversationAgentFilter
+    ? groupConversations.filter((conversation) => conversation.agentIds.includes(conversationAgentFilter))
+    : groupConversations;
   const visibleArchivedConversations = conversationAgentFilter
     ? archivedConversations.filter((conversation) => conversation.agentIds.includes(conversationAgentFilter))
     : archivedConversations;
@@ -133,7 +139,7 @@ export function Sidebar() {
 
   const renderConversation = (conv: Conversation) => {
     const conversationAgent = agents.find((agent) => agent.id === conv.agentIds[0]);
-    const isAgentOffline = conversationAgent?.status === "offline";
+    const isAgentOffline = conv.type === "dm" && conversationAgent?.status === "offline";
     const selected = selectedIds.has(conv.id);
 
     return (
@@ -164,9 +170,17 @@ export function Sidebar() {
           onClick={() => handleSelectConversation(conv.id)}
           className={`flex min-w-0 flex-1 items-center gap-3 px-3 py-2.5 text-left ${isSelectMode ? "pl-2" : ""}`}
         >
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--bg-elevated)] text-sm">
-            <MessageSquare aria-hidden="true" className="h-4 w-4" />
-          </div>
+          {conv.type === "dm" ? (
+            <AgentAvatar
+              name={conversationAgent?.name ?? conv.title ?? t("sidebar:untitledConversation")}
+              src={conversationAgent?.avatar}
+              size="sm"
+            />
+          ) : (
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--bg-elevated)] text-sm">
+              <Users aria-hidden="true" className="h-4 w-4" />
+            </div>
+          )}
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5">
               {conv.pinned && <Pin aria-label={t("sidebar:pinned")} className="h-3 w-3 shrink-0 text-[var(--accent-hover)]" />}
@@ -316,8 +330,7 @@ export function Sidebar() {
             )}
           </div>
 
-          <div className="mb-2 flex items-center justify-between gap-1 px-2">
-            <span className="text-xs font-medium uppercase tracking-wider text-[var(--text-tertiary)]">{t("sidebar:conversations")}</span>
+          <div className="mb-2 flex items-center justify-end gap-1 px-2">
             <div className="flex items-center">
               <Button variant="ghost" size="sm" className="h-7 px-2 normal-case" onClick={toggleSelectMode}>
                 <CheckSquare aria-hidden="true" className="h-3.5 w-3.5" />
@@ -354,17 +367,41 @@ export function Sidebar() {
             </div>
           )}
 
-          <div className="space-y-1">
-            {visibleConversations.length === 0 && (
-              <div className="rounded-lg border border-dashed border-[var(--border-color)] px-4 py-6 text-center">
-                <p className="text-sm text-[var(--text-tertiary)]">{t("sidebar:noConversations")}</p>
-                <Button onClick={() => void handleCreateConversation()} size="sm" className="mt-3">
-                  <Plus aria-hidden="true" className="h-4 w-4" />
-                  {t("sidebar:createConversation")}
-                </Button>
-              </div>
+          <div className="mb-4">
+            <div className="flex items-center gap-2 px-2 py-2 text-xs font-medium uppercase tracking-wider text-[var(--text-tertiary)]">
+              <MessageSquare aria-hidden="true" className="h-3.5 w-3.5" />
+              <span className="flex-1">{t("sidebar:dmConversations")}</span>
+              <span>{visibleConversations.length}</span>
+            </div>
+            <div className="mt-1 space-y-1">
+              {visibleConversations.length === 0 && (
+                <div className="rounded-lg border border-dashed border-[var(--border-color)] px-4 py-6 text-center">
+                  <p className="text-sm text-[var(--text-tertiary)]">{t("sidebar:noConversations")}</p>
+                  <Button onClick={() => void handleCreateConversation()} size="sm" className="mt-3">
+                    <Plus aria-hidden="true" className="h-4 w-4" />
+                    {t("sidebar:createConversation")}
+                  </Button>
+                </div>
+              )}
+              {visibleConversations.map(renderConversation)}
+            </div>
+          </div>
+
+          <div className="mb-4 border-t border-[var(--border-color)] pt-2">
+            <button
+              type="button"
+              onClick={() => setIsGroupsOpen((open) => !open)}
+              aria-expanded={isGroupsOpen}
+              className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-xs font-medium uppercase tracking-wider text-[var(--text-tertiary)] hover:bg-[var(--bg-hover)]"
+            >
+              <Users aria-hidden="true" className="h-3.5 w-3.5" />
+              <span className="flex-1 text-left">{t("sidebar:groupConversations")}</span>
+              <span>{visibleGroupConversations.length}</span>
+              <ChevronDown aria-hidden="true" className={`h-3.5 w-3.5 transition-transform ${isGroupsOpen ? "rotate-180" : ""}`} />
+            </button>
+            {isGroupsOpen && (
+              <div className="mt-1 space-y-1">{visibleGroupConversations.map(renderConversation)}</div>
             )}
-            {visibleConversations.map(renderConversation)}
           </div>
 
           {visibleArchivedConversations.length > 0 && (
