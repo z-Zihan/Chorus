@@ -32,6 +32,7 @@ export class AgentRegistry {
 
   constructor(private readonly repository: Repository) {
     this.persistence = new AgentPersistence(repository);
+    this.repository.setAgentStatusResolver((agentId) => this.getStatus(agentId));
   }
 
   async initialize(configs: AgentConfig[]): Promise<void> {

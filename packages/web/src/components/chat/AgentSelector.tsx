@@ -16,6 +16,7 @@ import { useAgentStore } from "@/store/agentStore";
 
 interface AgentSelectorProps {
   agentIds: string[];
+  isGroup: boolean;
   value: string | null;
   onValueChange: (agentId: string | null) => void;
   disabled?: boolean;
@@ -23,6 +24,7 @@ interface AgentSelectorProps {
 
 export function AgentSelector({
   agentIds,
+  isGroup,
   value,
   onValueChange,
   disabled = false,
@@ -42,7 +44,8 @@ export function AgentSelector({
     agent.name.toLocaleLowerCase().includes(normalizedQuery)
     || agent.id.toLocaleLowerCase().includes(normalizedQuery)
   );
-  const selectedAgent = onlineAgents.find((agent) => agent.id === value);
+  const selectedAgent = onlineAgents.find((agent) => agent.id === value)
+    ?? (!isGroup ? onlineAgents[0] : undefined);
 
   const select = (agentId: string | null) => {
     onValueChange(agentId);
@@ -97,16 +100,18 @@ export function AgentSelector({
           />
         </div>
         <DropdownMenuSeparator />
-        <DropdownMenuItem
-          ref={(element) => { itemRefs.current[filteredAgents.length] = element; }}
-          onSelect={() => select(null)}
-        >
-          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--bg-elevated)]">
-            <AtSign aria-hidden="true" className="h-3.5 w-3.5" />
-          </span>
-          <span className="flex-1">{t("agentSelector.allAgents")}</span>
-          {value === null && <Check aria-hidden="true" className="h-4 w-4" />}
-        </DropdownMenuItem>
+        {isGroup && (
+          <DropdownMenuItem
+            ref={(element) => { itemRefs.current[filteredAgents.length] = element; }}
+            onSelect={() => select(null)}
+          >
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--bg-elevated)]">
+              <AtSign aria-hidden="true" className="h-3.5 w-3.5" />
+            </span>
+            <span className="flex-1">{t("agentSelector.allAgents")}</span>
+            {value === null && <Check aria-hidden="true" className="h-4 w-4" />}
+          </DropdownMenuItem>
+        )}
         {filteredAgents.map((agent, index) => (
           <DropdownMenuItem
             key={agent.id}

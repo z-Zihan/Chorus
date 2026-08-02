@@ -1,5 +1,5 @@
 import { MessageList } from "@/components/message/MessageList";
-import { Download, FileJson, FileText, Menu, MessageSquare } from "lucide-react";
+import { Download, FileJson, FileText, Menu, MessageSquare, Users } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { InputBar } from "@/components/layout/InputBar";
 import { useChatStore } from "@/store/chatStore";
@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { api } from "@/services/api";
 import { logger } from "@/utils/logger";
+import { GroupMemberList } from "@/components/chat/GroupMemberList";
 
 export function ChatArea() {
   const { t } = useTranslation(["common", "chat"]);
@@ -56,13 +57,17 @@ export function ChatArea() {
         </button>
         <div className="flex min-w-0 flex-1 items-center gap-3">
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--bg-elevated)] text-sm">
-            <MessageSquare aria-hidden="true" className="h-4 w-4" />
+            {currentConv?.type === "group"
+              ? <Users aria-hidden="true" className="h-4 w-4" />
+              : <MessageSquare aria-hidden="true" className="h-4 w-4" />}
           </div>
           <div className="min-w-0">
             <h2 className="truncate font-semibold text-[var(--text-primary)]">
               {currentConv?.title ?? t("chat:defaultConversationTitle")}
             </h2>
-            {currentAgents.length > 0 && (
+            {currentConv?.type === "group" ? (
+              <GroupMemberList conversation={currentConv} />
+            ) : currentAgents.length > 0 && (
               <div className="mt-1 flex -space-x-1" aria-label={t("chat:participatingAgents")}>
                 {currentAgents.map((agent) => (
                   <span key={agent.id} className="relative" title={`${agent.name} · ${t(`common:status.${agent.status}`)}`}>

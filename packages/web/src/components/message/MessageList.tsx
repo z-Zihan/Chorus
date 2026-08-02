@@ -37,12 +37,18 @@ export function MessageList() {
   const isLoadingMessages = useChatStore((s) => s.isLoadingMessages);
   const isStreaming = useChatStore((s) => s.isStreaming);
   const currentConversationId = useChatStore((s) => s.currentConversationId);
+  const conversations = useChatStore((s) => s.conversations);
+  const groupConversations = useChatStore((s) => s.groupConversations);
+  const archivedConversations = useChatStore((s) => s.archivedConversations);
   const targetMessageId = useChatStore((s) => s.targetMessageId);
   const clearTargetMessage = useChatStore((s) => s.clearTargetMessage);
   const agents = useAgentStore((s) => s.agents);
   const scrollRef = useRef<HTMLDivElement>(null);
   const isAtBottomRef = useRef(true);
   const [showNewMessages, setShowNewMessages] = useState(false);
+  const isGroupConversation = [...conversations, ...groupConversations, ...archivedConversations].find(
+    (conversation) => conversation.id === currentConversationId,
+  )?.type === "group";
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
     const container = scrollRef.current;
@@ -122,8 +128,9 @@ export function MessageList() {
       <MessageBubble
         key={msg.id}
         message={msg}
-        agentName={agent?.name}
+        agentName={isGroupConversation ? agent?.name ?? msg.fromId : agent?.name}
         agentAvatar={agent?.avatar}
+        isGroup={isGroupConversation}
       />,
     );
 

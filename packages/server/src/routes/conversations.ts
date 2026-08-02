@@ -15,6 +15,9 @@ const messageSchema = z.object({
   agentId: z.string().trim().min(1).optional(),
   mentionedAgents: z.array(z.string().min(1)).max(20).optional(),
 });
+const membersSchema = z.object({
+  agentIds: z.array(z.string().trim().min(1)).min(1).max(20),
+});
 const messageQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(500).default(200),
   before: z.coerce.number().int().positive().optional(),
@@ -81,6 +84,40 @@ export function registerConversationRoutes(
       }
       const conversation = repository.addAgentToConversation(req.params.id, req.params.agentId);
       return reply.code(201).send(conversation);
+    },
+  );
+
+  app.get<{ Params: { id: string } }>("/api/conversations/:id/members", async (req, reply) => {
+    if (!repository.getConversation(req.params.id)) {
+      return reply.code(404).send({ error: "Conversation not found" });
+    }
+    return repository.getConversationMembers(req.params.id);
+  });
+
+  app.post<{ Params: { id: string } }>("/api/conversations/:id/members", async (req, reply) => {
+    const conversation = repository.getConversation(req.params.id);
+    if (!conversation) return reply.code(404).send({ error: "Conversation not found" });
+    const parsed = membersSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: "Invalid members", issues: parsed.error.flatten() });
+    }
+    const agentIds = [...new Set(parsed.data.agentIds)];
+    if (agentIds.some((agentId) => !registry.get(agentId))) {
+      return reply.code(404).send({ error: "Agent not found" });
+    }
+    if (new Set([...conversation.agentIds, ...agentIds]).size > 20) {
+      return reply.code(400).send({ error: "A conversation can have at most 20 agents" });
+    }
+    const updated = repository.addAgentsToConversation(req.params.id, agentIds);
+    return reply.code(201).send(updated);
+  });
+
+  app.delete<{ Params: { id: string; agentId: string } }>(
+    "/api/conversations/:id/members/:agentId",
+    async (req, reply) => {
+      const conversation = repository.removeAgentsFromConversation(req.params.id, [req.params.agentId]);
+      if (!conversation) return reply.code(404).send({ error: "Conversation not found" });
+      return conversation;
     },
   );
 

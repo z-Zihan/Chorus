@@ -136,11 +136,20 @@ export const api = {
     const query = params.toString();
     return request<Conversation[]>(`/conversations${query ? `?${query}` : ""}`);
   },
-  createConversation: (title?: string, agentIds?: string[]) =>
+  createConversation: (title?: string, agentIds?: string[], type: ConversationType = "dm") =>
     request<Conversation>("/conversations", {
       method: "POST",
-      body: JSON.stringify({ title, agentIds } satisfies CreateConversationInput),
+      body: JSON.stringify({ title, agentIds, type } satisfies CreateConversationInput),
     }),
+  getConversationMembers: (conversationId: string) =>
+    request<Agent[]>(`/conversations/${conversationId}/members`),
+  addConversationMembers: (conversationId: string, agentIds: string[]) =>
+    request<Conversation>(`/conversations/${conversationId}/members`, {
+      method: "POST",
+      body: JSON.stringify({ agentIds }),
+    }),
+  removeConversationMember: (conversationId: string, agentId: string) =>
+    request<Conversation>(`/conversations/${conversationId}/members/${agentId}`, { method: "DELETE" }),
   addAgentToConversation: (conversationId: string, agentId: string) =>
     request<Conversation>(`/conversations/${conversationId}/agents/${agentId}`, { method: "POST" }),
   removeAgentFromConversation: (conversationId: string, agentId: string) =>
@@ -165,10 +174,16 @@ export const api = {
   // Messages
   getMessages: (conversationId: string) =>
     request<Message[]>(`/conversations/${conversationId}/messages`),
-  sendMessage: (conversationId: string, content: string, signal?: AbortSignal, agentId?: string) =>
+  sendMessage: (
+    conversationId: string,
+    content: string,
+    signal?: AbortSignal,
+    agentId?: string,
+    mentionedAgents?: string[],
+  ) =>
     request<Message>(`/conversations/${conversationId}/messages`, {
       method: "POST",
-      body: JSON.stringify({ content, agentId }),
+      body: JSON.stringify({ content, agentId, mentionedAgents }),
       signal,
     }),
   searchMessages: (query: string, filters: SearchFilters = {}) => {

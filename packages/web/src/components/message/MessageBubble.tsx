@@ -20,6 +20,20 @@ interface Props {
   message: Message;
   agentName?: string;
   agentAvatar?: string;
+  isGroup?: boolean;
+}
+
+function highlightMentions(children: ReactNode): ReactNode {
+  return Children.map(children, (child) => {
+    if (typeof child !== "string") return child;
+    return child.split(/(@[\p{L}\p{N}_-]+)/gu).map((part, index) =>
+      part.startsWith("@") ? (
+        <span key={`${part}-${index}`} className="rounded bg-[var(--accent-color)]/20 px-0.5">
+          {part}
+        </span>
+      ) : part,
+    );
+  });
 }
 
 function getTextContent(node: ReactNode): string {
@@ -75,7 +89,7 @@ function CodeBlock({ children }: ComponentPropsWithoutRef<"pre">) {
   );
 }
 
-export function MessageBubble({ message, agentName, agentAvatar }: Props) {
+export function MessageBubble({ message, agentName, agentAvatar, isGroup = false }: Props) {
   const { t } = useTranslation(["common", "chat"]);
   const [isExpanded, setIsExpanded] = useState(false);
   const isUser = message.fromType === "user";
@@ -136,6 +150,8 @@ export function MessageBubble({ message, agentName, agentAvatar }: Props) {
             remarkPlugins={[remarkGfm]}
             components={{
               pre: CodeBlock,
+              p: ({ children }) => <p>{isGroup ? highlightMentions(children) : children}</p>,
+              li: ({ children }) => <li>{isGroup ? highlightMentions(children) : children}</li>,
               a: ({ href, children }) => (
                 <a
                   href={href}

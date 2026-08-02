@@ -28,6 +28,15 @@
     "unsupported": "Unsupported",
     "ready": "Ready"
   },
+  "group": {
+    "createGroup": "Create group chat",
+    "memberCount": "{{count}} members",
+    "addMembers": "Add members",
+    "removeMember": "Remove {{name}}",
+    "leaveGroup": "Leave group",
+    "createGroupTitle": "Create group chat",
+    "selectAgents": "Select at least two online agents"
+  },
   "aria": {
     "openSidebar": "Open sidebar",
     "closeSidebar": "Close sidebar",

@@ -32,6 +32,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { STATUS_COLORS } from "@/constants/agent";
 import { formatConversationTime } from "@/lib/date";
 import { useHotkey } from "@/hooks/useHotkey";
@@ -52,12 +58,16 @@ export function Sidebar() {
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showBatchConfirmation, setShowBatchConfirmation] = useState(false);
+  const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
+  const [isCreatingGroup, setIsCreatingGroup] = useState(false);
+  const [selectedGroupAgentIds, setSelectedGroupAgentIds] = useState<Set<string>>(new Set());
   const conversations = useChatStore((s) => s.conversations);
   const groupConversations = useChatStore((s) => s.groupConversations);
   const archivedConversations = useChatStore((s) => s.archivedConversations);
   const currentConversationId = useChatStore((s) => s.currentConversationId);
   const setCurrentConversation = useChatStore((s) => s.setCurrentConversation);
   const createConversation = useChatStore((s) => s.createConversation);
+  const createGroupConversation = useChatStore((s) => s.createGroupConversation);
   const renameConversation = useChatStore((s) => s.renameConversation);
   const togglePin = useChatStore((s) => s.togglePin);
   const toggleArchive = useChatStore((s) => s.toggleArchive);
@@ -96,6 +106,20 @@ export function Sidebar() {
 
   const handleCreateConversation = async () => {
     await createConversation();
+    closeSidebar();
+  };
+
+  const handleCreateGroup = async () => {
+    const selectedAgents = agents.filter((agent) => selectedGroupAgentIds.has(agent.id));
+    if (selectedAgents.length < 2) return;
+    setIsCreatingGroup(true);
+    await createGroupConversation(
+      selectedAgents.map((agent) => agent.name).join(", ").slice(0, 120),
+      selectedAgents.map((agent) => agent.id),
+    );
+    setIsCreatingGroup(false);
+    setSelectedGroupAgentIds(new Set());
+    setIsCreateGroupOpen(false);
     closeSidebar();
   };
 
@@ -388,17 +412,29 @@ export function Sidebar() {
           </div>
 
           <div className="mb-4 border-t border-[var(--border-color)] pt-2">
-            <button
-              type="button"
-              onClick={() => setIsGroupsOpen((open) => !open)}
-              aria-expanded={isGroupsOpen}
-              className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-xs font-medium uppercase tracking-wider text-[var(--text-tertiary)] hover:bg-[var(--bg-hover)]"
-            >
-              <Users aria-hidden="true" className="h-3.5 w-3.5" />
-              <span className="flex-1 text-left">{t("sidebar:groupConversations")}</span>
-              <span>{visibleGroupConversations.length}</span>
-              <ChevronDown aria-hidden="true" className={`h-3.5 w-3.5 transition-transform ${isGroupsOpen ? "rotate-180" : ""}`} />
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setIsGroupsOpen((open) => !open)}
+                aria-expanded={isGroupsOpen}
+                className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-2 text-xs font-medium uppercase tracking-wider text-[var(--text-tertiary)] hover:bg-[var(--bg-hover)]"
+              >
+                <Users aria-hidden="true" className="h-3.5 w-3.5" />
+                <span className="flex-1 text-left">{t("sidebar:groupConversations")}</span>
+                <span>{visibleGroupConversations.length}</span>
+                <ChevronDown aria-hidden="true" className={`h-3.5 w-3.5 transition-transform ${isGroupsOpen ? "rotate-180" : ""}`} />
+              </button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 shrink-0"
+                onClick={() => setIsCreateGroupOpen(true)}
+                aria-label={t("common:group.createGroup")}
+                title={t("common:group.createGroup")}
+              >
+                <Plus aria-hidden="true" className="h-3.5 w-3.5" />
+              </Button>
+            </div>
             {isGroupsOpen && (
               <div className="mt-1 space-y-1">{visibleGroupConversations.map(renderConversation)}</div>
             )}
@@ -467,6 +503,54 @@ export function Sidebar() {
         onConfirm={() => void handleBatchDelete()}
         onCancel={() => setShowBatchConfirmation(false)}
       />
+      <Dialog open={isCreateGroupOpen} onOpenChange={(open) => {
+        setIsCreateGroupOpen(open);
+        if (!open && !isCreatingGroup) setSelectedGroupAgentIds(new Set());
+      }}>
+        <DialogContent>
+          <DialogTitle>{t("common:group.createGroupTitle")}</DialogTitle>
+          <DialogDescription className="mt-1">
+            {t("common:group.selectAgents")}
+          </DialogDescription>
+          <div className="mt-4 max-h-72 space-y-1 overflow-y-auto">
+            {agents.filter((agent) => agent.status === "online").map((agent) => {
+              const selected = selectedGroupAgentIds.has(agent.id);
+              return (
+                <label
+                  key={agent.id}
+                  className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2 hover:bg-[var(--bg-hover)]"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selected}
+                    onChange={() => setSelectedGroupAgentIds((current) => {
+                      const next = new Set(current);
+                      if (next.has(agent.id)) next.delete(agent.id);
+                      else next.add(agent.id);
+                      return next;
+                    })}
+                    className="h-4 w-4 accent-[var(--accent-color)]"
+                  />
+                  <AgentAvatar name={agent.name} src={agent.avatar} size="sm" />
+                  <span className="min-w-0 flex-1 truncate text-sm">{agent.name}</span>
+                  <span className={`h-2 w-2 rounded-full ${STATUS_COLORS[agent.status]}`} />
+                </label>
+              );
+            })}
+          </div>
+          <div className="mt-5 flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setIsCreateGroupOpen(false)} disabled={isCreatingGroup}>
+              {t("common:buttons.cancel")}
+            </Button>
+            <Button
+              onClick={() => void handleCreateGroup()}
+              disabled={selectedGroupAgentIds.size < 2 || isCreatingGroup}
+            >
+              {t("common:group.createGroup")}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
       <AgentSettingsPanel />
       <CatalogModal open={isCatalogOpen} onOpenChange={setIsCatalogOpen} />
     </>

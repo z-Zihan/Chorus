@@ -28,6 +28,15 @@
     "unsupported": "版本不兼容",
     "ready": "可用"
   },
+  "group": {
+    "createGroup": "创建群聊",
+    "memberCount": "{{count}} 位成员",
+    "addMembers": "添加成员",
+    "removeMember": "移除 {{name}}",
+    "leaveGroup": "退出群聊",
+    "createGroupTitle": "创建群聊",
+    "selectAgents": "请选择至少两个在线 Agent"
+  },
   "aria": {
     "openSidebar": "打开侧栏",
     "closeSidebar": "关闭侧栏",

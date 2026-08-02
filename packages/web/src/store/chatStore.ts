@@ -57,6 +57,8 @@ interface ChatState {
   cancelA2AThread: (threadId: string) => void;
   setWebSocketSend: (send: WebSocketSend | null) => void;
   createConversation: (title?: string) => Promise<void>;
+  createGroupConversation: (title: string, agentIds: string[]) => Promise<void>;
+  syncConversation: (conversation: Conversation) => void;
   renameConversation: (id: string, title: string) => Promise<boolean>;
   togglePin: (id: string) => Promise<void>;
   toggleArchive: (id: string) => Promise<void>;
@@ -161,15 +163,20 @@ export const useChatStore = create<ChatState>((set, get) => {
 
     const conversation = [...get().conversations, ...get().groupConversations, ...get().archivedConversations]
       .find((item) => item.id === convId);
-    const activeAgentId = agentId ?? conversation?.agentIds[0];
+    const isGroup = conversation?.type === "group";
+    const activeAgentId = isGroup ? agentId ?? undefined : agentId ?? conversation?.agentIds[0];
     if (agentId && !conversation?.agentIds.includes(agentId)) {
       useUIStore.getState().addToast(i18n.t("errors:agentUnavailable"), "error");
       return;
     }
-    const activeAgent = useAgentStore
-      .getState()
-      .agents.find((agent) => agent.id === activeAgentId);
-    if (!activeAgent || activeAgent.status !== "online") {
+    const availableAgents = useAgentStore.getState().agents;
+    const activeAgent = availableAgents.find((agent) => agent.id === activeAgentId);
+    const hasOnlineGroupMember = Boolean(
+      isGroup && conversation?.agentIds.some((id) =>
+        availableAgents.some((agent) => agent.id === id && agent.status === "online"),
+      ),
+    );
+    if (activeAgentId ? activeAgent?.status !== "online" : !hasOnlineGroupMember) {
       useUIStore.getState().addToast(i18n.t("errors:agentUnavailable"), "error");
       return;
     }
@@ -193,11 +200,13 @@ export const useChatStore = create<ChatState>((set, get) => {
     track("message_sent", { conversationId: convId, transport: get().webSocketSend ? "websocket" : "http" });
     streamManager.armStreamTimer(userMsg.id);
 
+    const mentionedAgents = isGroup && activeAgentId ? [activeAgentId] : undefined;
     const sent = get().webSocketSend?.({
       type: "message",
       conversationId: convId,
       content: trimmedContent,
-      agentId: activeAgentId,
+      agentId: isGroup ? undefined : activeAgentId,
+      mentionedAgents,
     });
     if (sent) return;
 
@@ -205,7 +214,13 @@ export const useChatStore = create<ChatState>((set, get) => {
     const controller = new AbortController();
     streamManager.setFallbackController(controller);
     try {
-      await api.sendMessage(convId, trimmedContent, controller.signal, activeAgentId);
+      await api.sendMessage(
+        convId,
+        trimmedContent,
+        controller.signal,
+        isGroup ? undefined : activeAgentId,
+        mentionedAgents,
+      );
       streamManager.clearStreamTimer();
       await get().fetchMessages(convId);
       set({ isStreaming: false, streamingMessageId: null });
@@ -283,6 +298,27 @@ export const useChatStore = create<ChatState>((set, get) => {
         logger.error("Failed to create conversation", e);
       }
     },
+
+    createGroupConversation: async (title, agentIds) => {
+      try {
+        const conv = await api.createConversation(title, agentIds, "group");
+        set((state) => ({
+          groupConversations: sortConversations([conv, ...state.groupConversations]),
+          currentConversationId: conv.id,
+          messages: [],
+          isLoadingMessages: false,
+        }));
+        track("conversation_created", { conversationId: conv.id, type: "group" });
+      } catch (error) {
+        logger.error("Failed to create group conversation", error);
+      }
+    },
+
+    syncConversation: (conversation) => set((state) => ({
+      conversations: state.conversations.map((item) => item.id === conversation.id ? conversation : item),
+      groupConversations: state.groupConversations.map((item) => item.id === conversation.id ? conversation : item),
+      archivedConversations: state.archivedConversations.map((item) => item.id === conversation.id ? conversation : item),
+    })),
 
     renameConversation: async (id, title) => {
       const trimmed = title.trim();

@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import type {
+  Agent,
   AgentConfig,
+  AgentStatus,
   Conversation,
   ConversationType,
   Message,
@@ -20,7 +22,13 @@ import {
 } from "./schema";
 
 export class Repository {
+  private agentStatusResolver: (agentId: string) => AgentStatus = () => "offline";
+
   constructor(readonly context: DatabaseContext) {}
+
+  setAgentStatusResolver(resolver: (agentId: string) => AgentStatus): void {
+    this.agentStatusResolver = resolver;
+  }
 
   upsertAgent(agent: AgentConfig | PersistedAgentConfig): void {
     const now = Date.now();
@@ -197,20 +205,62 @@ export class Repository {
   }
 
   addAgentToConversation(conversationId: string, agentId: string): Conversation | undefined {
-    if (!this.getConversation(conversationId) || !this.getAgentRow(agentId)) return undefined;
-    this.context.db.insert(conversationAgents).values({ conversationId, agentId })
-      .onConflictDoNothing().run();
-    this.touchConversation(conversationId);
-    return this.getConversation(conversationId);
+    return this.addAgentsToConversation(conversationId, [agentId]);
   }
 
   removeAgentFromConversation(conversationId: string, agentId: string): Conversation | undefined {
-    if (!this.getConversation(conversationId)) return undefined;
-    this.context.db.delete(conversationAgents).where(and(
-      eq(conversationAgents.conversationId, conversationId),
-      eq(conversationAgents.agentId, agentId),
-    )).run();
-    this.touchConversation(conversationId);
+    return this.removeAgentsFromConversation(conversationId, [agentId]);
+  }
+
+  getConversationMembers(conversationId: string): Agent[] {
+    const rows = this.context.db.select({ agent: agents }).from(conversationAgents)
+      .innerJoin(agents, eq(conversationAgents.agentId, agents.id))
+      .where(eq(conversationAgents.conversationId, conversationId)).all();
+    return rows.map(({ agent }) => ({
+      id: agent.id,
+      name: agent.name,
+      description: agent.description ?? "",
+      avatar: agent.avatar ?? undefined,
+      type: agent.type as Agent["type"],
+      status: this.agentStatusResolver(agent.id),
+      model: String(safeJson<Record<string, unknown>>(agent.config, {}).model ?? ""),
+      disabled: agent.disabled,
+      catalogEntryId: agent.catalogEntryId ?? undefined,
+      createdAt: agent.createdAt,
+      updatedAt: agent.updatedAt,
+    }));
+  }
+
+  addAgentsToConversation(conversationId: string, agentIds: string[]): Conversation | undefined {
+    const conversation = this.getConversation(conversationId);
+    const uniqueAgentIds = [...new Set(agentIds)];
+    if (!conversation || uniqueAgentIds.some((agentId) => !this.getAgentRow(agentId))) return undefined;
+    if (uniqueAgentIds.length === 0) return conversation;
+    const transaction = this.context.sqlite.transaction(() => {
+      this.context.db.insert(conversationAgents).values(
+        uniqueAgentIds.map((agentId) => ({ conversationId, agentId })),
+      ).onConflictDoNothing().run();
+      this.touchConversation(conversationId);
+    });
+    transaction();
+    return this.getConversation(conversationId);
+  }
+
+  removeAgentsFromConversation(conversationId: string, agentIds: string[]): Conversation | undefined {
+    const conversation = this.getConversation(conversationId);
+    const uniqueAgentIds = [...new Set(agentIds)];
+    if (!conversation) return undefined;
+    if (uniqueAgentIds.length === 0) return conversation;
+    const transaction = this.context.sqlite.transaction(() => {
+      for (const agentId of uniqueAgentIds) {
+        this.context.db.delete(conversationAgents).where(and(
+          eq(conversationAgents.conversationId, conversationId),
+          eq(conversationAgents.agentId, agentId),
+        )).run();
+      }
+      this.touchConversation(conversationId);
+    });
+    transaction();
     return this.getConversation(conversationId);
   }
 

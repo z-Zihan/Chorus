@@ -49,24 +49,49 @@ export class AgentRuntime {
     if (explicitAgentId && !conversation.agentIds.includes(explicitAgentId)) {
       throw new Error("Agent is not assigned to this conversation");
     }
-    const agentId = explicitAgentId
-      ?? mentions.find((id) => conversation.agentIds.includes(id))
-      ?? conversation.agentIds[0];
-    if (!agentId) throw new Error("No Agent is assigned to this conversation");
+    const routingMentions = [...new Set([
+      ...mentions,
+      ...(explicitAgentId ? [explicitAgentId] : []),
+    ])];
+    const targetAgentIds = conversation.type === "group"
+      ? routingMentions.length > 0
+        ? routingMentions
+        : conversation.agentIds.filter((agentId) => this.registry.getStatus(agentId) === "online")
+      : [explicitAgentId ?? routingMentions[0] ?? conversation.agentIds[0]].filter(
+          (agentId): agentId is string => Boolean(agentId),
+        );
+    if (conversation.type !== "group" && targetAgentIds.length === 0) {
+      throw new Error("No Agent is assigned to this conversation");
+    }
 
     const userMessage = createMessage({
       conversationId,
       fromType: "user",
       fromId: "user",
       toType: "agent",
-      toId: agentId,
+      toId: targetAgentIds.length === 1 ? targetAgentIds[0] : undefined,
       content,
       status: "done",
     });
     this.repository.saveMessage(userMessage);
     this.events.publish(conversationId, { type: "message", message: userMessage });
-    track("message_sent", { conversationId, from: "user", to: agentId });
+    track("message_sent", {
+      conversationId,
+      from: "user",
+      to: targetAgentIds.length === 1 ? targetAgentIds[0] ?? "all" : "all",
+    });
 
+    await Promise.all(targetAgentIds.map((agentId) =>
+      this.routeMessageToAgent(conversationId, agentId, content, mentions),
+    ));
+  }
+
+  private async routeMessageToAgent(
+    conversationId: string,
+    agentId: string,
+    content: string,
+    mentionedAgents: string[],
+  ): Promise<void> {
     const adapter = this.registry.getAdapter(agentId);
     if (!adapter || this.registry.getStatus(agentId) !== "online") {
       const errorMessage = createMessage({
@@ -94,7 +119,7 @@ export class AgentRuntime {
     });
     this.repository.saveMessage(reply);
     this.events.publish(conversationId, { type: "message", message: reply });
-    await this.streamReply(reply, content, mentions, adapter);
+    await this.streamReply(reply, content, mentionedAgents, adapter);
   }
 
   cancel(messageId: string): void {

@@ -65,6 +65,7 @@ export function InputBar() {
         <div className="flex flex-1 items-end rounded-xl border border-[var(--border-color)] bg-[var(--bg-elevated)] px-4 py-2.5 focus-within:border-[var(--accent-color)]">
           <AgentSelector
             agentIds={currentConversation?.agentIds ?? []}
+            isGroup={currentConversation?.type === "group"}
             value={selectedAgentId}
             onValueChange={setSelectedAgentId}
             disabled={isStreaming || !currentConversationId}
