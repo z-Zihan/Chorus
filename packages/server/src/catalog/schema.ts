@@ -2,7 +2,7 @@ export type CatalogKind = "detected-cli" | "managed-cli" | "api-connector";
 export type CatalogPlatform = "darwin" | "linux" | "win32";
 
 export interface InstallRecipe {
-  method: "brew" | "npm" | "winget" | "download";
+  method: "brew" | "npm" | "winget" | "download" | "pip";
   executable: string;
   args: string[];
   requiresElevation: boolean;

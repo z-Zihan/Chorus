@@ -221,6 +221,9 @@ export class InstallExecutor extends EventEmitter {
     }
     if (recipe.method === "brew" && process.platform === "win32") throw new Error("METHOD_NOT_SUPPORTED");
     if (recipe.method === "winget" && process.platform !== "win32") throw new Error("METHOD_NOT_SUPPORTED");
+    if (recipe.method === "pip" && recipe.executable !== "pip" && recipe.executable !== "pip3") {
+      throw new Error("METHOD_NOT_SUPPORTED");
+    }
     await runCommand(recipe.executable, ["--version"], signal, 10_000);
   }
 

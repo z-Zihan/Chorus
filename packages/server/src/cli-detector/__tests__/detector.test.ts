@@ -8,11 +8,15 @@ import {
 } from "../index.js";
 
 describe("CLI descriptor contract", () => {
-  it("defines exactly the three supported CLIs", () => {
+  it("defines exactly the seven supported CLIs", () => {
     expect(CLI_DESCRIPTORS.map((descriptor) => descriptor.id)).toEqual([
       "claude-code",
       "codex",
       "copilot-cli",
+      "gemini-cli",
+      "aider",
+      "qwen-code",
+      "cursor-cli",
     ]);
   });
 

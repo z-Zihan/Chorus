@@ -1,7 +1,14 @@
 export type CliProbeOutput = "text";
 
 export interface CliDescriptor {
-  id: "claude-code" | "codex" | "copilot-cli";
+  id:
+    | "claude-code"
+    | "codex"
+    | "copilot-cli"
+    | "gemini-cli"
+    | "aider"
+    | "qwen-code"
+    | "cursor-cli";
   displayName: string;
   executable: string;
   executableNames: Partial<Record<NodeJS.Platform, string[]>>;
@@ -60,6 +67,58 @@ export const CLI_DESCRIPTORS: CliDescriptor[] = [
     },
     versionProbe: { args: ["--version"], timeoutMs: 2_000, output: "text" },
     adapterTemplate: { input: "argument", output: "plain", args: ["-p"] },
+  },
+  {
+    id: "gemini-cli",
+    displayName: "Gemini CLI",
+    executable: "gemini",
+    executableNames: { darwin: ["gemini"], linux: ["gemini"], win32: ["gemini"] },
+    knownInstallDirs: {
+      darwin: commonUnixDirs,
+      linux: ["/usr/local/bin", "/usr/bin"],
+    },
+    versionProbe: { args: ["--version"], timeoutMs: 2_000, output: "text" },
+    adapterTemplate: { input: "argument", output: "jsonl", args: ["--json"] },
+  },
+  {
+    id: "aider",
+    displayName: "Aider",
+    executable: "aider",
+    executableNames: { darwin: ["aider"], linux: ["aider"], win32: ["aider"] },
+    knownInstallDirs: {
+      darwin: commonUnixDirs,
+      linux: ["/usr/local/bin", "/usr/bin"],
+    },
+    versionProbe: { args: ["--version"], timeoutMs: 2_000, output: "text" },
+    adapterTemplate: {
+      input: "stdin",
+      output: "plain",
+      args: ["--no-auto-commits", "--stream"],
+    },
+  },
+  {
+    id: "qwen-code",
+    displayName: "Qwen Code",
+    executable: "qwen",
+    executableNames: { darwin: ["qwen"], linux: ["qwen"], win32: ["qwen"] },
+    knownInstallDirs: {
+      darwin: commonUnixDirs,
+      linux: ["/usr/local/bin", "/usr/bin"],
+    },
+    versionProbe: { args: ["--version"], timeoutMs: 2_000, output: "text" },
+    adapterTemplate: { input: "argument", output: "plain", args: ["--no-stream"] },
+  },
+  {
+    id: "cursor-cli",
+    displayName: "Cursor CLI",
+    executable: "cursor",
+    executableNames: { darwin: ["cursor"], linux: ["cursor"], win32: ["cursor"] },
+    knownInstallDirs: {
+      darwin: commonUnixDirs,
+      linux: ["/usr/local/bin", "/usr/bin"],
+    },
+    versionProbe: { args: ["--version"], timeoutMs: 2_000, output: "text" },
+    adapterTemplate: { input: "argument", output: "jsonl", args: ["--json"] },
   },
 ];
 

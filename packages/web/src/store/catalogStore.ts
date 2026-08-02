@@ -6,7 +6,7 @@ import i18n from "@/i18n";
 import { logger } from "@/utils/logger";
 
 export type CatalogKind = "detected-cli" | "managed-cli" | "api-connector";
-export type InstallMethod = "brew" | "npm" | "winget" | "download";
+export type InstallMethod = "brew" | "npm" | "winget" | "download" | "pip";
 
 export interface InstallRecipe {
   method: InstallMethod;
