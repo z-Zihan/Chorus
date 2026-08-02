@@ -9,7 +9,10 @@ import type {
 import type { Repository } from "../db/repository.js";
 import { BaseAdapter, messageFromError } from "./adapter.js";
 import { CliAdapter } from "./adapters/cli.js";
+import { CustomAdapter } from "./adapters/custom.js";
+import { DifyAdapter } from "./adapters/dify.js";
 import { MockAdapter } from "./adapters/mock.js";
+import { OpenClawAdapter } from "./adapters/openclaw.js";
 import { OpenAIAdapter } from "./adapters/openai.js";
 import { AgentPersistence } from "./persistence.js";
 
@@ -23,6 +26,7 @@ interface RegistryEntry {
 
 export class AgentRegistry {
   private readonly entries = new Map<string, RegistryEntry>();
+  readonly friends = new Map<string, Set<string>>();
   private readonly statusListeners = new Set<(status: AgentStatusSnapshot) => void>();
   private readonly persistence: AgentPersistence;
 
@@ -31,6 +35,7 @@ export class AgentRegistry {
   }
 
   async initialize(configs: AgentConfig[]): Promise<void> {
+    this.loadFriends();
     const persistedAgents = this.persistence.loadPersistedAgents();
     for (const config of configs) {
       const persisted = persistedAgents.find((agent) => agent.id === config.id);
@@ -48,6 +53,27 @@ export class AgentRegistry {
       if (persisted.disabled || this.entries.has(persisted.id)) continue;
       await this.registerInMemory(persisted);
     }
+  }
+
+  addFriend(agentId: string, friendId: string): boolean {
+    if (agentId === friendId || !this.get(agentId, true) || !this.get(friendId, true)) return false;
+    this.addFriendInMemory(agentId, friendId);
+    this.addFriendInMemory(friendId, agentId);
+    this.repository.addAgentFriend(agentId, friendId);
+    return true;
+  }
+
+  removeFriend(agentId: string, friendId: string): boolean {
+    const removed = Boolean(this.friends.get(agentId)?.delete(friendId))
+      || Boolean(this.friends.get(friendId)?.delete(agentId));
+    this.friends.get(agentId)?.delete(friendId);
+    this.friends.get(friendId)?.delete(agentId);
+    this.repository.removeAgentFriend(agentId, friendId);
+    return removed;
+  }
+
+  getFriends(agentId: string): string[] {
+    return [...(this.friends.get(agentId) ?? [])];
   }
 
   async register(config: AgentConfig): Promise<Agent> {
@@ -189,7 +215,12 @@ export class AgentRegistry {
     entry?.adapter.destroy?.();
     this.entries.delete(id);
     if (entry) this.broadcastStatus(id, "offline");
-    return this.persistence.deletePersistedAgent(id);
+    const deleted = this.persistence.deletePersistedAgent(id);
+    if (deleted) {
+      this.friends.delete(id);
+      for (const friendIds of this.friends.values()) friendIds.delete(id);
+    }
+    return deleted;
   }
 
   findByDetectionFingerprint(fingerprint: string): Agent | undefined {
@@ -233,6 +264,20 @@ export class AgentRegistry {
       updatedAt: row?.updatedAt ?? Date.now(),
     };
   }
+
+  private loadFriends(): void {
+    this.friends.clear();
+    for (const row of this.repository.listAgentFriends()) {
+      this.addFriendInMemory(row.agentId, row.friendId);
+      this.addFriendInMemory(row.friendId, row.agentId);
+    }
+  }
+
+  private addFriendInMemory(agentId: string, friendId: string): void {
+    const friendIds = this.friends.get(agentId) ?? new Set<string>();
+    friendIds.add(friendId);
+    this.friends.set(agentId, friendIds);
+  }
 }
 
 function createAdapter(config: AgentConfig): AgentAdapter {
@@ -241,6 +286,15 @@ function createAdapter(config: AgentConfig): AgentAdapter {
   }
   if (config.type === "cli") {
     return new CliAdapter(config.id, config.name, config.description);
+  }
+  if (config.type === "custom") {
+    return new CustomAdapter(config.id, config.name, config.description);
+  }
+  if (config.type === "openclaw") {
+    return new OpenClawAdapter(config.id, config.name, config.description);
+  }
+  if (config.type === "dify") {
+    return new DifyAdapter(config.id, config.name, config.description);
   }
   return new MockAdapter(config.id, config.name, config.description);
 }

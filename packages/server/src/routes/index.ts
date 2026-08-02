@@ -15,12 +15,15 @@ import { registerCatalogRoutes } from "./catalog.js";
 import { registerCleanupRoutes } from "./cleanup.js";
 import { registerExportRoutes } from "./export.js";
 import { registerSearchRoutes } from "./search.js";
+import type { Scheduler } from "../scheduler/index.js";
+import { registerSchedulerRoutes } from "./scheduler.js";
 
 export function registerRoutes(
   app: FastifyInstance,
   repository: Repository,
   registry: AgentRegistry,
   runtime: AgentRuntime,
+  scheduler: Scheduler,
   detector = new CliDetector(),
   onboarding = new OnboardingService(repository, registry, detector),
   catalog = new CatalogService(registry),
@@ -34,6 +37,7 @@ export function registerRoutes(
   registerExportRoutes(app, repository);
   registerSearchRoutes(app, repository.context, repository);
   registerDetectionRoutes(app, detector, registry);
+  registerSchedulerRoutes(app, scheduler);
   registerOnboardingRoutes(app, onboarding);
   registerCatalogRoutes(app, catalog, installer);
 }

@@ -55,6 +55,8 @@ export interface ConversationContext {
   a2aBus?: A2ABusLike;
   callStack?: string[];
   a2aThreadId?: string;
+  a2aCallerName?: string;
+  a2aContextSummary?: string;
   parentMessageId?: string;
   difyConversationId?: string;
   signal?: AbortSignal;

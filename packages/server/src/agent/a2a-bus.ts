@@ -72,10 +72,14 @@ export class A2ABus implements A2ABusLike {
     track("a2a_call_start", { fromAgentId, toAgentId, threadId });
     let stream: AsyncGenerator<StreamChunk> | null = null;
     try {
+      const callerName = this.registry.get(fromAgentId)?.name ?? fromAgentId;
+      const contextSummary = summarizeContext(context.history);
       stream = adapter.handleA2ACall(fromAgentId, message, {
         ...context,
         callStack: nextStack,
         a2aThreadId: undefined,
+        a2aCallerName: callerName,
+        a2aContextSummary: contextSummary,
         signal,
       });
       while (true) {
@@ -113,6 +117,16 @@ export class A2ABus implements A2ABusLike {
     call.controller.abort(new DOMException("A2A call cancelled", "AbortError"));
     return true;
   }
+}
+
+function summarizeContext(history: ConversationContext["history"]): string {
+  const messages = history.slice(-5).map((message) => {
+    const speaker = message.fromType === "user" ? "User" : message.fromId;
+    const content = message.content.replace(/\s+/gu, " ").trim();
+    return `${speaker}: ${content.length > 240 ? `${content.slice(0, 237)}...` : content}`;
+  });
+  const summary = messages.join("\n");
+  return summary.length > 1_200 ? `${summary.slice(0, 1_197)}...` : summary;
 }
 
 function stackKey(stack: string[]): string {

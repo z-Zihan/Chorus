@@ -12,6 +12,14 @@ export interface CliAdapterConfig {
   output?: CliOutputMode;
   env?: Record<string, string>;
   cwd?: string;
+  timeout?: number;
+}
+
+interface ProcessResult {
+  code: number | null;
+  signal: NodeJS.Signals | null;
+  stderr: string;
+  error?: Error;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -136,6 +144,9 @@ export class CliAdapter extends BaseAdapter {
       output: (cfg.output as CliOutputMode) ?? "jsonl",
       env: (cfg.env as Record<string, string>) ?? undefined,
       cwd: typeof cfg.cwd === "string" ? cfg.cwd : undefined,
+      timeout: Number.isFinite(Number(cfg.timeout))
+        ? Math.max(1, Number(cfg.timeout))
+        : 300_000,
     } satisfies CliAdapterConfig;
     this.status = "online";
   }
@@ -153,14 +164,17 @@ export class CliAdapter extends BaseAdapter {
       shell: process.platform === "win32",
     });
     this.child = child;
+    let timedOut = false;
 
     const abortHandler = () => {
-      child.kill("SIGTERM");
-      setTimeout(() => {
-        if (!child.killed) child.kill("SIGKILL");
-      }, 3000);
+      terminate(child);
     };
     context.signal?.addEventListener("abort", abortHandler, { once: true });
+    const timeoutMs = cfg.timeout ?? 300_000;
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      terminate(child);
+    }, timeoutMs);
 
     if (!isArgumentMode) {
       child.stdin.end(message);
@@ -168,20 +182,41 @@ export class CliAdapter extends BaseAdapter {
       child.stdin.end();
     }
 
-    yield* this.streamOutput(child, cfg.output ?? "jsonl");
-
-    this.child = null;
+    try {
+      const result = yield* this.streamOutput(child, cfg.output ?? "jsonl");
+      if (context.signal?.aborted) {
+        throw context.signal.reason ?? new DOMException("CLI request cancelled", "AbortError");
+      }
+      if (timedOut) {
+        const detail = result.stderr.trim();
+        throw new Error(`CLI process timed out after ${timeoutMs}ms${detail ? `: ${detail}` : ""}`);
+      }
+      if (result.error) throw result.error;
+      if (result.code !== 0) {
+        const detail = result.stderr.trim();
+        throw new Error(
+          `CLI process exited with code ${result.code ?? "unknown"}${detail ? `: ${detail}` : ""}`,
+        );
+      }
+      yield { type: "done", content: "" };
+    } finally {
+      clearTimeout(timeout);
+      context.signal?.removeEventListener("abort", abortHandler);
+      this.child = null;
+    }
   }
 
   private async *streamOutput(
     child: ChildProcess,
     outputMode: CliOutputMode,
-  ): AsyncGenerator<StreamChunk> {
+  ): AsyncGenerator<StreamChunk, ProcessResult> {
     let stdoutBuffer = "";
-    let done = false;
-
-    child.on("exit", () => { done = true; });
-    child.on("error", () => { done = true; });
+    let stderr = "";
+    let processError: Error | undefined;
+    const closed = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) => {
+      child.once("error", (error) => { processError = error; });
+      child.once("close", (code, signal) => resolve({ code, signal }));
+    });
 
     const flushJsonLine = (line: string): StreamChunk | null => {
       if (!line.trim()) return null;
@@ -223,32 +258,32 @@ export class CliAdapter extends BaseAdapter {
       stdoutBuffer = lines.pop() ?? "";
 
       for (const line of lines) {
-        const chunk = outputMode === "codex-json" ? flushCodexJson(line) : flushJsonLine(line);
+        const chunk = outputMode === "codex-json"
+          ? flushCodexJson(line)
+          : outputMode === "plain"
+            ? { type: "text" as const, content: line + "\n" }
+            : flushJsonLine(line);
         if (chunk) chunks.push(chunk);
       }
 
       return chunks;
     };
 
-    child.stdout!.on("data", (chunk: Buffer) => {
-      stdoutBuffer += chunk.toString();
+    child.stderr!.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString();
+      if (stderr.length > 32_000) stderr = stderr.slice(-32_000);
     });
 
-    child.stderr!.on("data", (_chunk: Buffer) => {
-      // stderr is informational; not forwarded to chat output
-    });
-
-    // Poll stdout buffer and flush lines every 50ms
-    while (!done) {
-      await new Promise<void>((resolve) => setTimeout(resolve, 50));
+    for await (const raw of child.stdout!) {
+      stdoutBuffer += Buffer.isBuffer(raw) ? raw.toString() : String(raw);
       const chunks = flushBuffer();
       for (const chunk of chunks) yield chunk;
     }
 
-    // Final flush
+    if (outputMode !== "json" && stdoutBuffer) stdoutBuffer += "\n";
     for (const chunk of flushBuffer()) yield chunk;
-
-    yield { type: "done", content: "" };
+    const result = await closed;
+    return { ...result, stderr, error: processError };
   }
 
   destroy(): void {
@@ -259,4 +294,12 @@ export class CliAdapter extends BaseAdapter {
       }, 3000);
     }
   }
+}
+
+function terminate(child: ChildProcess): void {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  child.kill("SIGTERM");
+  setTimeout(() => {
+    if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+  }, 3000).unref();
 }

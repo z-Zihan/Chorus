@@ -6,6 +6,7 @@ import { createDatabase } from "../../db";
 import { Repository } from "../../db/repository";
 import { EventHub } from "../../ws/events";
 import { registerRoutes } from "../index";
+import { Scheduler } from "../../scheduler";
 
 const testConfig: AppConfig = {
   port: 0,
@@ -31,8 +32,11 @@ export async function buildTestApp(): Promise<FastifyInstance> {
 
   const app = Fastify({ logger: false });
   const runtime = new AgentRuntime(repository, registry, new EventHub(), testConfig);
-  registerRoutes(app, repository, registry, runtime);
+  const scheduler = new Scheduler(repository, runtime);
+  scheduler.initialize();
+  registerRoutes(app, repository, registry, runtime, scheduler);
   app.addHook("onClose", async () => {
+    scheduler.destroy();
     for (const agent of registry.list()) registry.getAdapter(agent.id)?.destroy?.();
     database.sqlite.close();
   });

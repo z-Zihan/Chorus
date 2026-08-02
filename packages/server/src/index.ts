@@ -17,6 +17,7 @@ import { flushAnalytics, track } from "./analytics.js";
 import { logger } from "./utils/logger.js";
 import { CliDetector } from "./cli-detector/index.js";
 import { OnboardingService } from "./routes/onboarding.js";
+import { Scheduler } from "./scheduler/index.js";
 
 process.on("uncaughtException", (error) => {
   logger.fatal({ err: error }, "Uncaught exception");
@@ -41,6 +42,8 @@ async function main(): Promise<void> {
 
   const events = new EventHub();
   const runtime = new AgentRuntime(repository, registry, events, config);
+  const scheduler = new Scheduler(repository, runtime);
+  scheduler.initialize();
   const detector = new CliDetector();
   const onboarding = new OnboardingService(repository, registry, detector);
 
@@ -59,7 +62,7 @@ async function main(): Promise<void> {
   await app.register(cors, { origin: config.cors.origin });
   await app.register(websocket);
 
-  registerRoutes(app, repository, registry, runtime, detector, onboarding);
+  registerRoutes(app, repository, registry, runtime, scheduler, detector, onboarding);
   registerWebSocket(app, events, runtime, registry);
 
   const hasAgentsAtStartup = registry.list().length > 0;
@@ -78,6 +81,7 @@ async function main(): Promise<void> {
 
   const close = async () => {
     await app.close();
+    scheduler.destroy();
     for (const agent of registry.list()) registry.getAdapter(agent.id)?.destroy?.();
     sqlite.close();
   };

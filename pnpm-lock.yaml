@@ -123,6 +123,9 @@ importers:
       libsodium-wrappers:
         specifier: ^0.8.4
         version: 0.8.4
+      node-cron:
+        specifier: ^4.6.0
+        version: 4.6.0
       pino:
         specifier: ^10.3.1
         version: 10.3.1
@@ -142,6 +145,9 @@ importers:
       '@types/node':
         specifier: ^22.15.30
         version: 22.20.1
+      '@types/node-cron':
+        specifier: ^3.0.11
+        version: 3.0.11
       '@types/supertest':
         specifier: ^7.2.1
         version: 7.2.1
@@ -1918,6 +1924,9 @@ packages:
   '@types/ms@2.1.0':
     resolution: {integrity: sha512-GsCCIZDE/p3i96vtEqx+7dBUGXrc7zeSK3wwPHIaRThS+9OhWIXRqzs4d6k1SVU8g91DrNRWxWUGhp5KXQb2VA==}
 
+  '@types/node-cron@3.0.11':
+    resolution: {integrity: sha512-0ikrnug3/IyneSHqCBeslAhlK2aBfYek1fGo4bP4QnZPmiqSGRK+Oy7ZMisLWkesffJvQ1cqAcBnJC+8+nxIAg==}
+
   '@types/node@22.20.1':
     resolution: {integrity: sha512-EANqOCF9QFyra+4pfxUcX9STKJpCLjMbObVzljIJomAWSnuSIEAvyzEU53GaajbXJEgdh0iEcPL+DGvpUd4k1Q==}
 
@@ -3519,6 +3528,10 @@ packages:
   node-abi@3.94.0:
     resolution: {integrity: sha512-W5ZNO5KRPB5TkYmGVD9F6YqhsglXJzE6etpbmT+f6EQElhiX/UTG551cnsRGvLG3fyZEg9HwaDmNmj5nwJ4z9g==}
     engines: {node: '>=10'}
+
+  node-cron@4.6.0:
+    resolution: {integrity: sha512-Si/bzYiKRHOB8/a99T2+SDGN582ONDMSTlJr5oCkT6GtnqPjZ2s10eoQRYkW9ZHwjVxONL+W8Fb+qR0AHMQsdg==}
+    engines: {node: '>=20'}
 
   node-exports-info@1.6.2:
     resolution: {integrity: sha512-kXs9Go0cah0qHVV2v389IXQLdLCeE1xfFtjOAF+iobu0OIoG1pje8At2vMHyaPMiPMnG/LWP50twML21eMcAag==}
@@ -5843,6 +5856,8 @@ snapshots:
 
   '@types/ms@2.1.0': {}
 
+  '@types/node-cron@3.0.11': {}
+
   '@types/node@22.20.1':
     dependencies:
       undici-types: 6.21.0
@@ -7807,6 +7822,8 @@ snapshots:
   node-abi@3.94.0:
     dependencies:
       semver: 7.8.5
+
+  node-cron@4.6.0: {}
 
   node-exports-info@1.6.2:
     dependencies:

@@ -76,6 +76,28 @@ export class OpenAIAdapter extends BaseAdapter {
   }
 
   async *handleMessage(message: string, context: ConversationContext): AsyncGenerator<StreamChunk> {
+    yield* this.handleWithSystemPrompt(message, context);
+  }
+
+  async *handleA2ACall(
+    from: string,
+    message: string,
+    context: ConversationContext,
+  ): AsyncGenerator<StreamChunk> {
+    const callerName = context.a2aCallerName ?? from;
+    const summary = context.a2aContextSummary ?? "No previous context was provided.";
+    yield* this.handleWithSystemPrompt(
+      message,
+      context,
+      `You were called by ${callerName}. Previous context:\n${summary}`,
+    );
+  }
+
+  private async *handleWithSystemPrompt(
+    message: string,
+    context: ConversationContext,
+    a2aSystemPrompt?: string,
+  ): AsyncGenerator<StreamChunk> {
     const availableAgentIds = [...new Set(
       context.availableAgentIds ?? context.mentionedAgents ?? [],
     )];
@@ -87,7 +109,10 @@ export class OpenAIAdapter extends BaseAdapter {
     const messages: OpenAIMessage[] = [
       {
         role: "system",
-        content: String(this.config.systemPrompt ?? "You are a helpful assistant.") + directory,
+        content: [
+          String(this.config.systemPrompt ?? "You are a helpful assistant."),
+          a2aSystemPrompt,
+        ].filter(Boolean).join("\n\n") + directory,
       },
       ...context.history.map((item): OpenAIMessage => ({
         role: item.fromType === "user" ? "user" : "assistant",
@@ -123,14 +148,6 @@ export class OpenAIAdapter extends BaseAdapter {
     }
 
     throw new Error(`OpenAI exceeded the maximum of ${MAX_TOOL_ROUNDS} tool-calling rounds`);
-  }
-
-  async *handleA2ACall(
-    from: string,
-    message: string,
-    context: ConversationContext,
-  ): AsyncGenerator<StreamChunk> {
-    yield* this.handleMessage(`Request from agent ${from}:\n\n${message}`, context);
   }
 
   private async *streamCompletion(

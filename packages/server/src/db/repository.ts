@@ -9,7 +9,15 @@ import type {
 } from "@agentlink/shared";
 import { and, asc, desc, eq, lt } from "drizzle-orm";
 import type { DatabaseContext } from "./index";
-import { agents, appSettings, conversationAgents, conversations, messages } from "./schema";
+import {
+  agentFriends,
+  agents,
+  appSettings,
+  conversationAgents,
+  conversations,
+  messages,
+  scheduledTasks,
+} from "./schema";
 
 export class Repository {
   constructor(readonly context: DatabaseContext) {}
@@ -80,6 +88,9 @@ export class Repository {
           }),
         }).where(eq(messages.id, message.id)).run();
       }
+      this.context.db.delete(agentFriends).where(eq(agentFriends.agentId, id)).run();
+      this.context.db.delete(agentFriends).where(eq(agentFriends.friendId, id)).run();
+      this.context.db.delete(scheduledTasks).where(eq(scheduledTasks.agentId, id)).run();
       this.context.db.delete(conversationAgents).where(eq(conversationAgents.agentId, id)).run();
       return this.context.db.delete(agents).where(eq(agents.id, id)).run().changes > 0;
     });
@@ -98,6 +109,56 @@ export class Repository {
       updatedAt: Date.now(),
     }).where(eq(agents.id, id)).run();
     return result.changes > 0;
+  }
+
+  listAgentFriends() {
+    return this.context.db.select().from(agentFriends).orderBy(asc(agentFriends.createdAt)).all();
+  }
+
+  addAgentFriend(agentId: string, friendId: string): void {
+    const createdAt = Date.now();
+    const transaction = this.context.sqlite.transaction(() => {
+      this.context.db.insert(agentFriends).values({ agentId, friendId, createdAt })
+        .onConflictDoNothing().run();
+      this.context.db.insert(agentFriends).values({ agentId: friendId, friendId: agentId, createdAt })
+        .onConflictDoNothing().run();
+    });
+    transaction();
+  }
+
+  removeAgentFriend(agentId: string, friendId: string): void {
+    const transaction = this.context.sqlite.transaction(() => {
+      this.context.db.delete(agentFriends).where(and(
+        eq(agentFriends.agentId, agentId),
+        eq(agentFriends.friendId, friendId),
+      )).run();
+      this.context.db.delete(agentFriends).where(and(
+        eq(agentFriends.agentId, friendId),
+        eq(agentFriends.friendId, agentId),
+      )).run();
+    });
+    transaction();
+  }
+
+  listScheduledTasks() {
+    return this.context.db.select().from(scheduledTasks).orderBy(asc(scheduledTasks.createdAt)).all();
+  }
+
+  getScheduledTask(id: string) {
+    return this.context.db.select().from(scheduledTasks).where(eq(scheduledTasks.id, id)).get();
+  }
+
+  saveScheduledTask(task: typeof scheduledTasks.$inferInsert): void {
+    this.context.db.insert(scheduledTasks).values(task).run();
+  }
+
+  setScheduledTaskEnabled(id: string, enabled: boolean): boolean {
+    return this.context.db.update(scheduledTasks).set({ enabled })
+      .where(eq(scheduledTasks.id, id)).run().changes > 0;
+  }
+
+  deleteScheduledTask(id: string): boolean {
+    return this.context.db.delete(scheduledTasks).where(eq(scheduledTasks.id, id)).run().changes > 0;
   }
 
   createConversation(title: string, type = "dm", agentIds: string[] = []): Conversation {

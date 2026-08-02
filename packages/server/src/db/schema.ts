@@ -42,6 +42,26 @@ export const conversationAgents = sqliteTable(
   (table) => ({ pk: primaryKey({ columns: [table.conversationId, table.agentId] }) }),
 );
 
+export const agentFriends = sqliteTable(
+  "agent_friends",
+  {
+    agentId: text("agent_id").notNull().references(() => agents.id),
+    friendId: text("friend_id").notNull().references(() => agents.id),
+    createdAt: integer("created_at").notNull(),
+  },
+  (table) => ({ pk: primaryKey({ columns: [table.agentId, table.friendId] }) }),
+);
+
+export const scheduledTasks = sqliteTable("scheduled_tasks", {
+  id: text("id").primaryKey(),
+  agentId: text("agent_id").notNull().references(() => agents.id),
+  conversationId: text("conversation_id").notNull().references(() => conversations.id),
+  cronExpression: text("cron_expression").notNull(),
+  prompt: text("prompt").notNull(),
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+  createdAt: integer("created_at").notNull(),
+});
+
 export const messages = sqliteTable(
   "messages",
   {
