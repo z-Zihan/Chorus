@@ -142,7 +142,7 @@ export class AgentRuntime {
         chunks.push(chunk);
         if (chunk.type === "text" && !chunk.threadId) output += chunk.content;
         this.events.publish(reply.conversationId, { type: "stream", messageId: reply.id, chunk });
-        this.publishA2A(reply.conversationId, adapter.id, content, chunk);
+        this.publishA2A(reply.conversationId, reply.id, adapter.id, content, chunk);
       }
       this.finish(reply, output, "done", chunks, startedAt, adapter.id);
     } catch (error) {
@@ -190,7 +190,7 @@ export class AgentRuntime {
     this.registry.setStatus(agentId, "online");
   }
 
-  private publishA2A(conversationId: string, from: string, request: string, chunk: StreamChunk): void {
+  private publishA2A(conversationId: string, parentMessageId: string, from: string, request: string, chunk: StreamChunk): void {
     if (!chunk.threadId) return;
     if (chunk.type === "tool_call") {
       const to = String(chunk.metadata?.to ?? chunk.sourceAgentId ?? "agent");
@@ -206,6 +206,8 @@ export class AgentRuntime {
       this.events.publish(conversationId, {
         type: "tool_call_start",
         threadId: chunk.threadId,
+        conversationId,
+        parentMessageId,
         from,
         to,
         message,

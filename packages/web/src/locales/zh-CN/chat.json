@@ -24,5 +24,10 @@
   "a2aCancel": "取消调用",
   "a2aCancelled": "A2A 调用已取消",
   "a2aMessages_one": "{{count}} 条消息",
-  "a2aMessages_other": "{{count}} 条消息"
+  "a2aMessages_other": "{{count}} 条消息",
+  "taskRunning": "运行中",
+  "taskCompleted": "已完成",
+  "taskFailed": "失败",
+  "taskDuration": "耗时：{{duration}}",
+  "jumpToSource": "跳转到群聊"
 }

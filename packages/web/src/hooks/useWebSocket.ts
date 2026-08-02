@@ -164,7 +164,8 @@ export function useWebSocket() {
         case "tool_call_start":
           startA2AThread({
             threadId: event.threadId,
-            conversationId: useChatStore.getState().currentConversationId ?? "",
+            conversationId: event.conversationId ?? useChatStore.getState().currentConversationId ?? "",
+            parentMessageId: event.parentMessageId,
             from: event.from,
             to: event.to,
             message: event.message,

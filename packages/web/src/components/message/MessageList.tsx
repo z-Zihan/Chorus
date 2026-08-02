@@ -6,6 +6,7 @@ import { useAgentStore } from "@/store/agentStore";
 import { MessageBubble } from "./MessageBubble";
 import { TypingIndicator } from "./TypingIndicator";
 import { A2AThread } from "./A2AThread";
+import { TaskTrackingCard } from "./TaskTrackingCard";
 
 const BOTTOM_THRESHOLD_PX = 80;
 
@@ -89,11 +90,17 @@ export function MessageList() {
   // Group messages by threadId for A2A display
   const rendered: React.ReactNode[] = [];
   const seenThreads = new Set<string>();
+  const threadStates = Object.values(a2aThreads);
 
   for (let i = 0; i < messages.length; i++) {
     const msg = messages[i];
 
-    // If this message is part of an A2A thread, render as A2AThread
+    // Live A2A messages are represented by their task card.
+    if (msg.threadId && a2aThreads[msg.threadId]) {
+      continue;
+    }
+
+    // Keep the legacy grouped display for persisted A2A messages without live state.
     if (msg.threadId && !seenThreads.has(msg.threadId)) {
       seenThreads.add(msg.threadId);
       const threadMessages = messages.filter((m) => m.threadId === msg.threadId);
@@ -119,14 +126,21 @@ export function MessageList() {
         agentAvatar={agent?.avatar}
       />,
     );
+
+    if (msg.fromType === "agent") {
+      for (const thread of threadStates) {
+        if (thread.parentMessageId !== msg.id || seenThreads.has(thread.threadId)) continue;
+        seenThreads.add(thread.threadId);
+        rendered.push(<TaskTrackingCard key={`task-${thread.threadId}`} thread={thread} />);
+      }
+    }
   }
 
-  for (const thread of Object.values(a2aThreads)) {
+  // Calls without an available parent message remain visible as standalone cards.
+  for (const thread of threadStates) {
     if (seenThreads.has(thread.threadId)) continue;
     seenThreads.add(thread.threadId);
-    rendered.push(
-      <A2AThread key={`thread-${thread.threadId}`} messages={[]} thread={thread} />,
-    );
+    rendered.push(<TaskTrackingCard key={`task-${thread.threadId}`} thread={thread} />);
   }
 
   // Show typing indicator when agent is thinking

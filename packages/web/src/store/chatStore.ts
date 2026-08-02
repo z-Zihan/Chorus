@@ -15,6 +15,7 @@ type WebSocketSend = (event: ClientEvent) => boolean;
 export interface A2AThreadState {
   threadId: string;
   conversationId: string;
+  parentMessageId?: string;
   from: string;
   to: string;
   message: string;
@@ -22,6 +23,7 @@ export interface A2AThreadState {
   error?: string;
   status: "running" | "completed" | "error";
   startedAt: number;
+  completedAt?: number;
 }
 
 interface ChatState {
@@ -39,6 +41,7 @@ interface ChatState {
 
   fetchConversations: (includeArchived?: boolean) => Promise<void>;
   setCurrentConversation: (id: string) => void;
+  navigateToConversation: (id: string) => void;
   navigateToMessage: (conversationId: string, messageId: string) => void;
   clearTargetMessage: () => void;
   fetchMessages: (conversationId: string) => Promise<void>;
@@ -108,6 +111,12 @@ export const useChatStore = create<ChatState>((set, get) => {
     if (get().currentConversationId === id) return;
     set({ currentConversationId: id, messages: [], a2aThreads: {}, isLoadingMessages: true });
     get().fetchMessages(id);
+  },
+
+  navigateToConversation: (id) => {
+    set({ targetMessageId: null });
+    if (get().currentConversationId === id) return;
+    get().setCurrentConversation(id);
   },
 
   navigateToMessage: (conversationId, messageId) => {
@@ -237,7 +246,7 @@ export const useChatStore = create<ChatState>((set, get) => {
     return {
       a2aThreads: {
         ...state.a2aThreads,
-        [threadId]: { ...thread, result, error: undefined, status: "completed" },
+        [threadId]: { ...thread, result, error: undefined, status: "completed", completedAt: Date.now() },
       },
     };
   }),
@@ -248,7 +257,7 @@ export const useChatStore = create<ChatState>((set, get) => {
     return {
       a2aThreads: {
         ...state.a2aThreads,
-        [threadId]: { ...thread, error, status: "error" },
+        [threadId]: { ...thread, error, status: "error", completedAt: Date.now() },
       },
     };
   }),

@@ -24,5 +24,10 @@
   "a2aCancel": "Cancel call",
   "a2aCancelled": "A2A call cancelled",
   "a2aMessages_one": "{{count}} message",
-  "a2aMessages_other": "{{count}} messages"
+  "a2aMessages_other": "{{count}} messages",
+  "taskRunning": "Running",
+  "taskCompleted": "Completed",
+  "taskFailed": "Failed",
+  "taskDuration": "Duration: {{duration}}",
+  "jumpToSource": "Jump to group chat"
 }
