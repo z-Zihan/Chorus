@@ -18,6 +18,7 @@ import { registerSearchRoutes } from "./search.js";
 import type { Scheduler } from "../scheduler/index.js";
 import { registerSchedulerRoutes } from "./scheduler.js";
 import { registerMetricsRoutes } from "./metrics.js";
+import { registerHubRoutes, type HubRouteDependencies } from "./hub.js";
 
 export function registerRoutes(
   app: FastifyInstance,
@@ -29,6 +30,7 @@ export function registerRoutes(
   onboarding = new OnboardingService(repository, registry, detector),
   catalog = new CatalogService(registry),
   installer = new InstallExecutor(catalog, registry, detector),
+  hub?: HubRouteDependencies,
 ): void {
   registerHealthRoutes(app);
   registerLogRoutes(app);
@@ -42,4 +44,5 @@ export function registerRoutes(
   registerSchedulerRoutes(app, scheduler);
   registerOnboardingRoutes(app, onboarding);
   registerCatalogRoutes(app, catalog, installer);
+  if (hub) registerHubRoutes(app, hub);
 }

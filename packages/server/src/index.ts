@@ -20,6 +20,9 @@ import { OnboardingService } from "./routes/onboarding.js";
 import { Scheduler } from "./scheduler/index.js";
 import { authMiddleware } from "./middleware/auth.js";
 import { PluginLoader } from "./plugins/index.js";
+import { HubIdentity } from "./hub/identity.js";
+import { RelayClient } from "./hub/relay-client.js";
+import { HubMessageRouter } from "./hub/message-router.js";
 
 process.on("uncaughtException", (error) => {
   logger.fatal({ err: error }, "Uncaught exception");
@@ -39,7 +42,16 @@ async function main(): Promise<void> {
 
   const { sqlite, db } = createDatabase(dbPath);
   const repository = new Repository({ sqlite, db });
-  const registry = new AgentRegistry(repository);
+  let hubIdentity: HubIdentity | undefined;
+  let relayClient: RelayClient | undefined;
+  let relayToken = config.hub?.relay.token;
+  if (config.hub?.enabled) {
+    hubIdentity = new HubIdentity(resolve(rootDir, "data/hub-keypair.json"));
+    await hubIdentity.getOrCreateKeypair();
+    relayClient = new RelayClient();
+  }
+
+  const registry = new AgentRegistry(repository, relayClient);
   await registry.initialize(config.agents);
   registry.startHealthChecks();
   registry.watchConfig(resolve(rootDir, "agentlink.config.ts"));
@@ -48,7 +60,23 @@ async function main(): Promise<void> {
   const pluginLoader = new PluginLoader();
   await pluginLoader.loadPlugins(resolve(rootDir, "plugins"));
   await pluginLoader.initPlugins({ registry, repository, events, logger });
-  const runtime = new AgentRuntime(repository, registry, events, config);
+  const runtime = new AgentRuntime(repository, registry, events, config, relayClient);
+  let connectHub: (() => Promise<void>) | undefined;
+  if (config.hub?.enabled && hubIdentity && relayClient) {
+    const identity = hubIdentity;
+    const client = relayClient;
+    const hubConfig = config.hub;
+    const messageRouter = new HubMessageRouter(identity, registry, runtime, client);
+    runtime.setHubMessageRouter(messageRouter);
+    connectHub = async () => {
+      relayToken ??= await registerHub(
+        hubConfig.relay.url,
+        identity.getPublicKey(),
+        hubConfig.displayName,
+      );
+      await client.connect(hubConfig.relay.url, identity.hubId, relayToken);
+    };
+  }
   const scheduler = new Scheduler(repository, runtime);
   scheduler.initialize();
   const detector = new CliDetector();
@@ -70,11 +98,30 @@ async function main(): Promise<void> {
   await app.register(cors, { origin: config.cors.origin });
   await app.register(websocket);
 
-  registerRoutes(app, repository, registry, runtime, scheduler, detector, onboarding);
+  registerRoutes(
+    app,
+    repository,
+    registry,
+    runtime,
+    scheduler,
+    detector,
+    onboarding,
+    undefined,
+    undefined,
+    hubIdentity && relayClient && connectHub
+      ? { identity: hubIdentity, relayClient, registry, connect: connectHub }
+      : undefined,
+  );
   registerWebSocket(app, events, runtime, registry, config.auth);
 
   const hasAgentsAtStartup = registry.list().length > 0;
   if (hasAgentsAtStartup) await onboarding.bootstrap();
+
+  if (connectHub) {
+    void connectHub().catch((error: unknown) => {
+      app.log.warn({ err: error }, "Initial Relay connection failed");
+    });
+  }
 
   const webDist = resolve(rootDir, "packages/web/dist");
   if (existsSync(webDist)) {
@@ -88,6 +135,7 @@ async function main(): Promise<void> {
   }
 
   const close = async () => {
+    relayClient?.disconnect();
     await app.close();
     scheduler.destroy();
     registry.stopHealthChecks();
@@ -106,6 +154,29 @@ async function main(): Promise<void> {
       app.log.error({ err: error }, "Automatic CLI detection failed");
     });
   }
+}
+
+async function registerHub(
+  relayWebSocketUrl: string,
+  publicKey: string,
+  displayName: string,
+): Promise<string> {
+  const url = new URL(relayWebSocketUrl);
+  url.protocol = url.protocol === "wss:" ? "https:" : "http:";
+  url.pathname = "/api/hubs/register";
+  url.search = "";
+  url.hash = "";
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ hubId: publicKey, publicKey, displayName }),
+  });
+  if (!response.ok) throw new Error(`Relay Hub registration failed with HTTP ${response.status}`);
+  const body = await response.json() as { token?: unknown };
+  if (typeof body.token !== "string" || !body.token) {
+    throw new Error("Relay Hub registration returned no token");
+  }
+  return body.token;
 }
 
 main().catch((err) => {

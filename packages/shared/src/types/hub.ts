@@ -1,4 +1,16 @@
-import type { Message } from "./message";
+export type HubConnectionState =
+  | "disconnected"
+  | "connecting"
+  | "connected"
+  | "reconnecting"
+  | "error";
+
+export interface HubInfo {
+  hubId: string;
+  displayName: string;
+  online: boolean;
+  publicKey?: string;
+}
 
 /**
  * Hub 身份信息

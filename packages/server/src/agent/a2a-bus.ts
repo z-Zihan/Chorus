@@ -3,6 +3,8 @@ import type { A2ABusLike, ConversationContext, StreamChunk } from "@agentlink/sh
 import type { AgentRegistry } from "./registry";
 import { track } from "../analytics";
 import { logger } from "../utils/logger";
+import type { HubMessageRouter } from "../hub/message-router";
+import type { RelayClient } from "../hub/relay-client";
 
 export interface A2ABusOptions {
   maxDepth: number;
@@ -18,11 +20,17 @@ export class A2ABus implements A2ABusLike {
     parentThreadId?: string;
   }>();
   private readonly callsByStack = new Map<string, string[]>();
+  private hubMessageRouter?: HubMessageRouter;
 
   constructor(
     private readonly registry: AgentRegistry,
     private readonly options: A2ABusOptions = { maxDepth: 5, chainTimeoutMs: 60_000, maxConcurrency: 3 },
+    private readonly relayClient?: RelayClient,
   ) {}
+
+  setHubMessageRouter(router: HubMessageRouter): void {
+    this.hubMessageRouter = router;
+  }
 
   async *call(
     fromAgentId: string,
@@ -38,6 +46,33 @@ export class A2ABus implements A2ABusLike {
     }
     if (stack.length >= this.options.maxDepth) {
       yield { type: "error", content: `超过最大调用深度 ${this.options.maxDepth}`, threadId };
+      return;
+    }
+    const remoteHubId = this.registry.getRemoteAgentHub(toAgentId);
+    if (remoteHubId) {
+      if (!this.hubMessageRouter) {
+        yield { type: "error", content: "跨 Hub 消息路由不可用", threadId };
+        return;
+      }
+      if (this.relayClient?.state !== "connected") {
+        yield { type: "error", content: "Relay 当前未连接", threadId };
+        return;
+      }
+      const separatorIndex = toAgentId.startsWith(remoteHubId)
+        ? remoteHubId.length
+        : -1;
+      const remoteAgentId = separatorIndex >= 0 && [":", "/"].includes(toAgentId[separatorIndex] ?? "")
+        ? toAgentId.slice(separatorIndex + 1)
+        : toAgentId;
+      const response = await this.hubMessageRouter.callRemoteAgent(
+        remoteHubId,
+        fromAgentId,
+        remoteAgentId,
+        message,
+        { ...context, callStack: [...stack, toAgentId], a2aThreadId: threadId },
+      );
+      yield { type: "text", content: response, threadId, sourceAgentId: toAgentId };
+      yield { type: "done", content: "", threadId, sourceAgentId: toAgentId };
       return;
     }
     const active = this.concurrency.get(toAgentId) ?? 0;

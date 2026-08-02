@@ -9,6 +9,8 @@ import { AdapterMetrics, type AgentMetrics } from "./metrics";
 import type { AgentRegistry } from "./registry";
 import { track } from "../analytics";
 import { logger } from "../utils/logger";
+import type { HubMessageRouter } from "../hub/message-router";
+import type { RelayClient } from "../hub/relay-client";
 
 export class AgentRuntime {
   private readonly controllers = new Map<string, AbortController>();
@@ -21,8 +23,42 @@ export class AgentRuntime {
     private readonly registry: AgentRegistry,
     private readonly events: EventHub,
     private readonly config: AppConfig,
+    relayClient?: RelayClient,
   ) {
-    this.a2aBus = new A2ABus(registry);
+    this.a2aBus = new A2ABus(registry, undefined, relayClient);
+  }
+
+  setHubMessageRouter(router: HubMessageRouter): void {
+    this.a2aBus.setHubMessageRouter(router);
+  }
+
+  async handleRemoteA2ACall(
+    fromAgentId: string,
+    toAgentId: string,
+    message: string,
+    context: Parameters<A2ABus["call"]>[3],
+  ): Promise<string> {
+    let output = "";
+    for await (const chunk of this.a2aBus.call(fromAgentId, toAgentId, message, context)) {
+      if (["text", "task_step", "error"].includes(chunk.type)) output += chunk.content;
+    }
+    return output;
+  }
+
+  async handleHubMessage(
+    conversationId: string,
+    content: string,
+    targetAgentId?: string,
+  ): Promise<string> {
+    const previousIds = new Set(
+      this.repository.listMessages(conversationId).map((message) => message.id),
+    );
+    await this.handleUserMessage(conversationId, content, [], targetAgentId);
+    return this.repository.listMessages(conversationId)
+      .filter((message) => !previousIds.has(message.id) && message.fromType === "agent")
+      .map((message) => message.content)
+      .filter(Boolean)
+      .join("\n");
   }
 
   async handleUserMessage(

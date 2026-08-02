@@ -6,6 +6,7 @@ import type {
   AgentConfig,
   AgentStatus,
   AgentStatusSnapshot,
+  HubInfo,
   PersistedAgentConfig,
 } from "@agentlink/shared";
 import type { Repository } from "../db/repository.js";
@@ -20,6 +21,7 @@ import { LangChainAdapter } from "./adapters/langchain.js";
 import { OpenClawAdapter } from "./adapters/openclaw.js";
 import { OpenAIAdapter } from "./adapters/openai.js";
 import { AgentPersistence } from "./persistence.js";
+import type { RelayClient } from "../hub/relay-client.js";
 
 interface RegistryEntry {
   adapter: AgentAdapter;
@@ -36,13 +38,78 @@ export class AgentRegistry {
   private readonly persistence: AgentPersistence;
   private readonly configuredAgents = new Map<string, AgentConfig>();
   private readonly healthCheckFailures = new Set<string>();
+  private readonly hubPublicKeys = new Map<string, string>();
+  private readonly knownHubs = new Map<string, HubInfo>();
+  private readonly remoteAgentHubs = new Map<string, string>();
   private configWatcher?: ConfigWatcher;
   private healthCheckTimer?: NodeJS.Timeout;
   private healthCheckRunning = false;
 
-  constructor(private readonly repository: Repository) {
+  constructor(
+    private readonly repository: Repository,
+    relayClient?: RelayClient,
+  ) {
     this.persistence = new AgentPersistence(repository);
     this.repository.setAgentStatusResolver((agentId) => this.getStatus(agentId));
+    relayClient?.onPresence((hubId, status) => this.setHubPresence(hubId, status));
+    relayClient?.onRoomMembers((_roomId, members) => {
+      for (const member of members) {
+        this.setHubPresence(
+          member.hubId,
+          member.online ? "online" : "offline",
+          member.publicKey,
+          member.displayName,
+        );
+      }
+    });
+  }
+
+  getHubPublicKey(hubId: string): string | undefined {
+    return this.hubPublicKeys.get(hubId);
+  }
+
+  setHubPublicKey(hubId: string, publicKey: string): void {
+    this.hubPublicKeys.set(hubId, publicKey);
+    const current = this.knownHubs.get(hubId);
+    this.knownHubs.set(hubId, {
+      hubId,
+      displayName: current?.displayName ?? hubId.slice(0, 8),
+      online: current?.online ?? false,
+      publicKey,
+    });
+  }
+
+  setHubPresence(
+    hubId: string,
+    status: "online" | "offline",
+    publicKey = hubId,
+    displayName?: string,
+  ): void {
+    this.hubPublicKeys.set(hubId, publicKey);
+    const current = this.knownHubs.get(hubId);
+    this.knownHubs.set(hubId, {
+      hubId,
+      displayName: displayName ?? current?.displayName ?? hubId.slice(0, 8),
+      online: status === "online",
+      publicKey,
+    });
+  }
+
+  getKnownHubs(): HubInfo[] {
+    return [...this.knownHubs.values()];
+  }
+
+  registerRemoteAgent(agentId: string, hubId: string): void {
+    this.remoteAgentHubs.set(agentId, hubId);
+  }
+
+  getRemoteAgentHub(agentId: string): string | undefined {
+    const registered = this.remoteAgentHubs.get(agentId);
+    if (registered) return registered;
+    for (const hubId of this.hubPublicKeys.keys()) {
+      if (agentId.startsWith(`${hubId}:`) || agentId.startsWith(`${hubId}/`)) return hubId;
+    }
+    return undefined;
   }
 
   async initialize(configs: AgentConfig[]): Promise<void> {

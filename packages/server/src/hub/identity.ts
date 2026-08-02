@@ -50,6 +50,14 @@ export class HubIdentity {
     return this.hubId.slice(0, 8);
   }
 
+  getPublicKey(): string {
+    return this.hubId;
+  }
+
+  getSecretKey(): string {
+    return this.secretKey;
+  }
+
   /** Ed25519 secret key hex (for signing + decryption) */
   get secretKey(): string {
     if (!this.keypair) throw new Error("Hub identity not initialized — call getOrCreateKeypair() first");
