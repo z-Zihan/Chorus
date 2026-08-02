@@ -17,8 +17,8 @@ import { useAgentStore } from "@/store/agentStore";
 interface AgentSelectorProps {
   agentIds: string[];
   isGroup: boolean;
-  value: string | null;
-  onValueChange: (agentId: string | null) => void;
+  value: string[];
+  onValueChange: (agentIds: string[]) => void;
   disabled?: boolean;
 }
 
@@ -44,11 +44,16 @@ export function AgentSelector({
     agent.name.toLocaleLowerCase().includes(normalizedQuery)
     || agent.id.toLocaleLowerCase().includes(normalizedQuery)
   );
-  const selectedAgent = onlineAgents.find((agent) => agent.id === value)
-    ?? (!isGroup ? onlineAgents[0] : undefined);
+  const allSelected = isGroup
+    && agentIds.length > 0
+    && agentIds.every((agentId) => value.includes(agentId));
+  const selectedAgent = value.length === 1
+    ? onlineAgents.find((agent) => agent.id === value[0])
+    : undefined;
+  const defaultAgent = onlineAgents[0];
 
-  const select = (agentId: string | null) => {
-    onValueChange(agentId);
+  const select = (selectedAgentIds: string[]) => {
+    onValueChange(selectedAgentIds);
     setQuery("");
     setOpen(false);
   };
@@ -68,7 +73,11 @@ export function AgentSelector({
           className="h-8 max-w-40 shrink-0 px-2"
         >
           <AtSign aria-hidden="true" className="h-4 w-4" />
-          <span className="truncate">{selectedAgent?.name ?? t("agentSelector.all")}</span>
+          <span className="truncate">
+            {allSelected
+              ? t("agentSelector.all")
+              : selectedAgent?.name ?? defaultAgent?.name ?? t("agentSelector.noAgents")}
+          </span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
@@ -86,7 +95,7 @@ export function AgentSelector({
             itemRefs.current[index]?.focus();
           } else if (event.key === "Enter") {
             event.preventDefault();
-            select(filteredAgents[0]?.id ?? null);
+            select(filteredAgents[0] ? [filteredAgents[0].id] : []);
           }
         }}>
           <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-[var(--text-tertiary)]" />
@@ -103,27 +112,32 @@ export function AgentSelector({
         {isGroup && (
           <DropdownMenuItem
             ref={(element) => { itemRefs.current[filteredAgents.length] = element; }}
-            onSelect={() => select(null)}
+            onSelect={() => select(agentIds)}
           >
             <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--bg-elevated)]">
               <AtSign aria-hidden="true" className="h-3.5 w-3.5" />
             </span>
-            <span className="flex-1">{t("agentSelector.allAgents")}</span>
-            {value === null && <Check aria-hidden="true" className="h-4 w-4" />}
+            <span className="flex-1">
+              <span className="block">{t("agentSelector.allAgents")}</span>
+              <span className="block text-xs text-amber-600 dark:text-amber-400">
+                {t("agentSelector.broadcastWarning")}
+              </span>
+            </span>
+            {allSelected && <Check aria-hidden="true" className="h-4 w-4" />}
           </DropdownMenuItem>
         )}
         {filteredAgents.map((agent, index) => (
           <DropdownMenuItem
             key={agent.id}
             ref={(element) => { itemRefs.current[index] = element; }}
-            onSelect={() => select(agent.id)}
+            onSelect={() => select([agent.id])}
           >
             <span className="relative shrink-0">
               <AgentAvatar name={agent.name} src={agent.avatar} size="xs" />
               <span className={`absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-[var(--bg-surface)] ${STATUS_COLORS[agent.status]}`} />
             </span>
             <span className="min-w-0 flex-1 truncate">{agent.name}</span>
-            {value === agent.id && <Check aria-hidden="true" className="h-4 w-4" />}
+            {value.length === 1 && value[0] === agent.id && <Check aria-hidden="true" className="h-4 w-4" />}
           </DropdownMenuItem>
         ))}
         {filteredAgents.length === 0 && (

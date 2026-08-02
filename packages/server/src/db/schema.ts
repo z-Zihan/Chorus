@@ -38,6 +38,7 @@ export const conversationAgents = sqliteTable(
   {
     conversationId: text("conversation_id").notNull().references(() => conversations.id),
     agentId: text("agent_id").notNull().references(() => agents.id),
+    position: integer("position").notNull().default(0),
   },
   (table) => ({ pk: primaryKey({ columns: [table.conversationId, table.agentId] }) }),
 );

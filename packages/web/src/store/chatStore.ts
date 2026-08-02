@@ -26,6 +26,14 @@ export interface A2AThreadState {
   completedAt?: number;
 }
 
+export interface A2AConfirmation {
+  threadId: string;
+  from: string;
+  to: string;
+  message: string;
+  expiresAt: number;
+}
+
 interface ChatState {
   conversations: Conversation[];
   groupConversations: Conversation[];
@@ -37,6 +45,7 @@ interface ChatState {
   isStreaming: boolean;
   streamingMessageId: string | null;
   a2aThreads: Record<string, A2AThreadState>;
+  a2aConfirmations: A2AConfirmation[];
   webSocketSend: WebSocketSend | null;
 
   fetchConversations: (includeArchived?: boolean) => Promise<void>;
@@ -45,7 +54,7 @@ interface ChatState {
   navigateToMessage: (conversationId: string, messageId: string) => void;
   clearTargetMessage: () => void;
   fetchMessages: (conversationId: string) => Promise<void>;
-  sendMessage: (content: string, agentId?: string) => Promise<void>;
+  sendMessage: (content: string, mentionedAgentIds?: string[]) => Promise<void>;
   appendStreamChunk: (messageId: string, chunk: string) => void;
   noteStreamActivity: (messageId: string) => void;
   setMessageStatus: (messageId: string, status: Message["status"]) => void;
@@ -55,6 +64,8 @@ interface ChatState {
   completeA2AThread: (threadId: string, result: string) => void;
   failA2AThread: (threadId: string, error: string) => void;
   cancelA2AThread: (threadId: string) => void;
+  requestA2AConfirmation: (confirmation: A2AConfirmation) => void;
+  dismissA2AConfirmation: (threadId: string) => void;
   setWebSocketSend: (send: WebSocketSend | null) => void;
   createConversation: (title?: string) => Promise<void>;
   createGroupConversation: (title: string, agentIds: string[]) => Promise<void>;
@@ -85,6 +96,7 @@ export const useChatStore = create<ChatState>((set, get) => {
     isStreaming: false,
     streamingMessageId: null,
     a2aThreads: {},
+    a2aConfirmations: [],
     webSocketSend: null,
 
     fetchConversations: async (includeArchived = true) => {
@@ -111,7 +123,13 @@ export const useChatStore = create<ChatState>((set, get) => {
 
   setCurrentConversation: (id) => {
     if (get().currentConversationId === id) return;
-    set({ currentConversationId: id, messages: [], a2aThreads: {}, isLoadingMessages: true });
+    set({
+      currentConversationId: id,
+      messages: [],
+      a2aThreads: {},
+      a2aConfirmations: [],
+      isLoadingMessages: true,
+    });
     get().fetchMessages(id);
   },
 
@@ -154,7 +172,7 @@ export const useChatStore = create<ChatState>((set, get) => {
     }
   },
 
-  sendMessage: async (content, agentId) => {
+  sendMessage: async (content, mentionedAgentIds = []) => {
     const convId = get().currentConversationId;
     if (!convId) return;
 
@@ -164,19 +182,23 @@ export const useChatStore = create<ChatState>((set, get) => {
     const conversation = [...get().conversations, ...get().groupConversations, ...get().archivedConversations]
       .find((item) => item.id === convId);
     const isGroup = conversation?.type === "group";
-    const activeAgentId = isGroup ? agentId ?? undefined : agentId ?? conversation?.agentIds[0];
-    if (agentId && !conversation?.agentIds.includes(agentId)) {
+    const selectedAgentIds = [...new Set(mentionedAgentIds)];
+    if (selectedAgentIds.some((agentId) => !conversation?.agentIds.includes(agentId))) {
       useUIStore.getState().addToast(i18n.t("errors:agentUnavailable"), "error");
       return;
     }
     const availableAgents = useAgentStore.getState().agents;
-    const activeAgent = availableAgents.find((agent) => agent.id === activeAgentId);
-    const hasOnlineGroupMember = Boolean(
-      isGroup && conversation?.agentIds.some((id) =>
-        availableAgents.some((agent) => agent.id === id && agent.status === "online"),
-      ),
+    const isOnline = (agentId: string) => availableAgents.some(
+      (agent) => agent.id === agentId && agent.status === "online",
     );
-    if (activeAgentId ? activeAgent?.status !== "online" : !hasOnlineGroupMember) {
+    const firstOnlineAgentId = conversation?.agentIds.find(isOnline);
+    const activeAgentId = isGroup
+      ? selectedAgentIds.length === 1 ? selectedAgentIds[0] : firstOnlineAgentId
+      : selectedAgentIds[0] ?? conversation?.agentIds[0];
+    const routableAgentIds = isGroup && selectedAgentIds.length > 0
+      ? selectedAgentIds.filter(isOnline)
+      : activeAgentId ? [activeAgentId].filter(isOnline) : [];
+    if (routableAgentIds.length === 0) {
       useUIStore.getState().addToast(i18n.t("errors:agentUnavailable"), "error");
       return;
     }
@@ -200,7 +222,7 @@ export const useChatStore = create<ChatState>((set, get) => {
     track("message_sent", { conversationId: convId, transport: get().webSocketSend ? "websocket" : "http" });
     streamManager.armStreamTimer(userMsg.id);
 
-    const mentionedAgents = isGroup && activeAgentId ? [activeAgentId] : undefined;
+    const mentionedAgents = isGroup && selectedAgentIds.length > 0 ? selectedAgentIds : undefined;
     const sent = get().webSocketSend?.({
       type: "message",
       conversationId: convId,
@@ -281,6 +303,16 @@ export const useChatStore = create<ChatState>((set, get) => {
     get().webSocketSend?.({ type: "cancel", messageId: threadId });
     get().failA2AThread(threadId, i18n.t("chat:a2aCancelled"));
   },
+
+  requestA2AConfirmation: (confirmation) => set((state) => ({
+    a2aConfirmations: state.a2aConfirmations.some((item) => item.threadId === confirmation.threadId)
+      ? state.a2aConfirmations
+      : [...state.a2aConfirmations, confirmation],
+  })),
+
+  dismissA2AConfirmation: (threadId) => set((state) => ({
+    a2aConfirmations: state.a2aConfirmations.filter((item) => item.threadId !== threadId),
+  })),
 
   setWebSocketSend: (webSocketSend) => set({ webSocketSend }),
 

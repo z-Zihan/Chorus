@@ -9,7 +9,7 @@ import { AgentSelector } from "@/components/chat/AgentSelector";
 export function InputBar() {
   const { t } = useTranslation(["common", "chat"]);
   const [input, setInput] = useState("");
-  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
+  const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const sendMessage = useChatStore((s) => s.sendMessage);
   const isStreaming = useChatStore((s) => s.isStreaming);
@@ -23,26 +23,29 @@ export function InputBar() {
     .find((conversation) => conversation.id === currentConversationId);
 
   useEffect(() => {
-    setSelectedAgentId(null);
+    setSelectedAgentIds([]);
   }, [currentConversationId]);
 
   useEffect(() => {
-    if (!selectedAgentId) return;
-    const selectedAgent = agents.find((agent) => agent.id === selectedAgentId);
-    if (!currentConversation?.agentIds.includes(selectedAgentId) || selectedAgent?.status !== "online") {
-      setSelectedAgentId(null);
+    if (selectedAgentIds.length === 0) return;
+    const stillMembers = selectedAgentIds.every((agentId) => currentConversation?.agentIds.includes(agentId));
+    const singleAgent = selectedAgentIds.length === 1
+      ? agents.find((agent) => agent.id === selectedAgentIds[0])
+      : undefined;
+    if (!stillMembers || (singleAgent && singleAgent.status !== "online")) {
+      setSelectedAgentIds([]);
     }
-  }, [agents, currentConversation, selectedAgentId]);
+  }, [agents, currentConversation, selectedAgentIds]);
 
   const handleSend = useCallback(() => {
     const trimmed = input.trim();
     if (!trimmed || !currentConversationId || isStreaming) return;
-    sendMessage(trimmed, selectedAgentId ?? undefined);
+    sendMessage(trimmed, selectedAgentIds.length > 0 ? selectedAgentIds : undefined);
     setInput("");
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
     }
-  }, [input, currentConversationId, isStreaming, sendMessage, selectedAgentId]);
+  }, [input, currentConversationId, isStreaming, sendMessage, selectedAgentIds]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -66,8 +69,8 @@ export function InputBar() {
           <AgentSelector
             agentIds={currentConversation?.agentIds ?? []}
             isGroup={currentConversation?.type === "group"}
-            value={selectedAgentId}
-            onValueChange={setSelectedAgentId}
+            value={selectedAgentIds}
+            onValueChange={setSelectedAgentIds}
             disabled={isStreaming || !currentConversationId}
           />
           <div className="mx-2 h-6 w-px shrink-0 bg-[var(--border-color)]" />

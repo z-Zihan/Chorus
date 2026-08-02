@@ -21,6 +21,12 @@ const testConfig: AppConfig = {
       type: "mock",
       config: { delayMs: 0 },
     },
+    {
+      id: "second-agent",
+      name: "Second Agent",
+      type: "mock",
+      config: { delayMs: 0 },
+    },
   ],
 };
 

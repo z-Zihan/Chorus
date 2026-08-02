@@ -31,6 +31,13 @@ const conversationQuerySchema = z.object({
   archived: z.enum(["true", "false"]).optional().transform((value) => value === "true"),
   type: z.enum(["dm", "channel", "group"]).optional(),
 });
+const a2aPermissionSchema = z.object({
+  mode: z.enum(["auto", "confirm", "deny"]),
+});
+const a2aConfirmationSchema = z.object({
+  threadId: z.string().trim().min(1),
+  approved: z.boolean(),
+});
 
 export function registerConversationRoutes(
   app: FastifyInstance,
@@ -52,6 +59,36 @@ export function registerConversationRoutes(
     const conversation = repository.updateConversation(request.params.id, parsed.data);
     if (!conversation) return reply.code(404).send({ error: "Conversation not found" });
     return conversation;
+  });
+
+  app.get<{ Params: { id: string } }>("/api/conversations/:id/a2a-permission", async (request, reply) => {
+    if (!repository.getConversation(request.params.id)) {
+      return reply.code(404).send({ error: "Conversation not found" });
+    }
+    return { mode: runtime.getA2APermission(request.params.id) };
+  });
+
+  app.patch<{ Params: { id: string } }>("/api/conversations/:id/a2a-permission", async (request, reply) => {
+    if (!repository.getConversation(request.params.id)) {
+      return reply.code(404).send({ error: "Conversation not found" });
+    }
+    const parsed = a2aPermissionSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: "Invalid A2A permission", issues: parsed.error.flatten() });
+    }
+    runtime.setA2APermission(request.params.id, parsed.data.mode);
+    return { mode: parsed.data.mode };
+  });
+
+  app.post("/api/a2a/confirm", async (request, reply) => {
+    const parsed = a2aConfirmationSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: "Invalid A2A confirmation", issues: parsed.error.flatten() });
+    }
+    if (!runtime.confirmA2A(parsed.data.threadId, parsed.data.approved)) {
+      return reply.code(404).send({ error: "A2A confirmation not found or expired" });
+    }
+    return { ok: true };
   });
 
   app.post("/api/conversations", async (req, reply) => {

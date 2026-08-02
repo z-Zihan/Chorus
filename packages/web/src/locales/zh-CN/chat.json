@@ -5,6 +5,7 @@
     "label": "选择 Agent",
     "all": "全部",
     "allAgents": "全部 Agents",
+    "broadcastWarning": "将发送给所有在线 Agent",
     "search": "搜索 Agents…",
     "noAgents": "暂无在线 Agent"
   },
@@ -23,6 +24,18 @@
   "a2aFailed": "失败",
   "a2aCancel": "取消调用",
   "a2aCancelled": "A2A 调用已取消",
+  "a2aPermission": {
+    "label": "A2A 权限",
+    "auto": "A2A 自动",
+    "confirm": "A2A 需确认",
+    "deny": "A2A 禁用"
+  },
+  "a2aConfirmation": {
+    "title": "确认 A2A 调用",
+    "description": "{{from}} 想调用 {{to}}，是否允许？",
+    "approve": "允许",
+    "deny": "拒绝"
+  },
   "a2aMessages_one": "{{count}} 条消息",
   "a2aMessages_other": "{{count}} 条消息",
   "taskRunning": "运行中",

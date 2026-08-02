@@ -1,5 +1,6 @@
 import { MessageList } from "@/components/message/MessageList";
 import { Download, FileJson, FileText, Menu, MessageSquare, Users } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { InputBar } from "@/components/layout/InputBar";
 import { useChatStore } from "@/store/chatStore";
@@ -12,6 +13,20 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { api } from "@/services/api";
 import { logger } from "@/utils/logger";
 import { GroupMemberList } from "@/components/chat/GroupMemberList";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import type { A2APermissionMode } from "@/services/api";
 
 export function ChatArea() {
   const { t } = useTranslation(["common", "chat"]);
@@ -20,12 +35,81 @@ export function ChatArea() {
   const groupConversations = useChatStore((s) => s.groupConversations);
   const archivedConversations = useChatStore((s) => s.archivedConversations);
   const agents = useAgentStore((s) => s.agents);
+  const pendingConfirmation = useChatStore((s) => s.a2aConfirmations[0]);
+  const dismissA2AConfirmation = useChatStore((s) => s.dismissA2AConfirmation);
   const openSidebar = useUIStore((s) => s.openSidebar);
+  const [a2aPermission, setA2APermission] = useState<A2APermissionMode>("auto");
+  const [permissionLoading, setPermissionLoading] = useState(false);
+  const [confirmationSubmitting, setConfirmationSubmitting] = useState(false);
   const currentConv = [...conversations, ...groupConversations, ...archivedConversations]
     .find((c) => c.id === currentConversationId);
   const currentAgents = currentConv?.agentIds
     .map((agentId) => agents.find((agent) => agent.id === agentId))
     .filter((agent): agent is NonNullable<typeof agent> => Boolean(agent)) ?? [];
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!currentConv || currentConv.type !== "group") {
+      setA2APermission("auto");
+      setPermissionLoading(false);
+      return;
+    }
+    setPermissionLoading(true);
+    void api.getA2APermission(currentConv.id)
+      .then(({ mode }) => {
+        if (!cancelled) setA2APermission(mode);
+      })
+      .catch((error: unknown) => logger.error("Failed to load A2A permission", error))
+      .finally(() => {
+        if (!cancelled) setPermissionLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [currentConv]);
+
+  useEffect(() => {
+    if (!pendingConfirmation) return;
+    const remaining = pendingConfirmation.expiresAt - Date.now();
+    if (remaining <= 0) {
+      dismissA2AConfirmation(pendingConfirmation.threadId);
+      return;
+    }
+    const timeout = setTimeout(
+      () => dismissA2AConfirmation(pendingConfirmation.threadId),
+      remaining,
+    );
+    return () => clearTimeout(timeout);
+  }, [dismissA2AConfirmation, pendingConfirmation]);
+
+  const handlePermissionChange = async (mode: string) => {
+    if (!currentConv || !isA2APermissionMode(mode)) return;
+    setPermissionLoading(true);
+    try {
+      const updated = await api.setA2APermission(currentConv.id, mode);
+      setA2APermission(updated.mode);
+    } catch (error) {
+      logger.error("Failed to update A2A permission", error);
+    } finally {
+      setPermissionLoading(false);
+    }
+  };
+
+  const handleA2AConfirmation = async (approved: boolean) => {
+    if (!pendingConfirmation || confirmationSubmitting) return;
+    setConfirmationSubmitting(true);
+    try {
+      await api.confirmA2A(pendingConfirmation.threadId, approved);
+    } catch (error) {
+      logger.error("Failed to confirm A2A call", error);
+    } finally {
+      dismissA2AConfirmation(pendingConfirmation.threadId);
+      setConfirmationSubmitting(false);
+    }
+  };
+
+  const confirmationFrom = agents.find((agent) => agent.id === pendingConfirmation?.from)?.name
+    ?? pendingConfirmation?.from;
+  const confirmationTo = agents.find((agent) => agent.id === pendingConfirmation?.to)?.name
+    ?? pendingConfirmation?.to;
 
   const handleExport = async (format: "markdown" | "json") => {
     if (!currentConv) return;
@@ -83,6 +167,25 @@ export function ChatArea() {
             )}
           </div>
         </div>
+        {currentConv?.type === "group" && (
+          <Select
+            value={a2aPermission}
+            onValueChange={(mode) => void handlePermissionChange(mode)}
+            disabled={permissionLoading}
+          >
+            <SelectTrigger
+              className="mr-2 h-8 w-auto min-w-28"
+              aria-label={t("chat:a2aPermission.label")}
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent align="end">
+              <SelectItem value="auto">{t("chat:a2aPermission.auto")}</SelectItem>
+              <SelectItem value="confirm">{t("chat:a2aPermission.confirm")}</SelectItem>
+              <SelectItem value="deny">{t("chat:a2aPermission.deny")}</SelectItem>
+            </SelectContent>
+          </Select>
+        )}
         {currentConv && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -112,6 +215,47 @@ export function ChatArea() {
 
       {/* Input */}
       <InputBar />
+
+      <Dialog
+        open={Boolean(pendingConfirmation)}
+        onOpenChange={(open) => {
+          if (!open) void handleA2AConfirmation(false);
+        }}
+      >
+        <DialogContent>
+          <DialogTitle>{t("chat:a2aConfirmation.title")}</DialogTitle>
+          <DialogDescription className="mt-2">
+            {t("chat:a2aConfirmation.description", {
+              from: confirmationFrom,
+              to: confirmationTo,
+            })}
+          </DialogDescription>
+          {pendingConfirmation?.message && (
+            <p className="mt-3 max-h-32 overflow-auto rounded-lg bg-[var(--bg-elevated)] p-3 text-sm text-[var(--text-secondary)]">
+              {pendingConfirmation.message}
+            </p>
+          )}
+          <div className="mt-5 flex justify-end gap-2">
+            <Button
+              variant="secondary"
+              disabled={confirmationSubmitting}
+              onClick={() => void handleA2AConfirmation(false)}
+            >
+              {t("chat:a2aConfirmation.deny")}
+            </Button>
+            <Button
+              disabled={confirmationSubmitting}
+              onClick={() => void handleA2AConfirmation(true)}
+            >
+              {t("chat:a2aConfirmation.approve")}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
+}
+
+function isA2APermissionMode(value: string): value is A2APermissionMode {
+  return value === "auto" || value === "confirm" || value === "deny";
 }

@@ -31,6 +31,8 @@ export interface ServerLogEntry {
   source: "backend";
 }
 
+export type A2APermissionMode = "auto" | "confirm" | "deny";
+
 // ===== API =====
 
 let lastOfflineToastAt = 0;
@@ -163,6 +165,18 @@ export const api = {
     method: "PATCH",
     body: JSON.stringify(data),
   }),
+  getA2APermission: (conversationId: string) =>
+    request<{ mode: A2APermissionMode }>(`/conversations/${conversationId}/a2a-permission`),
+  setA2APermission: (conversationId: string, mode: A2APermissionMode) =>
+    request<{ mode: A2APermissionMode }>(`/conversations/${conversationId}/a2a-permission`, {
+      method: "PATCH",
+      body: JSON.stringify({ mode }),
+    }),
+  confirmA2A: (threadId: string, approved: boolean) =>
+    request<{ ok: boolean }>("/a2a/confirm", {
+      method: "POST",
+      body: JSON.stringify({ threadId, approved }),
+    }),
   deleteConversations: (ids: string[]) =>
     request<{ count: number }>("/conversations/batch", {
       method: "DELETE",

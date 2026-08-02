@@ -18,6 +18,7 @@ export type ServerEvent =
   | { type: "message"; eventId: string; message: Message }
   | { type: "stream"; eventId: string; messageId: string; chunk: StreamChunk }
   | { type: "a2a_call"; eventId: string; from: string; to: string; message: string; threadId: string }
+  | { type: "a2a_confirmation_required"; eventId: string; threadId: string; from: string; to: string; message: string; expiresAt: number }
   | { type: "a2a_response"; eventId: string; threadId: string; chunk: StreamChunk }
   | { type: "tool_call_start"; eventId: string; threadId: string; conversationId?: string; parentMessageId?: string; from: string; to: string; message: string }
   | { type: "tool_call_result"; eventId: string; threadId: string; result: string }

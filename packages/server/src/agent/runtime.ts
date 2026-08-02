@@ -4,8 +4,9 @@ import { parseMentions, truncateHistory } from "@agentlink/shared";
 import type { Repository } from "../db/repository";
 import type { EventHub } from "../ws/events";
 import { messageFromError } from "./adapter";
-import { A2ABus } from "./a2a-bus";
+import { A2ABus, type A2AAuthorizationRequest, type A2AAuthorizationResult } from "./a2a-bus";
 import { AdapterMetrics, type AgentMetrics } from "./metrics";
+import { A2APermissions, type A2APermissionMode } from "./permissions";
 import type { AgentRegistry } from "./registry";
 import { track } from "../analytics";
 import { logger } from "../utils/logger";
@@ -15,7 +16,14 @@ import type { RelayClient } from "../hub/relay-client";
 export class AgentRuntime {
   private readonly controllers = new Map<string, AbortController>();
   private readonly a2aResults = new Map<string, string>();
+  private readonly pendingA2AConfirmations = new Map<string, {
+    resolve: (result: A2AAuthorizationResult) => void;
+    timeout: ReturnType<typeof setTimeout>;
+    signal?: AbortSignal;
+    abort?: () => void;
+  }>();
   private readonly a2aBus: A2ABus;
+  private readonly a2aPermissions: A2APermissions;
   private readonly metrics = new AdapterMetrics();
 
   constructor(
@@ -25,7 +33,32 @@ export class AgentRuntime {
     private readonly config: AppConfig,
     relayClient?: RelayClient,
   ) {
-    this.a2aBus = new A2ABus(registry, undefined, relayClient);
+    this.a2aPermissions = new A2APermissions(repository);
+    this.a2aBus = new A2ABus(
+      registry,
+      undefined,
+      relayClient,
+      (request) => this.authorizeA2A(request),
+    );
+  }
+
+  getA2APermission(conversationId: string): A2APermissionMode {
+    return this.a2aPermissions.getPermission(conversationId);
+  }
+
+  setA2APermission(conversationId: string, mode: A2APermissionMode): void {
+    this.a2aPermissions.setPermission(conversationId, mode);
+  }
+
+  confirmA2A(threadId: string, approved: boolean): boolean {
+    const pending = this.pendingA2AConfirmations.get(threadId);
+    if (!pending) return false;
+    this.clearPendingA2AConfirmation(threadId, pending);
+    pending.resolve({
+      approved,
+      error: approved ? undefined : "A2A 调用未获批准",
+    });
+    return true;
   }
 
   setHubMessageRouter(router: HubMessageRouter): void {
@@ -91,10 +124,13 @@ export class AgentRuntime {
       ...mentions,
       ...(explicitAgentId ? [explicitAgentId] : []),
     ])];
+    const firstOnlineAgentId = conversation.agentIds.find(
+      (agentId) => this.registry.getStatus(agentId) === "online",
+    );
     const targetAgentIds = conversation.type === "group"
       ? routingMentions.length > 0
-        ? routingMentions
-        : conversation.agentIds.filter((agentId) => this.registry.getStatus(agentId) === "online")
+        ? routingMentions.filter((agentId) => this.registry.getStatus(agentId) === "online")
+        : firstOnlineAgentId ? [firstOnlineAgentId] : []
       : [explicitAgentId ?? routingMentions[0] ?? conversation.agentIds[0]].filter(
           (agentId): agentId is string => Boolean(agentId),
         );
@@ -309,6 +345,59 @@ export class AgentRuntime {
       });
       this.a2aResults.delete(chunk.threadId);
     }
+  }
+
+  private async authorizeA2A(request: A2AAuthorizationRequest): Promise<A2AAuthorizationResult> {
+    const mode = this.a2aPermissions.getPermission(request.conversationId);
+    if (mode === "auto") return { approved: true };
+    if (mode === "deny") return { approved: false, error: "A2A 调用已被禁用" };
+    if (request.signal?.aborted) {
+      return { approved: false, error: "A2A 调用未获批准" };
+    }
+
+    const expiresAt = Date.now() + 30_000;
+    return new Promise<A2AAuthorizationResult>((resolve) => {
+      const timeout = setTimeout(() => {
+        const pending = this.pendingA2AConfirmations.get(request.threadId);
+        if (!pending) return;
+        this.clearPendingA2AConfirmation(request.threadId, pending);
+        resolve({ approved: false, error: "A2A 调用确认超时" });
+      }, 30_000);
+      const abort = request.signal
+        ? () => {
+            const pending = this.pendingA2AConfirmations.get(request.threadId);
+            if (!pending) return;
+            this.clearPendingA2AConfirmation(request.threadId, pending);
+            resolve({ approved: false, error: "A2A 调用未获批准" });
+          }
+        : undefined;
+      this.pendingA2AConfirmations.set(request.threadId, {
+        resolve,
+        timeout,
+        signal: request.signal,
+        abort,
+      });
+      request.signal?.addEventListener("abort", abort!, { once: true });
+      this.events.publish(request.conversationId, {
+        type: "a2a_confirmation_required",
+        threadId: request.threadId,
+        from: request.fromAgentId,
+        to: request.toAgentId,
+        message: request.message,
+        expiresAt,
+      });
+    });
+  }
+
+  private clearPendingA2AConfirmation(
+    threadId: string,
+    pending: (typeof this.pendingA2AConfirmations extends Map<string, infer T> ? T : never),
+  ): void {
+    clearTimeout(pending.timeout);
+    if (pending.signal && pending.abort) {
+      pending.signal.removeEventListener("abort", pending.abort);
+    }
+    this.pendingA2AConfirmations.delete(threadId);
   }
 }
 

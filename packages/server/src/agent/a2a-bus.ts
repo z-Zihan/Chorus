@@ -12,6 +12,24 @@ export interface A2ABusOptions {
   maxConcurrency: number;
 }
 
+export interface A2AAuthorizationRequest {
+  conversationId: string;
+  threadId: string;
+  fromAgentId: string;
+  toAgentId: string;
+  message: string;
+  signal?: AbortSignal;
+}
+
+export interface A2AAuthorizationResult {
+  approved: boolean;
+  error?: string;
+}
+
+export type A2AAuthorizer = (
+  request: A2AAuthorizationRequest,
+) => Promise<A2AAuthorizationResult>;
+
 export class A2ABus implements A2ABusLike {
   private readonly concurrency = new Map<string, number>();
   private readonly activeCalls = new Map<string, {
@@ -26,6 +44,7 @@ export class A2ABus implements A2ABusLike {
     private readonly registry: AgentRegistry,
     private readonly options: A2ABusOptions = { maxDepth: 5, chainTimeoutMs: 60_000, maxConcurrency: 3 },
     private readonly relayClient?: RelayClient,
+    private readonly authorize?: A2AAuthorizer,
   ) {}
 
   setHubMessageRouter(router: HubMessageRouter): void {
@@ -46,6 +65,23 @@ export class A2ABus implements A2ABusLike {
     }
     if (stack.length >= this.options.maxDepth) {
       yield { type: "error", content: `超过最大调用深度 ${this.options.maxDepth}`, threadId };
+      return;
+    }
+    const authorization = await this.authorize?.({
+      conversationId: context.conversationId,
+      threadId,
+      fromAgentId,
+      toAgentId,
+      message,
+      signal: context.signal,
+    });
+    if (authorization && !authorization.approved) {
+      yield {
+        type: "error",
+        content: authorization.error ?? "A2A 调用未获批准",
+        threadId,
+        sourceAgentId: toAgentId,
+      };
       return;
     }
     const remoteHubId = this.registry.getRemoteAgentHub(toAgentId);

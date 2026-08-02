@@ -177,7 +177,7 @@ export class Repository {
       this.context.db.insert(conversations).values({ id, title, type, createdAt: now, updatedAt: now }).run();
       if (uniqueAgentIds.length > 0) {
         this.context.db.insert(conversationAgents).values(
-          uniqueAgentIds.map((agentId) => ({ conversationId: id, agentId })),
+          uniqueAgentIds.map((agentId, position) => ({ conversationId: id, agentId, position })),
         ).run();
       }
     });
@@ -215,7 +215,8 @@ export class Repository {
   getConversationMembers(conversationId: string): Agent[] {
     const rows = this.context.db.select({ agent: agents }).from(conversationAgents)
       .innerJoin(agents, eq(conversationAgents.agentId, agents.id))
-      .where(eq(conversationAgents.conversationId, conversationId)).all();
+      .where(eq(conversationAgents.conversationId, conversationId))
+      .orderBy(asc(conversationAgents.position)).all();
     return rows.map(({ agent }) => ({
       id: agent.id,
       name: agent.name,
@@ -236,9 +237,19 @@ export class Repository {
     const uniqueAgentIds = [...new Set(agentIds)];
     if (!conversation || uniqueAgentIds.some((agentId) => !this.getAgentRow(agentId))) return undefined;
     if (uniqueAgentIds.length === 0) return conversation;
+    const existingLinks = this.context.db.select().from(conversationAgents)
+      .where(eq(conversationAgents.conversationId, conversationId)).all();
+    const nextPosition = existingLinks.reduce(
+      (highest, link) => Math.max(highest, link.position + 1),
+      0,
+    );
     const transaction = this.context.sqlite.transaction(() => {
       this.context.db.insert(conversationAgents).values(
-        uniqueAgentIds.map((agentId) => ({ conversationId, agentId })),
+        uniqueAgentIds.map((agentId, index) => ({
+          conversationId,
+          agentId,
+          position: nextPosition + index,
+        })),
       ).onConflictDoNothing().run();
       this.touchConversation(conversationId);
     });
@@ -370,7 +381,8 @@ export class Repository {
 
   private toConversation(row: typeof conversations.$inferSelect): Conversation {
     const links = this.context.db.select().from(conversationAgents)
-      .where(eq(conversationAgents.conversationId, row.id)).all();
+      .where(eq(conversationAgents.conversationId, row.id))
+      .orderBy(asc(conversationAgents.position)).all();
     const latest = this.context.db.select().from(messages)
       .where(eq(messages.conversationId, row.id)).orderBy(desc(messages.createdAt)).limit(1).get();
     return {

@@ -5,6 +5,7 @@
     "label": "Choose an agent",
     "all": "All",
     "allAgents": "All Agents",
+    "broadcastWarning": "Will send to all online Agents",
     "search": "Search agents…",
     "noAgents": "No online agents"
   },
@@ -23,6 +24,18 @@
   "a2aFailed": "Failed",
   "a2aCancel": "Cancel call",
   "a2aCancelled": "A2A call cancelled",
+  "a2aPermission": {
+    "label": "A2A permission",
+    "auto": "A2A Auto",
+    "confirm": "A2A Confirm",
+    "deny": "A2A Disabled"
+  },
+  "a2aConfirmation": {
+    "title": "Confirm A2A call",
+    "description": "{{from}} wants to call {{to}}. Allow this call?",
+    "approve": "Allow",
+    "deny": "Deny"
+  },
   "a2aMessages_one": "{{count}} message",
   "a2aMessages_other": "{{count}} messages",
   "taskRunning": "Running",

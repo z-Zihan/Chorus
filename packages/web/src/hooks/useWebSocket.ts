@@ -26,6 +26,7 @@ export function useWebSocket() {
   const startA2AThread = useChatStore((s) => s.startA2AThread);
   const completeA2AThread = useChatStore((s) => s.completeA2AThread);
   const failA2AThread = useChatStore((s) => s.failA2AThread);
+  const requestA2AConfirmation = useChatStore((s) => s.requestA2AConfirmation);
   const setWebSocketSend = useChatStore((s) => s.setWebSocketSend);
   const currentConversationId = useChatStore((s) => s.currentConversationId);
   const updateAgentStatus = useAgentStore((s) => s.updateAgentStatus);
@@ -118,6 +119,18 @@ export function useWebSocket() {
               threadId: event.threadId,
               status: "done",
               metadata: { a2aType: "call" },
+            });
+          }
+          break;
+
+        case "a2a_confirmation_required":
+          if (event.expiresAt > Date.now()) {
+            requestA2AConfirmation({
+              threadId: event.threadId,
+              from: event.from,
+              to: event.to,
+              message: event.message,
+              expiresAt: event.expiresAt,
             });
           }
           break;
@@ -264,6 +277,7 @@ export function useWebSocket() {
     startA2AThread,
     completeA2AThread,
     failA2AThread,
+    requestA2AConfirmation,
     setWebSocketSend,
     currentConversationId,
     updateAgentStatus,
