@@ -398,9 +398,9 @@ A4-01  A4-02  A4-03  (独立)
 |:---|------|------|:---:|------|:---:|
 | R5-01 | Relay 房间管理 | 创建/加入/离开/邀请 + 成员 + presence | 3h | R1-05 | 🔴 P0 | 🟡 |
 | R5-02 | 群聊消息扇出 | `to: "room:xxx"` → fan-out 在线成员 | 2h | R5-01 | 🔴 P0 | 🟡 |
-| R5-03 | 本地群聊会话 | Hub 端 group 类型会话 + conversation_agents | 2h | R5-01 | 🔴 P0 | 🔴 |
-| R5-04 | 群聊 UI | 群消息 + 成员列表 + 邀请 + @跨Hub Agent | 3h | R5-03 | 🟡 P1 | 🔴 |
-| R5-05 | 跨 Hub A2A | 群聊 @对方 Agent → 跨 Hub A2A 调用 | 2h | R5-02, R2-04 | 🟡 P1 | 🔴 |
+| R5-03 | 本地群聊会话 | Hub 端 group 类型会话 + conversation_agents | 2h | R5-01 | 🔴 P0 | ✅ |
+| R5-04 | 群聊 UI | 群消息 + 成员列表 + 邀请 + @跨Hub Agent | 3h | R5-03 | 🟡 P1 | ✅ |
+| R5-05 | 跨 Hub A2A | 群聊 @对方 Agent → 跨 Hub A2A 调用 | 2h | R5-02, R2-04 | 🟡 P1 | ✅ |
 
 ### 6.6 部署与文档
 
@@ -408,7 +408,7 @@ A4-01  A4-02  A4-03  (独立)
 |:---|------|------|:---:|------|:---:|
 | R6-01 | Docker 镜像 | Relay Dockerfile + 多阶段构建 + Docker Hub | 1.5h | R1-06 | 🟡 P1 | ✅ |
 | R6-02 | 自部署指南 | Docker + Nginx 反代 + TLS 配置文档 | 1h | R6-01 | 🟡 P1 | ✅ |
-| R6-03 | Hub 配置 UI | 设置面板: Relay 地址 + P2P 开关 + Hub ID | 1.5h | R2-05 | 🟡 P1 | 🔴 |
+| R6-03 | Hub 配置 UI | 设置面板: Relay 地址 + P2P 开关 + Hub ID | 1.5h | R2-05 | 🟡 P1 | ✅ |
 | R6-04 | 官方 Relay | 部署一个官方 Relay 实例 | 1h | R6-01 | 🟢 P2 | 🔴 |
 
 ---
@@ -418,11 +418,11 @@ A4-01  A4-02  A4-03  (独立)
 
 | ID | 标题 | 描述 | 优先级 | 状态 |
 |:---|------|------|:---:|:---:|
-| U-01 | 系统级密钥存储 | PRD §8.2.5 已设计：macOS Keychain / Windows Credential Manager / Linux Secret Service；SQLite 仅存 credentialRef。当前 API Key 明文存 DB。 | 🔴 P0 | 🔴 未开始 |
-| U-02 | A2A 权限确认 UI | PRD §2.3 要求：跨 Agent 调用需用户确认（自动/确认/拒绝）。当前 A2A 直接执行无确认。 | 🟡 P1 | 🔴 未开始 |
-| U-03 | 群聊路由语义统一 | PRD §8.4 说"无@默认只交给群主"，但代码实现是"无@广播所有在线 Agent"。需统一。 | 🔴 P0 | ⚠️ 需确认 |
-| U-04 | E2E 验证冲刺 | 干净环境首启测试 + TTFM 度量 + A2A 端到端 + 跨 Hub 端到端 + 群聊完整流程 | 🔴 P0 | 🔴 未开始 |
-| U-05 | A2A tool-calling 仅 OpenAI adapter | CLI adapter（Claude Code/Codex）不支持 tool-calling，A2A 只在 OpenAI API Agent 间工作 | 🟡 P1 | ⚠️ 设计限制 |
+| U-01 | 系统级密钥存储 | macOS Keychain + Windows Credential Manager + Linux libsecret + AES-256-GCM 文件兜底。credential-store.ts 400+ 行。 | 🔴 P0 | ✅ 已验证 |
+| U-02 | A2A 权限确认 UI | auto/confirm/deny 三模式 + 30s 超时 + 弹窗确认 + 3 个 API 端点 | 🟡 P1 | ✅ 已验证 |
+| U-03 | 群聊路由语义统一 | 无@→首个在线 Agent（不再广播）；显式 All→广播；AgentSelector 多选 | 🔴 P0 | ✅ 已验证 |
+| U-04 | E2E 验证冲刺 | 干净环境首启 ✅ + TTFM 7s ✅ + CLI adapter 修复 ✅ + WS lastEventId 修复 ✅ | 🔴 P0 | 🟡 部分完成 |
+| U-05 | A2A tool-calling 仅 OpenAI adapter | CLI adapter 不支持 tool-calling，A2A 只在 OpenAI API Agent 间工作。需 prompt-based A2A | 🟡 P1 | ⚠️ 设计限制 |
 
 ## 验证冲刺（优先于所有新功能开发）
 
@@ -441,13 +441,13 @@ A4-01  A4-02  A4-03  (独立)
 | 版本 | 任务数 | ✅ 已验证 | 🟡 已写未验证 | 🔴 未开始 |
 |------|:---:|:---:|:---:|:---:|
 | v0.1 收尾 | 18 | 18 | 0 | 0 |
-| 产品缺口修复 (G0-G4) | 22 | 20 | 1 | 0 |
-| v1.1 基建 | 35 | 25 | 9 | 0 |
-| v0.2 多 Agent (M1-M5) | 17 | 10 | 7 | 0 |
-| v0.3 群聊+生态 (A1-A4) | 13 | 8 | 3 | 0 |
-| v1.0 跨用户 (R1-R6) | 29 | 10 | 5 | 14 |
-| 未排期 (U-01~05) | 5 | 0 | 0 | 5 |
-| **合计** | **139** | **91** | **25** | **19** |
+| 产品缺口修复 (G0-G4) | 22 | 22 | 0 | 0 |
+| v1.1 基建 | 35 | 27 | 8 | 0 |
+| v0.2 多 Agent (M1-M5) | 17 | 12 | 5 | 0 |
+| v0.3 群聊+生态 (A1-A4) | 13 | 10 | 3 | 0 |
+| v1.0 跨用户 (R1-R6) | 29 | 24 | 4 | 1 |
+| 未排期 (U-01~05) | 5 | 3 | 1 | 1 |
+| **合计** | **139** | **116** | **21** | **2** |
 
 > ✅ 已验证 = 代码存在 + 单元/集成测试通过
 > 🟡 已写未验证 = 代码存在但无 E2E 验证或 PRD 验收测试
