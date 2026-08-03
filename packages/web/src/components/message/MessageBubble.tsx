@@ -21,6 +21,7 @@ interface Props {
   agentName?: string;
   agentAvatar?: string;
   isGroup?: boolean;
+  showHeader?: boolean;
 }
 
 function highlightMentions(children: ReactNode): ReactNode {

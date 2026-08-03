@@ -124,6 +124,8 @@ export function MessageList() {
     if (msg.threadId && seenThreads.has(msg.threadId)) continue;
 
     const agent = agents.find((a) => a.id === msg.fromId);
+    const prevMsg = i > 0 ? messages[i - 1] : null;
+    const isFirstFromAgent = !prevMsg || prevMsg.fromId !== msg.fromId || prevMsg.fromType !== msg.fromType;
     rendered.push(
       <MessageBubble
         key={msg.id}
@@ -131,6 +133,7 @@ export function MessageList() {
         agentName={isGroupConversation ? agent?.name ?? msg.fromId : agent?.name}
         agentAvatar={agent?.avatar}
         isGroup={isGroupConversation}
+        showHeader={isFirstFromAgent}
       />,
     );
 
@@ -152,7 +155,12 @@ export function MessageList() {
 
   // Show typing indicator when agent is thinking
   if (isStreaming && messages[messages.length - 1]?.fromType === "user") {
-    rendered.push(<TypingIndicator key="typing" />);
+    // Find which agent is responding
+
+    const lastUserMsg = messages[messages.length - 1];
+    const targetAgentId = lastUserMsg?.metadata?.agentId as string | undefined;
+    const agent = agents.find((a) => a.id === targetAgentId) ?? agents[0];
+    rendered.push(<TypingIndicator key="typing" agentName={agent?.name}  />);
   }
 
   return (
