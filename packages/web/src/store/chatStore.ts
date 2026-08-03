@@ -317,22 +317,17 @@ export const useChatStore = create<ChatState>((set, get) => {
     setWebSocketSend: (webSocketSend) => set({ webSocketSend }),
 
     createConversation: async (title, agentId) => {
+      const targetAgentId = agentId ?? useAgentStore.getState().selectedAgentId ?? undefined;
       const current = get();
-      // Only block if creating for the same agent and current is empty
-      if (
-        current.currentConversationId &&
-        current.messages.length === 0 &&
-        !current.isStreaming &&
-        (!agentId || current.currentConversationId && (() => {
-          // Check if current conversation already has this agent
-          const conv = [...current.conversations, ...current.groupConversations].find(c => c.id === current.currentConversationId);
-          return conv?.agentIds.includes(agentId) ?? false;
-        })())
-      ) {
-        return;
+      // Block only if: current is empty AND same agent (avoid duplicate empty convos)
+      if (current.currentConversationId && current.messages.length === 0 && !current.isStreaming) {
+        const conv = [...current.conversations, ...current.groupConversations].find(c => c.id === current.currentConversationId);
+        if (conv && (!targetAgentId || conv.agentIds.includes(targetAgentId))) {
+          // Switch to the existing empty conversation instead of creating a new one
+          if (conv.agentIds[0] === targetAgentId) return;
+        }
       }
 
-      const targetAgentId = agentId ?? useAgentStore.getState().selectedAgentId ?? undefined;
       try {
         const conv = await api.createConversation(title, targetAgentId);
         set((state) => ({

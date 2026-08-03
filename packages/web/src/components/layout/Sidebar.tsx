@@ -330,8 +330,8 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
                       key={agent.id}
                       onClick={() => {
                         selectAgent(agent.id);
-                        filterByAgent(isActive ? null : agent.id);
-                        if (!isActive) void createConversation(undefined, agent.id);
+                        filterByAgent(agent.id);
+                        void createConversation(undefined, agent.id);
                       }}
                       aria-pressed={isActive}
                       aria-label={t("sidebar:filterByAgent", { name: agent.name })}

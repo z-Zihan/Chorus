@@ -68,6 +68,9 @@ export function registerWebSocket(
       }
       const parsed = eventSchema.safeParse(raw);
       if (!parsed.success) {
+        const issues = parsed.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join('; ');
+        const rawType = typeof raw === 'object' && raw !== null ? (raw as Record<string, unknown>).type : 'unknown';
+        app.log.warn({ raw, issues, rawType }, "WebSocket event validation failed");
         events.sendDirect(ws, { type: "error", message: parsed.error.issues[0]?.message ?? "Invalid event" });
         return;
       }
