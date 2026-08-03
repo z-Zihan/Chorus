@@ -197,5 +197,30 @@
       "INVALID_DETECTION": "无效的 Agent 检测结果",
       "UNKNOWN": "发生未知错误，请重试"
     }
+  },
+  "scheduler": {
+    "title": "定时任务",
+    "empty": "暂无定时任务",
+    "create": "新建任务",
+    "delete": "删除",
+    "cron": "Cron 表达式",
+    "prompt": "执行提示词",
+    "agent": "Agent",
+    "enabled": "启用"
+  },
+  "plugins": {
+    "title": "插件",
+    "empty": "暂无插件",
+    "version": "版本",
+    "type": "类型",
+    "permissions": "权限"
+  },
+  "health": {
+    "healthy": "健康",
+    "checking": "检查中",
+    "unhealthy": "异常",
+    "lastCheck": "上次检查: {{time}}",
+    "unavailableReason": "Agent 不可用",
+    "ariaLabel": "健康状态: {{status}}"
   }
 }

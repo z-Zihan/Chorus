@@ -140,6 +140,7 @@ async function main(): Promise<void> {
     onboarding,
     undefined,
     undefined,
+    pluginLoader,
     hubIdentity && relayClient && connectionManager && connectHub && config.hub
       ? {
           identity: hubIdentity,

@@ -198,5 +198,30 @@
       "INVALID_DETECTION": "Invalid Agent detection result",
       "UNKNOWN": "An unknown error occurred. Please try again"
     }
+  },
+  "scheduler": {
+    "title": "Scheduled Tasks",
+    "empty": "No scheduled tasks",
+    "create": "New Task",
+    "delete": "Delete",
+    "cron": "Cron Expression",
+    "prompt": "Prompt",
+    "agent": "Agent",
+    "enabled": "Enabled"
+  },
+  "plugins": {
+    "title": "Plugins",
+    "empty": "No plugins loaded",
+    "version": "Version",
+    "type": "Type",
+    "permissions": "Permissions"
+  },
+  "health": {
+    "healthy": "Healthy",
+    "checking": "Checking",
+    "unhealthy": "Unhealthy",
+    "lastCheck": "Last check: {{time}}",
+    "unavailableReason": "Agent unavailable",
+    "ariaLabel": "Health: {{status}}"
   }
 }

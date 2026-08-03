@@ -9,6 +9,7 @@ import { A2AThread } from "./A2AThread";
 import { TaskTrackingCard } from "./TaskTrackingCard";
 
 const BOTTOM_THRESHOLD_PX = 80;
+const SCROLL_DEBOUNCE_MS = 100;
 
 function MessageSkeletons({ label }: { label: string }) {
   return (
@@ -45,6 +46,7 @@ export function MessageList() {
   const agents = useAgentStore((s) => s.agents);
   const scrollRef = useRef<HTMLDivElement>(null);
   const isAtBottomRef = useRef(true);
+  const isFirstRenderForConversationRef = useRef(true);
   const [showNewMessages, setShowNewMessages] = useState(false);
   const isGroupConversation = [...conversations, ...groupConversations, ...archivedConversations].find(
     (conversation) => conversation.id === currentConversationId,
@@ -70,16 +72,33 @@ export function MessageList() {
 
   useEffect(() => {
     isAtBottomRef.current = true;
+    isFirstRenderForConversationRef.current = true;
     setShowNewMessages(false);
   }, [currentConversationId]);
 
   useEffect(() => {
-    if (isAtBottomRef.current) {
+    if (isLoadingMessages) return;
+
+    if (isFirstRenderForConversationRef.current) {
+      isFirstRenderForConversationRef.current = false;
       scrollToBottom("auto");
+      return;
+    }
+
+    if (isAtBottomRef.current) {
+      const timeout = window.setTimeout(() => scrollToBottom("smooth"), SCROLL_DEBOUNCE_MS);
+      return () => window.clearTimeout(timeout);
     } else {
       setShowNewMessages(true);
     }
-  }, [messages, a2aThreads, isStreaming, scrollToBottom]);
+  }, [
+    messages,
+    a2aThreads,
+    isStreaming,
+    isLoadingMessages,
+    currentConversationId,
+    scrollToBottom,
+  ]);
 
   useEffect(() => {
     if (!targetMessageId || isLoadingMessages) return;

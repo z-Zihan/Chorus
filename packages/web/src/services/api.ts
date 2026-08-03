@@ -7,6 +7,8 @@ import type {
   InstallationStatus,
   InstallOptions,
 } from "@/store/catalogStore";
+import type { PluginInfo } from "@/store/pluginStore";
+import type { CreateScheduledTaskInput, ScheduledTask } from "@/store/schedulerStore";
 
 export interface SearchFilters {
   conversationId?: string;
@@ -48,6 +50,13 @@ export interface HubPeerStatus {
 export interface HubStatusResponse {
   relayState: HubConnectionState;
   peers: HubPeerStatus[];
+}
+
+export interface AgentMetrics {
+  totalCalls: number;
+  successRate: number;
+  avgLatencyMs: number;
+  lastCallAt: number | null;
 }
 
 // ===== API =====
@@ -117,6 +126,7 @@ export const api = {
   getAgents: (includeDisabled = false) =>
     request<Agent[]>(`/agents${includeDisabled ? "?includeDisabled=true" : ""}`),
   getAgent: (id: string) => request<Agent>(`/agents/${id}`),
+  getAgentMetrics: (id: string) => request<AgentMetrics>(`/agents/${id}/metrics`, undefined, true),
   createAgent: (data: AgentConfig) =>
     request<Agent>("/agents", {
       method: "POST",
@@ -154,6 +164,24 @@ export const api = {
     request<InstallationStatus>(`/installations/${id}/cancel`, {
       method: "POST",
     }),
+
+  // Scheduled tasks
+  getScheduledTasks: () => request<ScheduledTask[]>("/scheduler/tasks"),
+  createScheduledTask: (data: CreateScheduledTaskInput) =>
+    request<ScheduledTask>("/scheduler/tasks", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  deleteScheduledTask: (id: string) =>
+    request<{ ok: boolean }>(`/scheduler/tasks/${id}`, { method: "DELETE" }),
+  setScheduledTaskEnabled: (id: string, enabled: boolean) =>
+    request<ScheduledTask>(`/scheduler/tasks/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ enabled }),
+    }),
+
+  // Plugins
+  getPlugins: () => request<PluginInfo[]>("/plugins"),
 
   // Conversations
   getConversations: (archived = false, type?: ConversationType) => {

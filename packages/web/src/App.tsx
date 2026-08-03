@@ -21,6 +21,7 @@ export default function App() {
   const { t } = useTranslation(["common", "chat", "errors"]);
   const currentConversationId = useChatStore((s) => s.currentConversationId);
   const fetchAgents = useAgentStore((s) => s.fetchAgents);
+  const fetchHealthStatus = useAgentStore((s) => s.fetchHealthStatus);
   const fetchConversations = useChatStore((s) => s.fetchConversations);
   const isOffline = useUIStore((s) => s.isOffline);
   const isSidebarOpen = useUIStore((s) => s.isSidebarOpen);
@@ -59,9 +60,9 @@ export default function App() {
 
   // Init: load agents & conversations on mount
   useEffect(() => {
-    fetchAgents();
-    fetchConversations();
-  }, [fetchAgents, fetchConversations]);
+    void fetchAgents().then(fetchHealthStatus);
+    void fetchConversations();
+  }, [fetchAgents, fetchConversations, fetchHealthStatus]);
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[var(--bg-base)] text-[var(--text-primary)]">

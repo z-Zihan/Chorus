@@ -21,6 +21,7 @@ import { useChatStore, type Conversation } from "@/store/chatStore";
 import { useAgentStore } from "@/store/agentStore";
 import { useUIStore } from "@/store/uiStore";
 import { AgentAvatar } from "@/components/agent/AgentAvatar";
+import { AgentHealthBadge } from "@/components/agent/AgentHealthBadge";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -45,6 +46,25 @@ import { CatalogModal } from "@/components/catalog/CatalogModal";
 
 interface SidebarProps {
   onOpenSettings: () => void;
+}
+
+const LAST_GROUP_AGENTS_KEY = "agentlink-last-group-agents";
+
+function readLastGroupAgentIds(): Set<string> {
+  try {
+    const value = JSON.parse(localStorage.getItem(LAST_GROUP_AGENTS_KEY) ?? "[]") as unknown;
+    return new Set(Array.isArray(value) ? value.filter((id): id is string => typeof id === "string") : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function writeLastGroupAgentIds(agentIds: string[]): void {
+  try {
+    localStorage.setItem(LAST_GROUP_AGENTS_KEY, JSON.stringify(agentIds));
+  } catch {
+    // Group creation remains available when storage is unavailable.
+  }
 }
 
 export function Sidebar({ onOpenSettings }: SidebarProps) {
@@ -121,10 +141,21 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
       selectedAgents.map((agent) => agent.name).join(", ").slice(0, 120),
       selectedAgents.map((agent) => agent.id),
     );
+    writeLastGroupAgentIds(selectedAgents.map((agent) => agent.id));
     setIsCreatingGroup(false);
     setSelectedGroupAgentIds(new Set());
     setIsCreateGroupOpen(false);
     closeSidebar();
+  };
+
+  const openCreateGroupDialog = () => {
+    const onlineAgentIds = new Set(
+      agents.filter((agent) => agent.status === "online").map((agent) => agent.id),
+    );
+    setSelectedGroupAgentIds(new Set(
+      [...readLastGroupAgentIds()].filter((agentId) => onlineAgentIds.has(agentId)),
+    ));
+    setIsCreateGroupOpen(true);
   };
 
   useHotkey("Ctrl+N", () => void handleCreateConversation(), [createConversation, closeSidebar, conversationAgentFilter]);
@@ -350,6 +381,7 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
                         />
                       </span>
                       <span className="min-w-0 flex-1 truncate text-sm font-medium">{agent.name}</span>
+                      <AgentHealthBadge agentId={agent.id} />
                     </button>
                   );
                 })}
@@ -436,7 +468,7 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
                 variant="ghost"
                 size="icon"
                 className="h-7 w-7 shrink-0"
-                onClick={() => setIsCreateGroupOpen(true)}
+                onClick={openCreateGroupDialog}
                 aria-label={t("common:group.createGroup")}
                 title={t("common:group.createGroup")}
               >
@@ -534,8 +566,11 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
         onCancel={() => setShowBatchConfirmation(false)}
       />
       <Dialog open={isCreateGroupOpen} onOpenChange={(open) => {
-        setIsCreateGroupOpen(open);
-        if (!open && !isCreatingGroup) setSelectedGroupAgentIds(new Set());
+        if (open) openCreateGroupDialog();
+        else {
+          setIsCreateGroupOpen(false);
+          if (!isCreatingGroup) setSelectedGroupAgentIds(new Set());
+        }
       }}>
         <DialogContent>
           <DialogTitle>{t("common:group.createGroupTitle")}</DialogTitle>

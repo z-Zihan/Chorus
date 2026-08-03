@@ -16,6 +16,7 @@ import { registerCleanupRoutes } from "./cleanup.js";
 import { registerExportRoutes } from "./export.js";
 import { registerSearchRoutes } from "./search.js";
 import type { Scheduler } from "../scheduler/index.js";
+import { registerPluginRoutes } from "./plugins.js";
 import { registerSchedulerRoutes } from "./scheduler.js";
 import { registerMetricsRoutes } from "./metrics.js";
 import { registerHubRoutes, type HubRouteDependencies } from "./hub.js";
@@ -30,6 +31,7 @@ export function registerRoutes(
   onboarding = new OnboardingService(repository, registry, detector),
   catalog = new CatalogService(registry, detector),
   installer = new InstallExecutor(catalog, registry, detector),
+  loader?: import("../plugins/loader.js").PluginLoader,
   hub?: HubRouteDependencies,
 ): void {
   registerHealthRoutes(app);
@@ -44,5 +46,6 @@ export function registerRoutes(
   registerSchedulerRoutes(app, scheduler);
   registerOnboardingRoutes(app, onboarding);
   registerCatalogRoutes(app, catalog, installer);
+  if (loader) registerPluginRoutes(app, loader);
   if (hub) registerHubRoutes(app, hub);
 }

@@ -6,14 +6,24 @@ import { logger } from "@/utils/logger";
 
 export type { Agent, AgentStatus } from "@agentlink/shared";
 
+export type AgentHealthState = "healthy" | "checking" | "unhealthy";
+
+export interface AgentHealthStatus {
+  status: AgentHealthState;
+  lastCheck: number | null;
+  reason?: string;
+}
+
 interface AgentState {
   agents: Agent[];
   isLoading: boolean;
   selectedAgentId: string | null;
   conversationAgentFilter: string | null;
   statusByAgentId: Record<string, Pick<AgentStatusSnapshot, "status" | "error">>;
+  healthStatus: Record<string, AgentHealthStatus>;
 
   fetchAgents: () => Promise<void>;
+  fetchHealthStatus: () => Promise<void>;
   updateAgent: (
     agentId: string,
     data: Partial<Pick<AgentConfig, "name" | "description" | "avatar" | "config">>
@@ -27,12 +37,13 @@ interface AgentState {
   filterByAgent: (agentId: string | null) => void;
 }
 
-export const useAgentStore = create<AgentState>((set) => ({
+export const useAgentStore = create<AgentState>((set, get) => ({
   agents: [],
   isLoading: false,
   selectedAgentId: null,
   conversationAgentFilter: null,
   statusByAgentId: {},
+  healthStatus: {},
 
   fetchAgents: async () => {
     set({ isLoading: true });
@@ -49,6 +60,49 @@ export const useAgentStore = create<AgentState>((set) => ({
       logger.error("Failed to fetch agents", e);
       set({ isLoading: false });
     }
+  },
+
+  fetchHealthStatus: async () => {
+    const agents = get().agents;
+    if (agents.length === 0) return;
+    set((state) => ({
+      healthStatus: {
+        ...state.healthStatus,
+        ...Object.fromEntries(agents.map((agent) => [agent.id, {
+          status: "checking" as const,
+          lastCheck: state.healthStatus[agent.id]?.lastCheck ?? null,
+        }])),
+      },
+    }));
+
+    await Promise.all(agents.map(async (agent) => {
+      try {
+        await api.getAgentMetrics(agent.id);
+        const currentAgent = get().agents.find((item) => item.id === agent.id) ?? agent;
+        const unhealthy = currentAgent.status === "error" || currentAgent.status === "offline";
+        set((state) => ({
+          healthStatus: {
+            ...state.healthStatus,
+            [agent.id]: {
+              status: unhealthy ? "unhealthy" : "healthy",
+              lastCheck: Date.now(),
+              reason: unhealthy ? currentAgent.error : undefined,
+            },
+          },
+        }));
+      } catch (error) {
+        set((state) => ({
+          healthStatus: {
+            ...state.healthStatus,
+            [agent.id]: {
+              status: "unhealthy",
+              lastCheck: Date.now(),
+              reason: error instanceof Error ? error.message : undefined,
+            },
+          },
+        }));
+      }
+    }));
   },
 
   updateAgent: async (agentId, data) => {
@@ -94,13 +148,18 @@ export const useAgentStore = create<AgentState>((set) => ({
 
   deleteAgent: async (agentId) => {
     await api.deleteAgent(agentId);
-    set((state) => ({
-      agents: state.agents.filter((agent) => agent.id !== agentId),
-      selectedAgentId: state.selectedAgentId === agentId ? null : state.selectedAgentId,
-      conversationAgentFilter: state.conversationAgentFilter === agentId
-        ? null
-        : state.conversationAgentFilter,
-    }));
+    set((state) => {
+      const healthStatus = { ...state.healthStatus };
+      delete healthStatus[agentId];
+      return {
+        agents: state.agents.filter((agent) => agent.id !== agentId),
+        healthStatus,
+        selectedAgentId: state.selectedAgentId === agentId ? null : state.selectedAgentId,
+        conversationAgentFilter: state.conversationAgentFilter === agentId
+          ? null
+          : state.conversationAgentFilter,
+      };
+    });
   },
 
   selectAgent: (agentId) => set({ selectedAgentId: agentId }),
