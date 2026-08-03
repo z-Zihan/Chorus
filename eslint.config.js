@@ -65,6 +65,7 @@ module.exports = tseslint.config(
       ...react.configs.flat.recommended.rules,
       ...react.configs.flat["jsx-runtime"].rules,
       ...reactHooks.configs.flat.recommended.rules,
+      "react-hooks/set-state-in-effect": "off",
       "react/prop-types": "off",
       "react/jsx-no-literals": [
         "warn",

@@ -994,6 +994,29 @@ first_response_completed { elapsedMs, success }
 
 验收必须使用新用户干净环境测试，而不是只在开发者已存在的 `agentlink.config.ts` 上测试。
 
+### 8.4 Prompt-based A2A for CLI Adapters
+
+CLI adapters (Claude Code, Codex) don't support OpenAI's tool-calling parameter. AgentLink injects a system prompt teaching the CLI agent to use the `[A2A_CALL: target: message]` format. After CLI output completes, the adapter parses calls, executes them via `a2aBus`, and feeds the responses back to the CLI agent. The process is limited to 3 rounds. See `packages/server/src/agent/agentlink-skill.ts` for the full skill text.
+
+### 8.5 Credential Storage Architecture
+
+- macOS: Keychain via the `security` command
+- Windows: Credential Manager via PowerShell
+- Linux: libsecret via `secret-tool`
+- Fallback: AES-256-GCM encrypted file with a machine-specific key
+- The DB stores only `credentialRef`, never plaintext API keys
+- Auto-migration moves existing plaintext keys to the keychain on first load
+- The REST API never returns `apiKey` in responses
+
+### 8.6 A2A Permission System
+
+- Per-conversation mode: `auto` | `confirm` | `deny`
+- `auto`: A2A calls execute immediately (default)
+- `confirm`: emit an `a2a_confirmation_required` event and wait for `POST /api/a2a/confirm`
+- `deny`: return the immediate error `"A2A 调用已被禁用"`
+- Confirmation times out after 30 seconds and is automatically denied
+- The mode is stored in the `app_settings` table
+
 ## 9. 部署
 
 ### Tauri 桌面客户端开发

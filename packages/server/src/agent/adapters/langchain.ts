@@ -54,8 +54,10 @@ export class LangChainAdapter extends BaseAdapter {
     };
     if (config.endpoint) {
       yield* this.streamEndpoint(config, input, context.signal);
+    } else if (config.runnableScript) {
+      yield* this.streamRunnable(config.runnableScript, input, context.signal);
     } else {
-      yield* this.streamRunnable(config.runnableScript!, input, context.signal);
+      throw new Error("LangChain adapter is missing endpoint and runnableScript configuration");
     }
     yield { type: "done", content: "" };
   }
@@ -65,7 +67,9 @@ export class LangChainAdapter extends BaseAdapter {
     input: Record<string, unknown>,
     signal?: AbortSignal,
   ): AsyncGenerator<StreamChunk> {
-    const response = await fetch(config.endpoint!, {
+    const endpoint = config.endpoint;
+    if (!endpoint) throw new Error("LangChain endpoint is not configured");
+    const response = await fetch(endpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

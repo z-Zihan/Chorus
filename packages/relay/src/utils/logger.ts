@@ -16,7 +16,13 @@ class PrettyLogStream extends Writable {
         ? ({ 10: "TRACE", 20: "DEBUG", 30: "INFO", 40: "WARN", 50: "ERROR", 60: "FATAL" }[record.level] ?? "INFO")
         : "INFO";
       const message = typeof record.msg === "string" ? record.msg : "";
-      const { level: _level, time: _time, msg: _msg, pid: _pid, hostname: _hostname, service: _service, ...details } = record;
+      const details = { ...record };
+      delete details.level;
+      delete details.time;
+      delete details.msg;
+      delete details.pid;
+      delete details.hostname;
+      delete details.service;
       const suffix = Object.keys(details).length > 0 ? ` ${JSON.stringify(details)}` : "";
       process.stdout.write(`[${time}] ${level} ${message}${suffix}\n`);
       callback();

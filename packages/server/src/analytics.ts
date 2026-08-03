@@ -26,9 +26,10 @@ const providers = new Map<string, AnalyticsProvider>();
 const eventQueue: AnalyticsEvent[] = [];
 const configuredProvider = process.env.SERVER_ANALYTICS_PROVIDER?.trim().toLowerCase() || "noop";
 
-providers.set("noop", new NoopAnalyticsProvider());
+const noopProvider = new NoopAnalyticsProvider();
+providers.set("noop", noopProvider);
 providers.set("sentry", new SentryAnalyticsProvider());
-let activeProvider = providers.get(configuredProvider) ?? providers.get("noop")!;
+let activeProvider: AnalyticsProvider = providers.get(configuredProvider) ?? noopProvider;
 
 export function registerAnalyticsProvider(name: string, provider: AnalyticsProvider): void {
   const normalizedName = name.trim().toLowerCase();

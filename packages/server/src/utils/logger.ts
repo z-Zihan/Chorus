@@ -45,11 +45,17 @@ const levelColors: Record<LogLevel, string> = {
 
 function normalizeLog(record: Record<string, unknown>): ServerLogEntry {
   const level = levelNames[Number(record.level)] ?? "info";
-  const { level: _level, time, msg, pid: _pid, hostname: _hostname, service: _service, ...data } = record;
+  const data = { ...record };
+  delete data.level;
+  delete data.time;
+  delete data.msg;
+  delete data.pid;
+  delete data.hostname;
+  delete data.service;
   return {
-    timestamp: typeof time === "number" ? time : Date.now(),
+    timestamp: typeof record.time === "number" ? record.time : Date.now(),
     level,
-    message: typeof msg === "string" ? msg : "",
+    message: typeof record.msg === "string" ? record.msg : "",
     ...(Object.keys(data).length > 0 ? { data } : {}),
     source: "backend",
   };

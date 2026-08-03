@@ -433,6 +433,10 @@ export class CliAdapter extends BaseAdapter {
     child: ChildProcess,
     outputMode: CliOutputMode,
   ): AsyncGenerator<StreamChunk, ProcessResult> {
+    const { stdout, stderr: childStderr } = child;
+    if (!stdout || !childStderr) {
+      throw new Error("CLI process output streams are unavailable");
+    }
     let stdoutBuffer = "";
     let stderr = "";
     let processError: Error | undefined;
@@ -492,12 +496,12 @@ export class CliAdapter extends BaseAdapter {
       return chunks;
     };
 
-    child.stderr!.on("data", (chunk: Buffer) => {
+    childStderr.on("data", (chunk: Buffer) => {
       stderr += chunk.toString();
       if (stderr.length > 32_000) stderr = stderr.slice(-32_000);
     });
 
-    for await (const raw of child.stdout!) {
+    for await (const raw of stdout) {
       stdoutBuffer += Buffer.isBuffer(raw) ? raw.toString() : String(raw);
       const chunks = flushBuffer();
       for (const chunk of chunks) yield chunk;

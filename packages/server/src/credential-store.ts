@@ -39,9 +39,7 @@ export async function setCredential(agentId: string, apiKey: string): Promise<vo
       activateFileFallback(backend, error);
     }
   }
-  await mutateFileCredentials((credentials) => {
-    credentials[agentId] = apiKey;
-  });
+  await mutateFileCredentials((credentials) => ({ ...credentials, [agentId]: apiKey }));
 }
 
 export async function getCredential(agentId: string): Promise<string | null> {
@@ -69,9 +67,9 @@ export async function deleteCredential(agentId: string): Promise<void> {
       activateFileFallback(backend, error);
     }
   }
-  await mutateFileCredentials((credentials) => {
-    delete credentials[agentId];
-  });
+  await mutateFileCredentials((credentials) => Object.fromEntries(
+    Object.entries(credentials).filter(([storedAgentId]) => storedAgentId !== agentId),
+  ));
 }
 
 export async function hasCredential(agentId: string): Promise<boolean> {
@@ -362,11 +360,12 @@ async function writeFileCredentials(credentials: Record<string, string>): Promis
   if (process.platform !== "win32") await access(FALLBACK_FILE, fsConstants.R_OK | fsConstants.W_OK);
 }
 
-function mutateFileCredentials(mutation: (credentials: Record<string, string>) => void): Promise<void> {
+function mutateFileCredentials(
+  mutation: (credentials: Record<string, string>) => Record<string, string>,
+): Promise<void> {
   const operation = fileMutationQueue.then(async () => {
     const credentials = await readFileCredentials();
-    mutation(credentials);
-    await writeFileCredentials(credentials);
+    await writeFileCredentials(mutation(credentials));
   });
   fileMutationQueue = operation.catch(() => undefined);
   return operation;

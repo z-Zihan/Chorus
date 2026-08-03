@@ -377,7 +377,9 @@ export class AgentRuntime {
         signal: request.signal,
         abort,
       });
-      request.signal?.addEventListener("abort", abort!, { once: true });
+      if (request.signal && abort) {
+        request.signal.addEventListener("abort", abort, { once: true });
+      }
       this.events.publish(request.conversationId, {
         type: "a2a_confirmation_required",
         threadId: request.threadId,

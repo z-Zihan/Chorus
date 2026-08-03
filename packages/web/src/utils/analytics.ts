@@ -32,12 +32,13 @@ const providers = new Map<string, AnalyticsProvider>();
 const eventQueue: AnalyticsEvent[] = [];
 
 providers.set("console", new ConsoleAnalyticsProvider());
-providers.set("noop", new NoopAnalyticsProvider());
+const noopProvider = new NoopAnalyticsProvider();
+providers.set("noop", noopProvider);
 providers.set("sentry", new SentryAnalyticsProvider());
 
 const configuredProvider = import.meta.env.VITE_ANALYTICS_PROVIDER?.trim().toLowerCase();
-let activeProvider = providers.get(configuredProvider || (import.meta.env.DEV ? "console" : "noop"))
-  ?? providers.get("noop")!;
+let activeProvider: AnalyticsProvider = providers.get(configuredProvider || (import.meta.env.DEV ? "console" : "noop"))
+  ?? noopProvider;
 
 export function registerAnalyticsProvider(name: string, provider: AnalyticsProvider): void {
   providers.set(name.trim().toLowerCase(), provider);

@@ -1,11 +1,12 @@
 import { existsSync } from "node:fs";
+import type * as NodeFs from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("node:fs", async (importOriginal) => {
-  const original = await importOriginal<typeof import("node:fs")>();
+  const original = await importOriginal<typeof NodeFs>();
   return { ...original, existsSync: vi.fn(original.existsSync) };
 });
 

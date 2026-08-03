@@ -5,9 +5,8 @@ export interface RelaySocket {
   close(code?: number, reason?: string): void;
   terminate(): void;
   on(event: "message", listener: (data: { toString(): string }) => void): this;
-  on(event: "close", listener: () => void): this;
+  on(event: "close" | "pong", listener: () => void): this;
   on(event: "error", listener: (error: Error) => void): this;
-  on(event: "pong", listener: () => void): this;
 }
 
 export const OPEN_SOCKET_STATE = 1;

@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import type { HubConfig } from "@agentlink/shared";
 import type { AgentRegistry } from "../agent/registry.js";
 import type { ConnectionManager } from "../hub/connection-manager.js";
 import type { HubIdentity } from "../hub/identity.js";
@@ -9,7 +10,7 @@ export interface HubRouteDependencies {
   relayClient: RelayClient;
   registry: AgentRegistry;
   connectionManager: ConnectionManager;
-  hubConfig: import("@agentlink/shared").HubConfig;
+  hubConfig: HubConfig;
   connect: () => Promise<void>;
 }
 
