@@ -17,7 +17,7 @@ import { announceUpdate, checkForUpdates } from "@/services/updater";
 import { track } from "@/utils/analytics";
 
 const APP_VERSION = "0.1.0";
-const HOMEPAGE_URL = "https://agentlink.app";
+const HOMEPAGE_URL = "https://github.com/z-Zihan/agent-link";
 
 interface SettingsPanelProps {
   open: boolean;

@@ -138,10 +138,15 @@ export const api = {
     const query = params.toString();
     return request<Conversation[]>(`/conversations${query ? `?${query}` : ""}`);
   },
-  createConversation: (title?: string, agentIds?: string[], type: ConversationType = "dm") =>
+  createConversation: (title?: string, agentId?: string | string[], type: ConversationType = "dm") =>
     request<Conversation>("/conversations", {
       method: "POST",
-      body: JSON.stringify({ title, agentIds, type } satisfies CreateConversationInput),
+      body: JSON.stringify({
+        title,
+        agentId: typeof agentId === "string" ? agentId : undefined,
+        agentIds: Array.isArray(agentId) ? agentId : undefined,
+        type,
+      } satisfies CreateConversationInput & { agentId?: string }),
     }),
   getConversationMembers: (conversationId: string) =>
     request<Agent[]>(`/conversations/${conversationId}/members`),

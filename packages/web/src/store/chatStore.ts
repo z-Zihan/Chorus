@@ -67,7 +67,7 @@ interface ChatState {
   requestA2AConfirmation: (confirmation: A2AConfirmation) => void;
   dismissA2AConfirmation: (threadId: string) => void;
   setWebSocketSend: (send: WebSocketSend | null) => void;
-  createConversation: (title?: string) => Promise<void>;
+  createConversation: (title?: string, agentId?: string) => Promise<void>;
   createGroupConversation: (title: string, agentIds: string[]) => Promise<void>;
   syncConversation: (conversation: Conversation) => void;
   renameConversation: (id: string, title: string) => Promise<boolean>;
@@ -316,7 +316,7 @@ export const useChatStore = create<ChatState>((set, get) => {
 
     setWebSocketSend: (webSocketSend) => set({ webSocketSend }),
 
-    createConversation: async (title) => {
+    createConversation: async (title, agentId) => {
       const current = get();
       if (
         current.currentConversationId &&
@@ -326,8 +326,9 @@ export const useChatStore = create<ChatState>((set, get) => {
         return;
       }
 
+      const targetAgentId = agentId ?? useAgentStore.getState().selectedAgentId ?? undefined;
       try {
-        const conv = await api.createConversation(title);
+        const conv = await api.createConversation(title, targetAgentId);
         set((state) => ({
           conversations: sortConversations([conv, ...state.conversations]),
           currentConversationId: conv.id,

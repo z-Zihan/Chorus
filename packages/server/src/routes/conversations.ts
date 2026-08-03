@@ -5,7 +5,7 @@ import type { AgentRegistry } from "../agent/registry.js";
 import type { Repository } from "../db/repository.js";
 
 const createConversationSchema = z.object({
-  title: z.string().trim().min(1).max(120).optional(),
+  title: z.string().trim().min(1).max(120).nullish().transform((value) => value ?? undefined).optional(),
   type: z.enum(["dm", "channel", "group"]).default("dm"),
   agentIds: z.array(z.string().trim().min(1)).max(20).optional(),
   agentId: z.string().trim().min(1).optional(),

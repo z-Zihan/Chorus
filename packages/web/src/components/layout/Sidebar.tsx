@@ -110,7 +110,7 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
   };
 
   const handleCreateConversation = async () => {
-    await createConversation();
+    await createConversation(undefined, conversationAgentFilter ?? undefined);
     closeSidebar();
   };
 
@@ -128,7 +128,7 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
     closeSidebar();
   };
 
-  useHotkey("Ctrl+N", () => void handleCreateConversation(), [createConversation, closeSidebar]);
+  useHotkey("Ctrl+N", () => void handleCreateConversation(), [createConversation, closeSidebar, conversationAgentFilter]);
 
   const handleConfirmDelete = async () => {
     if (!conversationToDelete) return;
