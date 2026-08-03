@@ -8,12 +8,14 @@ import type { RelayClient } from "./relay-client.js";
 type PeerListener = (hubId: string) => void;
 type MessageListener = (hubId: string, envelope: HubEnvelope) => void;
 
-type P2PMessage =
+export type P2PMessage =
   | { type: "p2p_register"; hubId: string; nonce: string }
   | { type: "p2p_challenge"; nonce: string }
   | { type: "p2p_response"; signature: string }
   | { type: "p2p_confirm"; signature: string }
-  | { type: "p2p_message"; envelope: HubEnvelope };
+  | { type: "p2p_message"; envelope: HubEnvelope }
+  | { type: "p2p_ping"; timestamp: number }
+  | { type: "p2p_pong"; timestamp: number };
 
 interface SocketState {
   outbound: boolean;
@@ -24,6 +26,7 @@ interface SocketState {
 }
 
 const HANDSHAKE_TIMEOUT_MS = 10_000;
+const PONG_TIMEOUT_MS = 5_000;
 
 export class P2PListener {
   private server?: WebSocketServer;
@@ -35,6 +38,10 @@ export class P2PListener {
   private readonly connectedListeners = new Set<PeerListener>();
   private readonly disconnectedListeners = new Set<PeerListener>();
   private readonly messageListeners = new Set<MessageListener>();
+  private readonly p2pLatencies = new Map<string, number>();
+  private readonly pendingPings = new Map<string, number>();
+  private readonly pongTimers = new Map<string, NodeJS.Timeout>();
+  private healthCheckTimer?: NodeJS.Timeout;
 
   constructor(private readonly relayClient: RelayClient) {}
 
@@ -127,6 +134,25 @@ export class P2PListener {
     return true;
   }
 
+  startHealthChecks(intervalMs = 30_000): void {
+    this.stopHealthChecks();
+    this.healthCheckTimer = setInterval(() => this.pingConnectedPeers(), intervalMs);
+    this.healthCheckTimer.unref();
+  }
+
+  stopHealthChecks(): void {
+    if (this.healthCheckTimer) clearInterval(this.healthCheckTimer);
+    this.healthCheckTimer = undefined;
+    for (const timer of this.pongTimers.values()) clearTimeout(timer);
+    this.pongTimers.clear();
+    this.pendingPings.clear();
+  }
+
+  getP2PLatency(hubId: string): number | null {
+    if (!this.isConnected(hubId)) return null;
+    return this.p2pLatencies.get(hubId) ?? null;
+  }
+
   onPeerConnected(callback: PeerListener): () => void {
     this.connectedListeners.add(callback);
     return () => this.connectedListeners.delete(callback);
@@ -143,11 +169,13 @@ export class P2PListener {
   }
 
   async stop(): Promise<void> {
+    this.stopHealthChecks();
     const server = this.server;
     this.server = undefined;
     this.connectingPeers.clear();
     for (const socket of this.connections.values()) socket.close(1001, "P2P listener stopped");
     this.connections.clear();
+    this.p2pLatencies.clear();
     if (!server) return;
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
@@ -184,7 +212,7 @@ export class P2PListener {
     const message = parseMessage(data);
     if (!message) throw new Error("Invalid P2P message");
     if (state.authenticated) {
-      this.deliverMessage(state, message);
+      this.deliverMessage(socket, state, message);
       return;
     }
     if (!state.hubId) {
@@ -223,7 +251,7 @@ export class P2PListener {
     const message = parseMessage(data);
     if (!message) throw new Error("Invalid P2P message");
     if (state.authenticated) {
-      this.deliverMessage(state, message);
+      this.deliverMessage(socket, state, message);
       return;
     }
     if (!state.remoteNonce) {
@@ -254,21 +282,33 @@ export class P2PListener {
     if (!hubId) throw new Error("Cannot authenticate an unidentified P2P peer");
     const existing = this.connections.get(hubId);
     if (existing && existing !== socket) existing.close(1000, "P2P connection replaced");
+    this.clearPeerHealth(hubId);
     state.authenticated = true;
     this.connections.set(hubId, socket);
     logger.info({ hubId }, "P2P peer authenticated");
     for (const listener of this.connectedListeners) listener(hubId);
   }
 
-  private deliverMessage(state: SocketState, message: P2PMessage): void {
-    if (message.type !== "p2p_message" || !state.hubId) return;
-    for (const listener of this.messageListeners) listener(state.hubId, message.envelope);
+  private deliverMessage(socket: WebSocket, state: SocketState, message: P2PMessage): void {
+    if (!state.hubId) return;
+    if (message.type === "p2p_ping") {
+      this.send(socket, { type: "p2p_pong", timestamp: Date.now() });
+      return;
+    }
+    if (message.type === "p2p_pong") {
+      this.handlePong(state.hubId);
+      return;
+    }
+    if (message.type === "p2p_message") {
+      for (const listener of this.messageListeners) listener(state.hubId, message.envelope);
+    }
   }
 
   private handleClose(socket: WebSocket, state: SocketState): void {
     const hubId = state.hubId;
     if (!hubId || this.connections.get(hubId) !== socket) return;
     this.connections.delete(hubId);
+    this.clearPeerHealth(hubId);
     logger.info({ hubId }, "P2P peer disconnected");
     for (const listener of this.disconnectedListeners) listener(hubId);
   }
@@ -281,6 +321,44 @@ export class P2PListener {
   private send(socket: WebSocket, message: P2PMessage): void {
     if (socket.readyState !== WebSocket.OPEN) throw new Error("P2P socket is not open");
     socket.send(JSON.stringify(message));
+  }
+
+  private pingConnectedPeers(): void {
+    for (const [hubId, socket] of this.connections) {
+      if (socket.readyState !== WebSocket.OPEN) continue;
+      const timestamp = Date.now();
+      this.pendingPings.set(hubId, timestamp);
+      this.send(socket, { type: "p2p_ping", timestamp });
+      const existingTimer = this.pongTimers.get(hubId);
+      if (existingTimer) clearTimeout(existingTimer);
+      const timer = setTimeout(() => {
+        this.pongTimers.delete(hubId);
+        this.pendingPings.delete(hubId);
+        if (this.connections.get(hubId) !== socket) return;
+        logger.warn({ hubId }, "P2P peer pong timeout; closing unhealthy connection");
+        socket.close(1011, "P2P health check timed out");
+      }, PONG_TIMEOUT_MS);
+      timer.unref();
+      this.pongTimers.set(hubId, timer);
+    }
+  }
+
+  private handlePong(hubId: string): void {
+    const timestamp = this.pendingPings.get(hubId);
+    if (timestamp === undefined) return;
+    this.pendingPings.delete(hubId);
+    const timer = this.pongTimers.get(hubId);
+    if (timer) clearTimeout(timer);
+    this.pongTimers.delete(hubId);
+    this.p2pLatencies.set(hubId, Date.now() - timestamp);
+  }
+
+  private clearPeerHealth(hubId: string): void {
+    const timer = this.pongTimers.get(hubId);
+    if (timer) clearTimeout(timer);
+    this.pongTimers.delete(hubId);
+    this.pendingPings.delete(hubId);
+    this.p2pLatencies.delete(hubId);
   }
 }
 

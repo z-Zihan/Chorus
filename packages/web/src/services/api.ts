@@ -1,4 +1,4 @@
-import type { Agent, AgentConfig, CliDetection, Conversation, ConversationType, CreateConversationInput, Message, OnboardingStatus } from "@agentlink/shared";
+import type { Agent, AgentConfig, CliDetection, Conversation, ConversationType, CreateConversationInput, HubConnectionState, Message, OnboardingStatus } from "@agentlink/shared";
 import { useUIStore } from "@/store/uiStore";
 import { getApiBaseUrl } from "./env";
 import i18n from "@/i18n";
@@ -38,13 +38,26 @@ export interface CredentialStatus {
   agents: Array<{ id: string; name: string }>;
 }
 
+export interface HubPeerStatus {
+  hubId: string;
+  displayName: string;
+  path: "p2p" | "relay" | "none";
+  latency: number | null;
+}
+
+export interface HubStatusResponse {
+  relayState: HubConnectionState;
+  peers: HubPeerStatus[];
+}
+
 // ===== API =====
 
 let lastOfflineToastAt = 0;
 
 async function request<T>(
   path: string,
-  options?: RequestInit
+  options?: RequestInit,
+  silent = false,
 ): Promise<T> {
   let res: Response;
   try {
@@ -76,7 +89,7 @@ async function request<T>(
     } catch {
       // Keep the plain-text response as the error message.
     }
-    useUIStore.getState().addToast(message, "error");
+    if (!silent) useUIStore.getState().addToast(message, "error");
     throw new Error(message);
   }
 
@@ -96,6 +109,9 @@ async function requestBlob(path: string): Promise<Blob> {
 export const api = {
   // Health
   health: () => request<{ ok: boolean }>("/health"),
+
+  // Hub
+  getHubStatus: () => request<HubStatusResponse>("/hub/status", undefined, true),
 
   // Agents
   getAgents: (includeDisabled = false) =>

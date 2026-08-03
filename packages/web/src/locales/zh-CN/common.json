@@ -28,6 +28,24 @@
     "unsupported": "版本不兼容",
     "ready": "可用"
   },
+  "hub": {
+    "connectionStatus": "Hub 连接状态",
+    "connected": "已连接",
+    "disconnected": "未连接",
+    "connecting": "连接中",
+    "reconnecting": "重新连接中",
+    "error": "连接错误",
+    "p2pPeers": "{{count}} 个 P2P 节点",
+    "relay": "中继",
+    "latency": "{{latency}} 毫秒",
+    "latencyUnknown": "—",
+    "noPeers": "暂无已知节点",
+    "path": {
+      "p2p": "P2P",
+      "relay": "中继",
+      "none": "离线"
+    }
+  },
   "group": {
     "createGroup": "创建群聊",
     "memberCount": "{{count}} 位成员",

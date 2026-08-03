@@ -27,6 +27,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { A2APermissionMode } from "@/services/api";
+import { ConnectionStatus } from "@/components/hub/ConnectionStatus";
 
 export function ChatArea() {
   const { t } = useTranslation(["common", "chat"]);
@@ -167,6 +168,7 @@ export function ChatArea() {
             )}
           </div>
         </div>
+        <ConnectionStatus />
         {currentConv?.type === "group" && (
           <Select
             value={a2aPermission}

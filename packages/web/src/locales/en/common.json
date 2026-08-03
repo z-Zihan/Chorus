@@ -28,6 +28,25 @@
     "unsupported": "Unsupported",
     "ready": "Ready"
   },
+  "hub": {
+    "connectionStatus": "Hub connection status",
+    "connected": "Connected",
+    "disconnected": "Disconnected",
+    "connecting": "Connecting",
+    "reconnecting": "Reconnecting",
+    "error": "Connection error",
+    "p2pPeers": "{{count}} P2P peer",
+    "p2pPeers_other": "{{count}} P2P peers",
+    "relay": "Relay",
+    "latency": "{{latency}} ms",
+    "latencyUnknown": "—",
+    "noPeers": "No known peers",
+    "path": {
+      "p2p": "P2P",
+      "relay": "Relay",
+      "none": "Offline"
+    }
+  },
   "group": {
     "createGroup": "Create group chat",
     "memberCount": "{{count}} members",

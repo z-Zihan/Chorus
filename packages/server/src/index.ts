@@ -26,6 +26,7 @@ import { RelayClient } from "./hub/relay-client.js";
 import { HubMessageRouter } from "./hub/message-router.js";
 import { P2PDiscovery } from "./hub/p2p-discovery.js";
 import { P2PListener } from "./hub/p2p-listener.js";
+import { ConnectionManager } from "./hub/connection-manager.js";
 
 process.on("uncaughtException", (error) => {
   logger.fatal({ err: error }, "Uncaught exception");
@@ -49,6 +50,7 @@ async function main(): Promise<void> {
   let relayClient: RelayClient | undefined;
   let p2pDiscovery: P2PDiscovery | undefined;
   let p2pListener: P2PListener | undefined;
+  let connectionManager: ConnectionManager | undefined;
   let relayToken = config.hub?.relay.token;
   if (config.hub?.enabled) {
     hubIdentity = new HubIdentity(resolve(rootDir, "data/hub-keypair.json"));
@@ -71,11 +73,13 @@ async function main(): Promise<void> {
     const identity = hubIdentity;
     const client = relayClient;
     const hubConfig = config.hub;
-    const messageRouter = new HubMessageRouter(identity, registry, runtime, client);
+    const listener = new P2PListener(client);
+    const manager = new ConnectionManager(listener, client);
+    connectionManager = manager;
+    const messageRouter = new HubMessageRouter(identity, registry, runtime, client, manager);
     runtime.setHubMessageRouter(messageRouter);
     if (hubConfig.p2p?.enabled) {
       const discovery = new P2PDiscovery();
-      const listener = new P2PListener(client);
       const p2pPort = hubConfig.p2p.port ?? 3212;
       const connectPeer = (hub: P2PDiscoveredHub) => {
         if (listener.isConnected(hub.hubId)) return;
@@ -84,6 +88,7 @@ async function main(): Promise<void> {
         });
       };
       await listener.start(p2pPort, identity);
+      listener.startHealthChecks();
       messageRouter.setP2PListener(listener);
       discovery.onDiscovered(connectPeer);
       client.onPresence((hubId, status) => {
@@ -135,8 +140,14 @@ async function main(): Promise<void> {
     onboarding,
     undefined,
     undefined,
-    hubIdentity && relayClient && connectHub
-      ? { identity: hubIdentity, relayClient, registry, connect: connectHub }
+    hubIdentity && relayClient && connectionManager && connectHub
+      ? {
+          identity: hubIdentity,
+          relayClient,
+          registry,
+          connectionManager,
+          connect: connectHub,
+        }
       : undefined,
   );
   registerWebSocket(app, events, runtime, registry, config.auth);

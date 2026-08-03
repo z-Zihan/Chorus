@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import type { AgentRegistry } from "../agent/registry.js";
+import type { ConnectionManager } from "../hub/connection-manager.js";
 import type { HubIdentity } from "../hub/identity.js";
 import type { RelayClient } from "../hub/relay-client.js";
 
@@ -7,6 +8,7 @@ export interface HubRouteDependencies {
   identity: HubIdentity;
   relayClient: RelayClient;
   registry: AgentRegistry;
+  connectionManager: ConnectionManager;
   connect: () => Promise<void>;
 }
 
@@ -14,12 +16,23 @@ export function registerHubRoutes(
   app: FastifyInstance,
   dependencies: HubRouteDependencies,
 ): void {
-  const { identity, relayClient, registry, connect } = dependencies;
+  const { identity, relayClient, registry, connectionManager, connect } = dependencies;
 
   app.get("/api/hub/status", async () => ({
-    hubId: identity.getPublicKey(),
-    state: relayClient.state,
-    hubs: registry.getKnownHubs().filter((hub) => hub.hubId !== identity.hubId),
+    relayState: relayClient.state,
+    peers: registry.getKnownHubs()
+      .filter((hub) => hub.hubId !== identity.hubId)
+      .map((hub) => {
+        const connection = connectionManager.getConnectionInfo(hub.hubId);
+        return {
+          hubId: hub.hubId,
+          displayName: hub.displayName,
+          path: connection.path,
+          latency: connection.path === "p2p"
+            ? connection.p2pLatency
+            : connection.relayLatency,
+        };
+      }),
   }));
 
   app.post("/api/hub/connect", async (_request, reply) => {

@@ -4,6 +4,7 @@ import type { AgentRegistry } from "../agent/registry.js";
 import type { AgentRuntime } from "../agent/runtime.js";
 import { logger } from "../utils/logger.js";
 import { decryptPayload, encryptPayload, signEnvelope, verifySignature } from "./crypto.js";
+import type { ConnectionManager } from "./connection-manager.js";
 import type { HubIdentity } from "./identity.js";
 import type { P2PListener } from "./p2p-listener.js";
 import type { RelayClient } from "./relay-client.js";
@@ -32,6 +33,7 @@ export class HubMessageRouter {
     private readonly registry: AgentRegistry,
     private readonly runtime: AgentRuntime,
     private readonly relayClient: RelayClient,
+    private readonly connectionManager: ConnectionManager,
   ) {
     relayClient.onMessage((envelope) => {
       void this.onEnvelope(envelope, relayClient).catch((error: unknown) => {
@@ -130,8 +132,8 @@ export class HubMessageRouter {
       ...unsigned,
       signature: await signEnvelope(signingData(unsigned), this.identity.getSecretKey()),
     };
-    if (!this.p2pListener?.sendToHub(toHubId, envelope)) {
-      this.relayClient.sendEnvelope(envelope);
+    if (!this.connectionManager.sendEnvelope(toHubId, envelope)) {
+      throw new Error(`No connection available for Hub ${toHubId}`);
     }
     return payload.messageId;
   }
