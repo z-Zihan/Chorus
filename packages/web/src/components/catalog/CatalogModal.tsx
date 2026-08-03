@@ -116,7 +116,7 @@ export function CatalogModal({ open, onOpenChange }: CatalogModalProps) {
 
               <aside className="rounded-xl border border-[var(--border-color)] bg-[var(--bg-base)] p-5">
                 {selectedEntry.installed && !installation ? (
-                  <div className="flex items-center gap-2 text-sm text-[var(--text-secondary)]"><Check className="h-5 w-5 text-green-500" />{t("catalog.installed")}</div>
+                  <div className="flex items-center gap-2 text-sm text-[var(--text-secondary)]"><Check className="h-5 w-5 text-[var(--status-online)]" />{t("catalog.installed")}</div>
                 ) : selectedEntry.detected && !installation ? (
                   <div className="space-y-4">
                     <p className="text-sm text-[var(--text-secondary)]">{t("catalog.detectedReady")}</p>
@@ -175,7 +175,7 @@ export function CatalogModal({ open, onOpenChange }: CatalogModalProps) {
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                   {filteredEntries.map((entry) => (
                     <button key={entry.id} type="button" onClick={() => handleSelectEntry(entry)} className="rounded-xl border border-[var(--border-color)] bg-[var(--bg-surface)] p-4 text-left transition hover:border-[var(--accent-color)] hover:bg-[var(--bg-hover)]">
-                      <div className="flex items-start gap-3"><EntryIcon entry={entry} /><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-2"><h3 className="truncate font-medium">{entry.name}</h3>{entry.installed && <Check className="h-4 w-4 shrink-0 text-green-500" />}{!entry.installed && entry.detected && <span className="text-xs text-amber-500">已检测到</span>}</div><KindBadge entry={entry} /></div></div>
+                      <div className="flex items-start gap-3"><EntryIcon entry={entry} /><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-2"><h3 className="truncate font-medium">{entry.name}</h3>{entry.installed && <Check className="h-4 w-4 shrink-0 text-[var(--status-online)]" />}{!entry.installed && entry.detected && <span className="text-xs text-[var(--status-busy)]">已检测到</span>}</div><KindBadge entry={entry} /></div></div>
                       <p className="mt-3 line-clamp-2 text-sm leading-5 text-[var(--text-secondary)]">{entry.summary}</p>
                     </button>
                   ))}
@@ -203,7 +203,7 @@ function InstallationProgress({ onCancel }: { onCancel: () => void }) {
   const { t } = useTranslation("common");
   const installation = useCatalogStore((state) => state.installation);
   if (!installation) return null;
-  return <div><div className="flex items-center justify-between text-sm"><span>{installation.stage === "error" ? t("catalog.failed") : installation.stage === "done" ? t("catalog.installed") : t("catalog.installing")}</span><span>{t("catalog.progress", { progress: installation.progress })}</span></div><div className="mt-3 h-2 overflow-hidden rounded-full bg-[var(--bg-elevated)]"><div className={cn("h-full transition-all", installation.stage === "error" ? "bg-red-500" : "bg-[var(--accent-color)]")} style={{ width: `${installation.progress}%` }} /></div><p className="mt-3 text-xs text-[var(--text-tertiary)]">{t(`catalog.stages.${installation.stage}`)}</p>{installation.error && <p className="mt-2 break-words text-xs text-red-400">{installation.error}</p>}{!["done", "error"].includes(installation.stage) && <Button variant="secondary" className="mt-5 w-full" onClick={onCancel}>{t("catalog.cancelInstall")}</Button>}</div>;
+  return <div><div className="flex items-center justify-between text-sm"><span>{installation.stage === "error" ? t("catalog.failed") : installation.stage === "done" ? t("catalog.installed") : t("catalog.installing")}</span><span>{t("catalog.progress", { progress: installation.progress })}</span></div><div className="mt-3 h-2 overflow-hidden rounded-full bg-[var(--bg-elevated)]"><div className={cn("h-full transition-all", installation.stage === "error" ? "bg-[var(--status-error)]" : "bg-[var(--accent-color)]")} style={{ width: `${installation.progress}%` }} /></div><p className="mt-3 text-xs text-[var(--text-tertiary)]">{t(`catalog.stages.${installation.stage}`)}</p>{installation.error && <p className="mt-2 break-words text-xs text-[var(--status-error)]">{installation.error}</p>}{!["done", "error"].includes(installation.stage) && <Button variant="secondary" className="mt-5 w-full" onClick={onCancel}>{t("catalog.cancelInstall")}</Button>}</div>;
 }
 
 function preferredRecipe(entry: CatalogEntry | null): InstallRecipe | undefined {

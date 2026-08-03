@@ -75,7 +75,7 @@ export function AgentSettingsPanel() {
                 onChange={(event) => setField("description", event.target.value)}
                 rows={3}
                 maxLength={500}
-                className="w-full resize-none rounded-lg border border-[var(--border-color)] bg-[var(--bg-base)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none transition focus:border-[var(--accent-color)] focus:ring-2 focus:ring-indigo-500/20"
+                className="w-full resize-none rounded-lg border border-[var(--border-color)] bg-[var(--bg-base)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none transition focus:border-[var(--accent-color)] focus:ring-2 focus:ring-[var(--accent-subtle)]"
               />
             </label>
 
@@ -99,7 +99,7 @@ export function AgentSettingsPanel() {
                 onChange={(event) => setField("systemPrompt", event.target.value)}
                 rows={6}
                 placeholder={t("settings:systemPromptPlaceholder")}
-                className="w-full resize-y rounded-lg border border-[var(--border-color)] bg-[var(--bg-base)] px-3 py-2.5 text-sm leading-6 text-[var(--text-primary)] outline-none transition placeholder:text-[var(--text-muted)] focus:border-[var(--accent-color)] focus:ring-2 focus:ring-indigo-500/20"
+                className="w-full resize-y rounded-lg border border-[var(--border-color)] bg-[var(--bg-base)] px-3 py-2.5 text-sm leading-6 text-[var(--text-primary)] outline-none transition placeholder:text-[var(--text-muted)] focus:border-[var(--accent-color)] focus:ring-2 focus:ring-[var(--accent-subtle)]"
               />
             </label>
 

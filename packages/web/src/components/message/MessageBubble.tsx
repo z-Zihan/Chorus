@@ -175,7 +175,7 @@ export function MessageBubble({ message, agentName, agentAvatar, isGroup = false
             onClick={() => setIsExpanded((expanded) => !expanded)}
             className={`mt-2 text-xs font-medium transition-colors ${
               isUser
-                ? "text-indigo-100 hover:text-white"
+                ? "text-teal-100 hover:text-white"
                 : "text-[var(--accent-hover)] hover:opacity-80"
             }`}
           >
@@ -196,7 +196,7 @@ export function MessageBubble({ message, agentName, agentAvatar, isGroup = false
         {/* Timestamp */}
         <div
           className={`mt-1 text-right text-[10px] ${
-            isUser ? "text-indigo-200/70" : "text-[var(--text-tertiary)]"
+            isUser ? "text-teal-200/70" : "text-[var(--text-tertiary)]"
           }`}
         >
           {formatMessageTime(message.timestamp)}
