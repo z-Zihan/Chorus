@@ -20,7 +20,7 @@ const eventSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("subscribe"),
     conversationId: z.string().min(1),
-    lastEventId: z.string().optional(),
+    lastEventId: z.string().nullish(),
   }),
   z.object({ type: z.literal("cancel"), messageId: z.string().min(1) }),
   z.object({ type: z.literal("ping") }),
