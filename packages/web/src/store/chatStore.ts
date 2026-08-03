@@ -318,10 +318,16 @@ export const useChatStore = create<ChatState>((set, get) => {
 
     createConversation: async (title, agentId) => {
       const current = get();
+      // Only block if creating for the same agent and current is empty
       if (
         current.currentConversationId &&
         current.messages.length === 0 &&
-        !current.isStreaming
+        !current.isStreaming &&
+        (!agentId || current.currentConversationId && (() => {
+          // Check if current conversation already has this agent
+          const conv = [...current.conversations, ...current.groupConversations].find(c => c.id === current.currentConversationId);
+          return conv?.agentIds.includes(agentId) ?? false;
+        })())
       ) {
         return;
       }

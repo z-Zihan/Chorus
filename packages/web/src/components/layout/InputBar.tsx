@@ -67,7 +67,7 @@ export function InputBar() {
       <div className="flex items-end gap-3">
         <div className="flex flex-1 items-end rounded-xl border border-[var(--border-color)] bg-[var(--bg-elevated)] px-4 py-2.5 focus-within:border-[var(--accent-color)]">
           <AgentSelector
-            agentIds={currentConversation?.agentIds ?? []}
+            agentIds={[...new Set([...(currentConversation?.agentIds ?? []), ...agents.filter(a => a.status === "online").map(a => a.id)])]}
             isGroup={currentConversation?.type === "group"}
             value={selectedAgentIds}
             onValueChange={setSelectedAgentIds}

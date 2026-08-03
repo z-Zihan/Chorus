@@ -68,7 +68,6 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
   const groupConversations = useChatStore((s) => s.groupConversations);
   const archivedConversations = useChatStore((s) => s.archivedConversations);
   const currentConversationId = useChatStore((s) => s.currentConversationId);
-  const messages = useChatStore((s) => s.messages);
   const setCurrentConversation = useChatStore((s) => s.setCurrentConversation);
   const createConversation = useChatStore((s) => s.createConversation);
   const createGroupConversation = useChatStore((s) => s.createGroupConversation);
@@ -93,7 +92,6 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
   const visibleArchivedConversations = conversationAgentFilter
     ? archivedConversations.filter((conversation) => conversation.agentIds.includes(conversationAgentFilter))
     : archivedConversations;
-  const isCurrentConversationEmpty = Boolean(currentConversationId) && messages.length === 0;
 
   const handleSelectConversation = (id: string) => {
     if (isSelectMode) {
@@ -299,7 +297,7 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
         <div className="flex h-14 items-center gap-2 border-b border-[var(--border-color)] px-4">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--accent-color)] text-sm font-bold text-white">AL</div>
           <span className="flex-1 font-semibold text-[var(--text-primary)]">{t("common:appName")}</span>
-          <Button variant="ghost" size="icon" onClick={() => void handleCreateConversation()} disabled={isCurrentConversationEmpty} aria-label={t("sidebar:createConversation")} title={t("sidebar:createConversation")} className="h-8 w-8">
+          <Button variant="ghost" size="icon" onClick={() => void handleCreateConversation()}  aria-label={t("sidebar:createConversation")} title={t("sidebar:createConversation")} className="h-8 w-8">
             <Plus aria-hidden="true" className="h-5 w-5" />
           </Button>
           <Button variant="ghost" size="icon" onClick={closeSidebar} aria-label={t("common:aria.closeSidebar")} className="h-8 w-8 md:hidden">
@@ -330,7 +328,11 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
                     <button
                       type="button"
                       key={agent.id}
-                      onClick={() => filterByAgent(isActive ? null : agent.id)}
+                      onClick={() => {
+                        selectAgent(agent.id);
+                        filterByAgent(isActive ? null : agent.id);
+                        if (!isActive) void createConversation(undefined, agent.id);
+                      }}
                       aria-pressed={isActive}
                       aria-label={t("sidebar:filterByAgent", { name: agent.name })}
                       className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors ${
