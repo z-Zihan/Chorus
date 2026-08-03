@@ -44,6 +44,9 @@ function collectJsonText(value: unknown, depth = 0): string[] {
   if (Array.isArray(value)) return value.flatMap((item) => collectJsonText(item, depth + 1));
   if (!isRecord(value)) return [];
 
+  const recordType = getStringRecordValue(value, ["type"]);
+  if (recordType === "system" || recordType === "user") return [];
+
   const messageText = collectMessageContentText(value.message);
   if (messageText.length) return messageText;
 
@@ -86,21 +89,44 @@ function collectMessageContentText(message: unknown): string[] {
     .filter(Boolean);
 }
 
-function formatJsonLine(rawEvent: unknown): string {
+function formatJsonLine(rawEvent: unknown): string | null {
   if (!isRecord(rawEvent)) return JSON.stringify(rawEvent);
 
   const eventType = getStringRecordValue(rawEvent, ["type", "event", "kind", "sessionUpdate"]);
+
+  // Claude Code stream-json: init/config metadata and echoes of user input.
+  if (eventType === "system" || eventType === "user") return null;
+
+  if (eventType === "assistant") {
+    const message = rawEvent.message;
+    if (!isRecord(message)) return null;
+    const content = message.content;
+    if (typeof content === "string") return content.trim() || null;
+    if (!Array.isArray(content)) return null;
+    const text = content
+      .filter((item): item is Record<string, unknown> => isRecord(item) && item.type === "text")
+      .map((item) => (typeof item.text === "string" ? item.text : ""))
+      .join("")
+      .trim();
+    return text || null;
+  }
+
+  if (eventType === "result") {
+    const result = rawEvent.result;
+    const text = typeof result === "string"
+      ? result.trim()
+      : collectJsonText(result).join("").trim();
+    return text || null;
+  }
+
   const text = collectJsonText(rawEvent)
     .filter((part) => part !== eventType)
     .join("")
     .trim();
+  if (!text) return null;
 
-  if (text) {
-    if (/chunk|delta|partial/iu.test(eventType)) return text;
-    return eventType ? `[${eventType}] ${text}` : text;
-  }
-
-  return eventType ? `[${eventType}] ${JSON.stringify(rawEvent)}` : JSON.stringify(rawEvent);
+  if (/chunk|delta|partial/iu.test(eventType)) return text;
+  return eventType ? `[${eventType}] ${text}` : text;
 }
 
 function parseCodexJson(raw: unknown): string {
