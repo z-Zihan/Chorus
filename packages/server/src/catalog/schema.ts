@@ -1,35 +1,22 @@
 export type CatalogKind = "detected-cli" | "managed-cli" | "api-connector";
 export type CatalogPlatform = "darwin" | "linux" | "win32";
 
-export interface InstallRecipe {
-  method: "brew" | "npm" | "winget" | "download" | "pip";
-  executable: string;
-  args: string[];
-  requiresElevation: boolean;
-}
-
 export interface CatalogEntry {
+  schemaVersion: 1;
   id: string;
   name: string;
   summary: string;
-  publisher: {
-    name: string;
-    url: string;
-    verified: boolean;
-  };
+  publisher: { name: string; url: string; verified: boolean };
   kind: CatalogKind;
   platforms: CatalogPlatform[];
   capabilities: string[];
   permissions: string[];
   homepage: string;
-  license: string;
+  license?: string;
   descriptorId?: string;
-  installRecipes: InstallRecipe[];
-  uninstallRecipes: InstallRecipe[];
-  adapterTemplate: {
-    type: "cli" | "openai";
-    config: Record<string, unknown>;
-  };
+  installRecipes: { method: "brew" | "npm" | "winget" | "download" | "pip"; executable: string; args: string[]; requiresElevation: boolean }[];
+  uninstallRecipes: { method: "brew" | "npm" | "winget" | "download" | "pip"; executable: string; args: string[]; requiresElevation: boolean }[];
+  adapterTemplate: { type: string; config: Record<string, unknown> };
 }
 
 export interface CatalogFile {
@@ -39,6 +26,7 @@ export interface CatalogFile {
 
 export interface CatalogEntryWithStatus extends CatalogEntry {
   installed: boolean;
+  detected?: boolean;
   agentId?: string;
   disabled?: boolean;
 }

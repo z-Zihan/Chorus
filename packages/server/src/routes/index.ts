@@ -28,7 +28,7 @@ export function registerRoutes(
   scheduler: Scheduler,
   detector = new CliDetector(),
   onboarding = new OnboardingService(repository, registry, detector),
-  catalog = new CatalogService(registry),
+  catalog = new CatalogService(registry, detector),
   installer = new InstallExecutor(catalog, registry, detector),
   hub?: HubRouteDependencies,
 ): void {

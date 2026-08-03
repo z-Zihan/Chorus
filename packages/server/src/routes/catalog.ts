@@ -18,7 +18,7 @@ export function registerCatalogRoutes(
   app.get("/api/catalog", async () => catalog.list());
 
   app.get<{ Params: { id: string } }>("/api/catalog/:id", async (request, reply) => {
-    const entry = catalog.get(request.params.id);
+    const entry = await catalog.get(request.params.id);
     if (!entry) return reply.code(404).send({ error: "CATALOG_ENTRY_NOT_FOUND" });
     return entry;
   });

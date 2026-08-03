@@ -31,6 +31,7 @@ export interface CatalogEntry {
   uninstallRecipes: InstallRecipe[];
   adapterTemplate: { type: "cli" | "openai"; config: Record<string, unknown> };
   installed: boolean;
+  detected?: boolean;
   agentId?: string;
   disabled?: boolean;
 }

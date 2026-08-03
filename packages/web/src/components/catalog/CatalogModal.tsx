@@ -42,7 +42,7 @@ export function CatalogModal({ open, onOpenChange }: CatalogModalProps) {
   const filteredEntries = useMemo(() => entries.filter((entry) => {
     if (filter === "cli") return entry.kind !== "api-connector";
     if (filter === "api") return entry.kind === "api-connector";
-    if (filter === "installed") return entry.installed;
+    if (filter === "installed") return entry.installed || entry.detected;
     return true;
   }), [entries, filter]);
 
@@ -167,7 +167,7 @@ export function CatalogModal({ open, onOpenChange }: CatalogModalProps) {
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                   {filteredEntries.map((entry) => (
                     <button key={entry.id} type="button" onClick={() => handleSelectEntry(entry)} className="rounded-xl border border-[var(--border-color)] bg-[var(--bg-surface)] p-4 text-left transition hover:border-[var(--accent-color)] hover:bg-[var(--bg-hover)]">
-                      <div className="flex items-start gap-3"><EntryIcon entry={entry} /><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-2"><h3 className="truncate font-medium">{entry.name}</h3>{entry.installed && <Check className="h-4 w-4 shrink-0 text-green-500" />}</div><KindBadge entry={entry} /></div></div>
+                      <div className="flex items-start gap-3"><EntryIcon entry={entry} /><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-2"><h3 className="truncate font-medium">{entry.name}</h3>{entry.installed && <Check className="h-4 w-4 shrink-0 text-green-500" />}{!entry.installed && entry.detected && <span className="text-xs text-amber-500">已检测到</span>}</div><KindBadge entry={entry} /></div></div>
                       <p className="mt-3 line-clamp-2 text-sm leading-5 text-[var(--text-secondary)]">{entry.summary}</p>
                     </button>
                   ))}

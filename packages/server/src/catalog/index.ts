@@ -1,21 +1,42 @@
+import type { CliDetector } from "../cli-detector/index.js";
 import type { AgentRegistry } from "../agent/registry.js";
 import { defaultCatalog } from "./default-catalog.js";
 import type { CatalogEntry, CatalogEntryWithStatus } from "./schema.js";
 
 export class CatalogService {
-  constructor(private readonly registry: AgentRegistry) {}
+  private detectionCache: { detections: import("../cli-detector/index.js").CliDetection[]; ts: number } | null = null;
+  private scanning: Promise<void> | null = null;
 
-  list(): CatalogEntryWithStatus[] {
+  constructor(
+    private readonly registry: AgentRegistry,
+    private readonly detector?: CliDetector,
+  ) {}
+
+  async list(): Promise<CatalogEntryWithStatus[]> {
+    await this.ensureDetections();
     return defaultCatalog.entries.map((entry) => this.withInstalledStatus(entry));
   }
 
-  get(id: string): CatalogEntryWithStatus | undefined {
+  async get(id: string): Promise<CatalogEntryWithStatus | undefined> {
+    await this.ensureDetections();
     const entry = defaultCatalog.entries.find((candidate) => candidate.id === id);
     return entry ? this.withInstalledStatus(entry) : undefined;
   }
 
-  getCompatible(): CatalogEntryWithStatus[] {
-    return this.list().filter((entry) => entry.platforms.includes(currentPlatform()));
+  getCompatible(): Promise<CatalogEntryWithStatus[]> {
+    return this.list().then((items) => items.filter((entry) => entry.platforms.includes(currentPlatform())));
+  }
+
+  private async ensureDetections(): Promise<void> {
+    if (!this.detector) return;
+    // Use cached detections if available
+    const cached = this.detector.getCachedDetections();
+    if (cached.length > 0) return;
+    // Trigger a scan if no cache
+    if (!this.scanning) {
+      this.scanning = this.detector.detect().then(() => { this.scanning = null; }).catch(() => { this.scanning = null; });
+    }
+    await this.scanning;
   }
 
   private withInstalledStatus(entry: CatalogEntry): CatalogEntryWithStatus {
@@ -23,9 +44,18 @@ export class CatalogService {
       candidate.catalogEntryId === entry.id ||
       (entry.descriptorId !== undefined && candidate.id === entry.descriptorId),
     );
+
+    let detected = false;
+    if (!agent && entry.descriptorId && this.detector) {
+      const detections = this.detector.getCachedDetections();
+      const detection = detections.find((d) => d.descriptorId === entry.descriptorId);
+      detected = Boolean(detection && (detection.status === "ready" || detection.status === "installed"));
+    }
+
     return {
       ...entry,
       installed: Boolean(agent),
+      detected,
       agentId: agent?.id,
       disabled: agent?.disabled,
     };
