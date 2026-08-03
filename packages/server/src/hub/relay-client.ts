@@ -273,14 +273,19 @@ export class RelayClient {
     init: RequestInit = {},
   ): Promise<T> {
     if (!this.hubId) throw new Error("Hub identity is not configured");
+    if (!this.token) throw new Error("Relay authentication token is not configured");
     const url = new URL(relayUrl);
-    url.protocol = url.protocol === "wss:" ? "https:" : "http:";
+    if (url.protocol === "ws:") url.protocol = "http:";
+    if (url.protocol === "wss:") url.protocol = "https:";
     url.pathname = path;
     url.search = "";
     url.hash = "";
+    const headers = new Headers(init.headers);
+    headers.set("content-type", "application/json");
+    headers.set("authorization", `Bearer ${this.token}`);
     const response = await fetch(url, {
       ...init,
-      headers: { "content-type": "application/json", ...init.headers },
+      headers,
     });
     if (!response.ok) {
       const detail = await response.text();

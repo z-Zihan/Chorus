@@ -47,6 +47,7 @@ export class AgentRegistry {
   private readonly hubPublicKeys = new Map<string, string>();
   private readonly knownHubs = new Map<string, HubInfo>();
   private readonly remoteAgents = new Map<string, RemoteAgent>();
+  private readonly remoteAgentRooms = new Map<string, Set<string>>();
   private configWatcher?: ConfigWatcher;
   private healthCheckTimer?: NodeJS.Timeout;
   private healthCheckRunning = false;
@@ -58,7 +59,8 @@ export class AgentRegistry {
     this.persistence = new AgentPersistence(repository);
     this.repository.setAgentStatusResolver((agentId) => this.getStatus(agentId));
     relayClient?.onPresence((hubId, status) => this.setHubPresence(hubId, status));
-    relayClient?.onRoomMembers((_roomId, members) => {
+    relayClient?.onRoomMembers((roomId, members) => {
+      this.clearRemoteAgentsForRoom(roomId);
       for (const member of members) {
         this.setHubPresence(
           member.hubId,
@@ -68,6 +70,7 @@ export class AgentRegistry {
         );
         if (member.hubId !== relayClient.currentHubId) {
           this.registerRemoteAgent(member.hubId, member.hubId, member.displayName);
+          this.trackRemoteAgentRoom(this.remoteAgentId(member.hubId, member.hubId), roomId);
         }
       }
     });
@@ -109,7 +112,8 @@ export class AgentRegistry {
   }
 
   registerRemoteAgent(agentId: string, hubId: string, agentName: string): void {
-    this.remoteAgents.set(agentId, { id: agentId, name: agentName, hubId });
+    const id = this.remoteAgentId(hubId, agentId);
+    this.remoteAgents.set(id, { id, name: agentName, hubId });
   }
 
   getRemoteAgents(): RemoteAgent[] {
@@ -123,6 +127,26 @@ export class AgentRegistry {
       if (agentId.startsWith(`${hubId}:`) || agentId.startsWith(`${hubId}/`)) return hubId;
     }
     return undefined;
+  }
+
+  private remoteAgentId(hubId: string, originalAgentId: string): string {
+    return `remote:${hubId}:${originalAgentId}`;
+  }
+
+  private trackRemoteAgentRoom(agentId: string, roomId: string): void {
+    const rooms = this.remoteAgentRooms.get(agentId) ?? new Set<string>();
+    rooms.add(roomId);
+    this.remoteAgentRooms.set(agentId, rooms);
+  }
+
+  private clearRemoteAgentsForRoom(roomId: string): void {
+    for (const [agentId, rooms] of this.remoteAgentRooms) {
+      rooms.delete(roomId);
+      if (rooms.size === 0) {
+        this.remoteAgentRooms.delete(agentId);
+        this.remoteAgents.delete(agentId);
+      }
+    }
   }
 
   async initialize(configs: AgentConfig[]): Promise<void> {
