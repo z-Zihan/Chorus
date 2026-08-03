@@ -14,6 +14,8 @@ import { useOnboardingStore } from "@/store/onboardingStore";
 import { useUIStore } from "@/store/uiStore";
 import { useHotkeys } from "@/hooks/useHotkey";
 import { SearchPanel } from "@/components/search/SearchPanel";
+import { AgentSettingsPanel } from "@/components/agent/AgentSettingsPanel";
+import { SettingsPanel } from "@/components/common/SettingsPanel";
 
 export default function App() {
   const { t } = useTranslation(["common", "chat", "errors"]);
@@ -29,6 +31,7 @@ export default function App() {
   const selectAgent = useAgentStore((s) => s.selectAgent);
   const clearSelectedAgent = useAgentStore((s) => s.clearSelectedAgent);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   useWebSocket();
   const onboardingStatus = useOnboardingStore((s) => s.status);
@@ -83,7 +86,7 @@ export default function App() {
         )}
         {/* Left sidebar — conversations + agent status */}
         <ErrorBoundary>
-          <Sidebar />
+          <Sidebar onOpenSettings={() => setIsSettingsOpen(true)} />
         </ErrorBoundary>
 
         {/* Main chat area */}
@@ -115,6 +118,8 @@ export default function App() {
       {onboardingStatus && onboardingStatus.step !== "completed" && <OnboardingFlow />}
       <ToastContainer />
       <SearchPanel open={isSearchOpen} onOpenChange={setIsSearchOpen} />
+      <AgentSettingsPanel />
+      <SettingsPanel open={isSettingsOpen} onOpenChange={setIsSettingsOpen} />
     </div>
   );
 }

@@ -21,7 +21,6 @@ import { useChatStore, type Conversation } from "@/store/chatStore";
 import { useAgentStore } from "@/store/agentStore";
 import { useUIStore } from "@/store/uiStore";
 import { AgentAvatar } from "@/components/agent/AgentAvatar";
-import { AgentSettingsPanel } from "@/components/agent/AgentSettingsPanel";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -44,7 +43,11 @@ import { useHotkey } from "@/hooks/useHotkey";
 import { useOnboardingStore } from "@/store/onboardingStore";
 import { CatalogModal } from "@/components/catalog/CatalogModal";
 
-export function Sidebar() {
+interface SidebarProps {
+  onOpenSettings: () => void;
+}
+
+export function Sidebar({ onOpenSettings }: SidebarProps) {
   const { t } = useTranslation(["common", "sidebar"]);
   const [conversationToDelete, setConversationToDelete] = useState<Conversation | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -65,6 +68,7 @@ export function Sidebar() {
   const groupConversations = useChatStore((s) => s.groupConversations);
   const archivedConversations = useChatStore((s) => s.archivedConversations);
   const currentConversationId = useChatStore((s) => s.currentConversationId);
+  const messages = useChatStore((s) => s.messages);
   const setCurrentConversation = useChatStore((s) => s.setCurrentConversation);
   const createConversation = useChatStore((s) => s.createConversation);
   const createGroupConversation = useChatStore((s) => s.createGroupConversation);
@@ -89,6 +93,7 @@ export function Sidebar() {
   const visibleArchivedConversations = conversationAgentFilter
     ? archivedConversations.filter((conversation) => conversation.agentIds.includes(conversationAgentFilter))
     : archivedConversations;
+  const isCurrentConversationEmpty = Boolean(currentConversationId) && messages.length === 0;
 
   const handleSelectConversation = (id: string) => {
     if (isSelectMode) {
@@ -294,7 +299,7 @@ export function Sidebar() {
         <div className="flex h-14 items-center gap-2 border-b border-[var(--border-color)] px-4">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--accent-color)] text-sm font-bold text-white">AL</div>
           <span className="flex-1 font-semibold text-[var(--text-primary)]">{t("common:appName")}</span>
-          <Button variant="ghost" size="icon" onClick={() => void handleCreateConversation()} aria-label={t("sidebar:createConversation")} title={t("sidebar:createConversation")} className="h-8 w-8">
+          <Button variant="ghost" size="icon" onClick={() => void handleCreateConversation()} disabled={isCurrentConversationEmpty} aria-label={t("sidebar:createConversation")} title={t("sidebar:createConversation")} className="h-8 w-8">
             <Plus aria-hidden="true" className="h-5 w-5" />
           </Button>
           <Button variant="ghost" size="icon" onClick={closeSidebar} aria-label={t("common:aria.closeSidebar")} className="h-8 w-8 md:hidden">
@@ -481,6 +486,14 @@ export function Sidebar() {
                 <Settings aria-hidden="true" className="h-4 w-4 shrink-0 text-[var(--text-tertiary)] opacity-100 transition group-hover:text-[var(--text-primary)] md:opacity-0 md:group-hover:opacity-100 md:group-focus:opacity-100" />
               </button>
             ))}
+            <Button
+              variant="ghost"
+              className="mt-2 w-full justify-start"
+              onClick={onOpenSettings}
+            >
+              <Settings aria-hidden="true" className="h-4 w-4" />
+              {t("common:settings.title")}
+            </Button>
           </div>
         </div>
       </aside>
@@ -551,7 +564,6 @@ export function Sidebar() {
           </div>
         </DialogContent>
       </Dialog>
-      <AgentSettingsPanel />
       <CatalogModal open={isCatalogOpen} onOpenChange={setIsCatalogOpen} />
     </>
   );

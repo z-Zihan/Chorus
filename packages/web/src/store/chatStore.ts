@@ -314,9 +314,18 @@ export const useChatStore = create<ChatState>((set, get) => {
     a2aConfirmations: state.a2aConfirmations.filter((item) => item.threadId !== threadId),
   })),
 
-  setWebSocketSend: (webSocketSend) => set({ webSocketSend }),
+    setWebSocketSend: (webSocketSend) => set({ webSocketSend }),
 
     createConversation: async (title) => {
+      const current = get();
+      if (
+        current.currentConversationId &&
+        current.messages.length === 0 &&
+        !current.isStreaming
+      ) {
+        return;
+      }
+
       try {
         const conv = await api.createConversation(title);
         set((state) => ({

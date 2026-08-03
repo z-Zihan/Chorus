@@ -58,6 +58,20 @@
     "markdown": "Export as Markdown",
     "json": "Export as JSON"
   },
+  "settings": {
+    "title": "Settings",
+    "appearance": "Appearance",
+    "theme": "Theme",
+    "themeDark": "Dark",
+    "themeLight": "Light",
+    "themeSystem": "System",
+    "language": "Language",
+    "diagnostics": "Diagnostics",
+    "viewLogs": "View Logs",
+    "checkUpdates": "Check for Updates",
+    "about": "About",
+    "version": "Version"
+  },
   "catalog": {
     "title": "Agent Catalog",
     "subtitle": "Discover and install CLI tools and API connectors",
