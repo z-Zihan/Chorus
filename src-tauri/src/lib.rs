@@ -14,6 +14,7 @@ const MAIN_WINDOW_LABEL: &str = "main";
 const TRAY_ID: &str = "main";
 const SHOW_WINDOW_MENU_ID: &str = "show_window";
 const QUIT_MENU_ID: &str = "quit";
+#[cfg(not(debug_assertions))]
 const SERVER_SCRIPT_RELATIVE_PATH: &str = "packages/server/dist/index.js";
 
 pub struct NodeSidecar {

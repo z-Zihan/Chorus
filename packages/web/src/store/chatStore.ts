@@ -78,7 +78,9 @@ interface ChatState {
 }
 
 function sortConversations(items: Conversation[]): Conversation[] {
-  return [...items].sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.updatedAt - a.updatedAt);
+  return [...items].sort(
+    (a, b) => Number(b.pinned) - Number(a.pinned) || b.updatedAt - a.updatedAt,
+  );
 }
 
 export const useChatStore = create<ChatState>((set, get) => {
@@ -121,198 +123,221 @@ export const useChatStore = create<ChatState>((set, get) => {
       }
     },
 
-  setCurrentConversation: (id) => {
-    if (get().currentConversationId === id) return;
-    set({
-      currentConversationId: id,
-      messages: [],
-      a2aThreads: {},
-      a2aConfirmations: [],
-      isLoadingMessages: true,
-    });
-    get().fetchMessages(id);
-  },
-
-  navigateToConversation: (id) => {
-    set({ targetMessageId: null });
-    if (get().currentConversationId === id) return;
-    get().setCurrentConversation(id);
-  },
-
-  navigateToMessage: (conversationId, messageId) => {
-    set({ targetMessageId: messageId });
-    if (get().currentConversationId === conversationId) return;
-    get().setCurrentConversation(conversationId);
-  },
-
-  clearTargetMessage: () => set({ targetMessageId: null }),
-
-  fetchMessages: async (conversationId) => {
-    const requestId = ++messagesRequestId;
-    if (get().currentConversationId === conversationId) {
-      set({ isLoadingMessages: true });
-    }
-    try {
-      const data = await api.getMessages(conversationId);
-      if (
-        requestId === messagesRequestId &&
-        get().currentConversationId === conversationId
-      ) {
-        set({ messages: data });
-      }
-    } catch (e) {
-      logger.error("Failed to fetch messages", e);
-    } finally {
-      if (
-        requestId === messagesRequestId &&
-        get().currentConversationId === conversationId
-      ) {
-        set({ isLoadingMessages: false });
-      }
-    }
-  },
-
-  sendMessage: async (content, mentionedAgentIds = []) => {
-    const convId = get().currentConversationId;
-    if (!convId) return;
-
-    const trimmedContent = content.trim();
-    if (!trimmedContent) return;
-
-    const conversation = [...get().conversations, ...get().groupConversations, ...get().archivedConversations]
-      .find((item) => item.id === convId);
-    const isGroup = conversation?.type === "group";
-    const selectedAgentIds = [...new Set(mentionedAgentIds)];
-    if (selectedAgentIds.some((agentId) => !conversation?.agentIds.includes(agentId))) {
-      useUIStore.getState().addToast(i18n.t("errors:agentUnavailable"), "error");
-      return;
-    }
-    const availableAgents = useAgentStore.getState().agents;
-    const isOnline = (agentId: string) => availableAgents.some(
-      (agent) => agent.id === agentId && agent.status === "online",
-    );
-    const firstOnlineAgentId = conversation?.agentIds.find(isOnline);
-    const activeAgentId = isGroup
-      ? selectedAgentIds.length === 1 ? selectedAgentIds[0] : firstOnlineAgentId
-      : selectedAgentIds[0] ?? conversation?.agentIds[0];
-    const routableAgentIds = isGroup && selectedAgentIds.length > 0
-      ? selectedAgentIds.filter(isOnline)
-      : activeAgentId ? [activeAgentId].filter(isOnline) : [];
-    if (routableAgentIds.length === 0) {
-      useUIStore.getState().addToast(i18n.t("errors:agentUnavailable"), "error");
-      return;
-    }
-
-    const userMsg: Message = {
-      id: crypto.randomUUID(),
-      conversationId: convId,
-      fromType: "user",
-      fromId: "user",
-      toType: "agent",
-      toId: activeAgentId,
-      content: trimmedContent,
-      timestamp: Date.now(),
-      status: "sending",
-    };
-
-    set((state) => ({
-      messages: [...state.messages, userMsg],
-      isStreaming: true,
-    }));
-    track("message_sent", { conversationId: convId, transport: get().webSocketSend ? "websocket" : "http" });
-    streamManager.armStreamTimer(userMsg.id);
-
-    const mentionedAgents = isGroup && selectedAgentIds.length > 0 ? selectedAgentIds : undefined;
-    const sent = get().webSocketSend?.({
-      type: "message",
-      conversationId: convId,
-      content: trimmedContent,
-      agentId: isGroup ? undefined : activeAgentId,
-      mentionedAgents,
-    });
-    if (sent) return;
-
-    // Keep sending functional while the socket is still connecting/reconnecting.
-    const controller = new AbortController();
-    streamManager.setFallbackController(controller);
-    try {
-      await api.sendMessage(
-        convId,
-        trimmedContent,
-        controller.signal,
-        isGroup ? undefined : activeAgentId,
-        mentionedAgents,
-      );
-      streamManager.clearStreamTimer();
-      await get().fetchMessages(convId);
-      set({ isStreaming: false, streamingMessageId: null });
-    } catch (error) {
-      if (!(error instanceof DOMException && error.name === "AbortError")) {
-        logger.error("Failed to send message", error);
-        track("error_occurred", { message: "Failed to send message", source: "chat_store", lineno: 0 });
-        streamManager.clearStreamTimer();
-        get().setMessageStatus(userMsg.id, "error");
-        set({ isStreaming: false, streamingMessageId: null });
-      }
-    } finally {
-      streamManager.clearFallbackController(controller);
-    }
-  },
-
-  addMessage: (message) => streamManager.addMessage(message),
-  appendStreamChunk: (messageId, chunk) => streamManager.appendStreamChunk(messageId, chunk),
-  noteStreamActivity: (messageId) => streamManager.noteStreamActivity(messageId),
-  setMessageStatus: (messageId, status) => streamManager.setMessageStatus(messageId, status),
-  cancelStream: () => streamManager.cancelStream(),
-
-  startA2AThread: (thread) => set((state) => ({
-    a2aThreads: {
-      ...state.a2aThreads,
-      [thread.threadId]: {
-        ...thread,
-        result: "",
-        status: "running",
-        startedAt: Date.now(),
-      },
+    setCurrentConversation: (id) => {
+      if (get().currentConversationId === id) return;
+      set({
+        currentConversationId: id,
+        messages: [],
+        a2aThreads: {},
+        a2aConfirmations: [],
+        isLoadingMessages: true,
+      });
+      get().fetchMessages(id);
     },
-  })),
 
-  completeA2AThread: (threadId, result) => set((state) => {
-    const thread = state.a2aThreads[threadId];
-    if (!thread) return {};
-    return {
-      a2aThreads: {
-        ...state.a2aThreads,
-        [threadId]: { ...thread, result, error: undefined, status: "completed", completedAt: Date.now() },
-      },
-    };
-  }),
+    navigateToConversation: (id) => {
+      set({ targetMessageId: null });
+      if (get().currentConversationId === id) return;
+      get().setCurrentConversation(id);
+    },
 
-  failA2AThread: (threadId, error) => set((state) => {
-    const thread = state.a2aThreads[threadId];
-    if (!thread) return {};
-    return {
-      a2aThreads: {
-        ...state.a2aThreads,
-        [threadId]: { ...thread, error, status: "error", completedAt: Date.now() },
-      },
-    };
-  }),
+    navigateToMessage: (conversationId, messageId) => {
+      set({ targetMessageId: messageId });
+      if (get().currentConversationId === conversationId) return;
+      get().setCurrentConversation(conversationId);
+    },
 
-  cancelA2AThread: (threadId) => {
-    get().webSocketSend?.({ type: "cancel", messageId: threadId });
-    get().failA2AThread(threadId, i18n.t("chat:a2aCancelled"));
-  },
+    clearTargetMessage: () => set({ targetMessageId: null }),
 
-  requestA2AConfirmation: (confirmation) => set((state) => ({
-    a2aConfirmations: state.a2aConfirmations.some((item) => item.threadId === confirmation.threadId)
-      ? state.a2aConfirmations
-      : [...state.a2aConfirmations, confirmation],
-  })),
+    fetchMessages: async (conversationId) => {
+      const requestId = ++messagesRequestId;
+      if (get().currentConversationId === conversationId) {
+        set({ isLoadingMessages: true });
+      }
+      try {
+        const data = await api.getMessages(conversationId);
+        if (requestId === messagesRequestId && get().currentConversationId === conversationId) {
+          set({ messages: data });
+        }
+      } catch (e) {
+        logger.error("Failed to fetch messages", e);
+      } finally {
+        if (requestId === messagesRequestId && get().currentConversationId === conversationId) {
+          set({ isLoadingMessages: false });
+        }
+      }
+    },
 
-  dismissA2AConfirmation: (threadId) => set((state) => ({
-    a2aConfirmations: state.a2aConfirmations.filter((item) => item.threadId !== threadId),
-  })),
+    sendMessage: async (content, mentionedAgentIds = []) => {
+      const convId = get().currentConversationId;
+      if (!convId) return;
+
+      const trimmedContent = content.trim();
+      if (!trimmedContent) return;
+
+      const conversation = [
+        ...get().conversations,
+        ...get().groupConversations,
+        ...get().archivedConversations,
+      ].find((item) => item.id === convId);
+      const isGroup = conversation?.type === "group";
+      const selectedAgentIds = [...new Set(mentionedAgentIds)];
+      if (selectedAgentIds.some((agentId) => !conversation?.agentIds.includes(agentId))) {
+        useUIStore.getState().addToast(i18n.t("errors:agentUnavailable"), "error");
+        return;
+      }
+      const availableAgents = useAgentStore.getState().agents;
+      const isOnline = (agentId: string) =>
+        availableAgents.some(
+          (agent) => agent.id === agentId && (agent.status === "online" || agent.status === "busy"),
+        );
+      const firstOnlineAgentId = conversation?.agentIds.find(isOnline);
+      const activeAgentId = isGroup
+        ? selectedAgentIds.length === 1
+          ? selectedAgentIds[0]
+          : firstOnlineAgentId
+        : (selectedAgentIds[0] ?? conversation?.agentIds[0]);
+      const routableAgentIds =
+        isGroup && selectedAgentIds.length > 0
+          ? selectedAgentIds.filter(isOnline)
+          : activeAgentId
+            ? [activeAgentId].filter(isOnline)
+            : [];
+      if (routableAgentIds.length === 0) {
+        useUIStore.getState().addToast(i18n.t("errors:agentUnavailable"), "error");
+        return;
+      }
+
+      const userMsg: Message = {
+        id: crypto.randomUUID(),
+        conversationId: convId,
+        fromType: "user",
+        fromId: "user",
+        toType: "agent",
+        toId: activeAgentId,
+        content: trimmedContent,
+        timestamp: Date.now(),
+        status: "sending",
+      };
+
+      set((state) => ({
+        messages: [...state.messages, userMsg],
+        isStreaming: true,
+      }));
+      track("message_sent", {
+        conversationId: convId,
+        transport: get().webSocketSend ? "websocket" : "http",
+      });
+      streamManager.armStreamTimer(userMsg.id);
+
+      const mentionedAgents = isGroup && selectedAgentIds.length > 0 ? selectedAgentIds : undefined;
+      const sent = get().webSocketSend?.({
+        type: "message",
+        conversationId: convId,
+        content: trimmedContent,
+        agentId: isGroup ? undefined : activeAgentId,
+        mentionedAgents,
+      });
+      if (sent) return;
+
+      // Keep sending functional while the socket is still connecting/reconnecting.
+      const controller = new AbortController();
+      streamManager.setFallbackController(controller);
+      try {
+        await api.sendMessage(
+          convId,
+          trimmedContent,
+          controller.signal,
+          isGroup ? undefined : activeAgentId,
+          mentionedAgents,
+        );
+        streamManager.clearStreamTimer();
+        await get().fetchMessages(convId);
+        set({ isStreaming: false, streamingMessageId: null });
+      } catch (error) {
+        if (!(error instanceof DOMException && error.name === "AbortError")) {
+          logger.error("Failed to send message", error);
+          track("error_occurred", {
+            message: "Failed to send message",
+            source: "chat_store",
+            lineno: 0,
+          });
+          streamManager.clearStreamTimer();
+          get().setMessageStatus(userMsg.id, "error");
+          set({ isStreaming: false, streamingMessageId: null });
+        }
+      } finally {
+        streamManager.clearFallbackController(controller);
+      }
+    },
+
+    addMessage: (message) => streamManager.addMessage(message),
+    appendStreamChunk: (messageId, chunk) => streamManager.appendStreamChunk(messageId, chunk),
+    noteStreamActivity: (messageId) => streamManager.noteStreamActivity(messageId),
+    setMessageStatus: (messageId, status) => streamManager.setMessageStatus(messageId, status),
+    cancelStream: () => streamManager.cancelStream(),
+
+    startA2AThread: (thread) =>
+      set((state) => ({
+        a2aThreads: {
+          ...state.a2aThreads,
+          [thread.threadId]: {
+            ...thread,
+            result: "",
+            status: "running",
+            startedAt: Date.now(),
+          },
+        },
+      })),
+
+    completeA2AThread: (threadId, result) =>
+      set((state) => {
+        const thread = state.a2aThreads[threadId];
+        if (!thread) return {};
+        return {
+          a2aThreads: {
+            ...state.a2aThreads,
+            [threadId]: {
+              ...thread,
+              result,
+              error: undefined,
+              status: "completed",
+              completedAt: Date.now(),
+            },
+          },
+        };
+      }),
+
+    failA2AThread: (threadId, error) =>
+      set((state) => {
+        const thread = state.a2aThreads[threadId];
+        if (!thread) return {};
+        return {
+          a2aThreads: {
+            ...state.a2aThreads,
+            [threadId]: { ...thread, error, status: "error", completedAt: Date.now() },
+          },
+        };
+      }),
+
+    cancelA2AThread: (threadId) => {
+      get().webSocketSend?.({ type: "cancel", messageId: threadId });
+      get().failA2AThread(threadId, i18n.t("chat:a2aCancelled"));
+    },
+
+    requestA2AConfirmation: (confirmation) =>
+      set((state) => ({
+        a2aConfirmations: state.a2aConfirmations.some(
+          (item) => item.threadId === confirmation.threadId,
+        )
+          ? state.a2aConfirmations
+          : [...state.a2aConfirmations, confirmation],
+      })),
+
+    dismissA2AConfirmation: (threadId) =>
+      set((state) => ({
+        a2aConfirmations: state.a2aConfirmations.filter((item) => item.threadId !== threadId),
+      })),
 
     setWebSocketSend: (webSocketSend) => set({ webSocketSend }),
 
@@ -321,7 +346,9 @@ export const useChatStore = create<ChatState>((set, get) => {
       const current = get();
       // Block only if: current is empty AND same agent (avoid duplicate empty convos)
       if (current.currentConversationId && current.messages.length === 0 && !current.isStreaming) {
-        const conv = [...current.conversations, ...current.groupConversations].find(c => c.id === current.currentConversationId);
+        const conv = [...current.conversations, ...current.groupConversations].find(
+          (c) => c.id === current.currentConversationId,
+        );
         if (conv && (!targetAgentId || conv.agentIds.includes(targetAgentId))) {
           // Switch to the existing empty conversation instead of creating a new one
           if (conv.agentIds[0] === targetAgentId) return;
@@ -357,11 +384,18 @@ export const useChatStore = create<ChatState>((set, get) => {
       }
     },
 
-    syncConversation: (conversation) => set((state) => ({
-      conversations: state.conversations.map((item) => item.id === conversation.id ? conversation : item),
-      groupConversations: state.groupConversations.map((item) => item.id === conversation.id ? conversation : item),
-      archivedConversations: state.archivedConversations.map((item) => item.id === conversation.id ? conversation : item),
-    })),
+    syncConversation: (conversation) =>
+      set((state) => ({
+        conversations: state.conversations.map((item) =>
+          item.id === conversation.id ? conversation : item,
+        ),
+        groupConversations: state.groupConversations.map((item) =>
+          item.id === conversation.id ? conversation : item,
+        ),
+        archivedConversations: state.archivedConversations.map((item) =>
+          item.id === conversation.id ? conversation : item,
+        ),
+      })),
 
     renameConversation: async (id, title) => {
       const trimmed = title.trim();
@@ -369,9 +403,13 @@ export const useChatStore = create<ChatState>((set, get) => {
       try {
         const updated = await api.updateConversation(id, { title: trimmed });
         set((state) => ({
-          conversations: state.conversations.map((item) => item.id === id ? updated : item),
-          groupConversations: state.groupConversations.map((item) => item.id === id ? updated : item),
-          archivedConversations: state.archivedConversations.map((item) => item.id === id ? updated : item),
+          conversations: state.conversations.map((item) => (item.id === id ? updated : item)),
+          groupConversations: state.groupConversations.map((item) =>
+            item.id === id ? updated : item,
+          ),
+          archivedConversations: state.archivedConversations.map((item) =>
+            item.id === id ? updated : item,
+          ),
         }));
         return true;
       } catch (error) {
@@ -382,15 +420,24 @@ export const useChatStore = create<ChatState>((set, get) => {
 
     togglePin: async (id) => {
       const state = get();
-      const conversation = [...state.conversations, ...state.groupConversations, ...state.archivedConversations]
-        .find((item) => item.id === id);
+      const conversation = [
+        ...state.conversations,
+        ...state.groupConversations,
+        ...state.archivedConversations,
+      ].find((item) => item.id === id);
       if (!conversation) return;
       try {
         const updated = await api.updateConversation(id, { pinned: !conversation.pinned });
         set((current) => ({
-          conversations: sortConversations(current.conversations.map((item) => item.id === id ? updated : item)),
-          groupConversations: sortConversations(current.groupConversations.map((item) => item.id === id ? updated : item)),
-          archivedConversations: sortConversations(current.archivedConversations.map((item) => item.id === id ? updated : item)),
+          conversations: sortConversations(
+            current.conversations.map((item) => (item.id === id ? updated : item)),
+          ),
+          groupConversations: sortConversations(
+            current.groupConversations.map((item) => (item.id === id ? updated : item)),
+          ),
+          archivedConversations: sortConversations(
+            current.archivedConversations.map((item) => (item.id === id ? updated : item)),
+          ),
         }));
       } catch (error) {
         logger.error("Failed to pin conversation", error);
@@ -399,8 +446,11 @@ export const useChatStore = create<ChatState>((set, get) => {
 
     toggleArchive: async (id) => {
       const state = get();
-      const conversation = [...state.conversations, ...state.groupConversations, ...state.archivedConversations]
-        .find((item) => item.id === id);
+      const conversation = [
+        ...state.conversations,
+        ...state.groupConversations,
+        ...state.archivedConversations,
+      ].find((item) => item.id === id);
       if (!conversation) return;
       try {
         const updated = await api.updateConversation(id, { archived: !conversation.archived });
@@ -443,11 +493,19 @@ export const useChatStore = create<ChatState>((set, get) => {
         await api.deleteConversation(id);
         track("conversation_deleted", { conversationId: id });
         const state = get();
-        const allConversations = [...state.conversations, ...state.groupConversations, ...state.archivedConversations];
+        const allConversations = [
+          ...state.conversations,
+          ...state.groupConversations,
+          ...state.archivedConversations,
+        ];
         const deletedIndex = allConversations.findIndex((conversation) => conversation.id === id);
         const conversations = state.conversations.filter((conversation) => conversation.id !== id);
-        const groupConversations = state.groupConversations.filter((conversation) => conversation.id !== id);
-        const archivedConversations = state.archivedConversations.filter((conversation) => conversation.id !== id);
+        const groupConversations = state.groupConversations.filter(
+          (conversation) => conversation.id !== id,
+        );
+        const archivedConversations = state.archivedConversations.filter(
+          (conversation) => conversation.id !== id,
+        );
 
         if (state.currentConversationId !== id) {
           set({ conversations, groupConversations, archivedConversations });
@@ -459,7 +517,10 @@ export const useChatStore = create<ChatState>((set, get) => {
         messagesRequestId += 1;
         const activeConversations = [...conversations, ...groupConversations];
         const nextConversation =
-          activeConversations[deletedIndex] ?? activeConversations[deletedIndex - 1] ?? activeConversations[0] ?? null;
+          activeConversations[deletedIndex] ??
+          activeConversations[deletedIndex - 1] ??
+          activeConversations[0] ??
+          null;
 
         set({
           conversations,
@@ -489,8 +550,12 @@ export const useChatStore = create<ChatState>((set, get) => {
         const deletedIds = new Set(ids);
         const state = get();
         const conversations = state.conversations.filter((item) => !deletedIds.has(item.id));
-        const groupConversations = state.groupConversations.filter((item) => !deletedIds.has(item.id));
-        const archivedConversations = state.archivedConversations.filter((item) => !deletedIds.has(item.id));
+        const groupConversations = state.groupConversations.filter(
+          (item) => !deletedIds.has(item.id),
+        );
+        const archivedConversations = state.archivedConversations.filter(
+          (item) => !deletedIds.has(item.id),
+        );
         const currentWasDeleted = state.currentConversationId
           ? deletedIds.has(state.currentConversationId)
           : false;

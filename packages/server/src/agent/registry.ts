@@ -1,4 +1,6 @@
 import { isDeepStrictEqual } from "node:util";
+import { realpath } from "node:fs/promises";
+import { delimiter, isAbsolute, normalize, resolve } from "node:path";
 import type {
   AppConfig,
   Agent,
@@ -153,7 +155,9 @@ export class AgentRegistry {
     this.loadFriends();
     this.configuredAgents.clear();
     for (const config of configs) this.configuredAgents.set(config.id, config);
+    logger.info(`Initializing agents from config: ${configs.length} agents`);
     const persistedAgents = await this.persistence.loadPersistedAgents();
+    logger.info(`Loading persisted agents: ${persistedAgents.length} agents`);
     for (const config of configs) {
       const persisted = persistedAgents.find((agent) => agent.id === config.id);
       if (persisted?.disabled) continue;
@@ -166,8 +170,23 @@ export class AgentRegistry {
       });
     }
 
-    for (const persisted of persistedAgents) {
+    const orderedPersistedAgents = [...persistedAgents].sort(
+      (left, right) =>
+        Number(left.source === "auto_detected") - Number(right.source === "auto_detected"),
+    );
+    for (const persisted of orderedPersistedAgents) {
       if (persisted.disabled || this.entries.has(persisted.id)) continue;
+      if (persisted.source === "auto_detected") {
+        const command = commandFromConfig(persisted);
+        const duplicate = command ? await this.findByResolvedCommandPath(command) : undefined;
+        if (duplicate) {
+          logger.info(
+            { agentId: persisted.id, command, existingAgentId: duplicate.id },
+            "Skipping duplicate auto-detected agent",
+          );
+          continue;
+        }
+      }
       await this.registerInMemory(persisted);
     }
   }
@@ -181,8 +200,9 @@ export class AgentRegistry {
   }
 
   removeFriend(agentId: string, friendId: string): boolean {
-    const removed = Boolean(this.friends.get(agentId)?.delete(friendId))
-      || Boolean(this.friends.get(friendId)?.delete(agentId));
+    const removed =
+      Boolean(this.friends.get(agentId)?.delete(friendId)) ||
+      Boolean(this.friends.get(friendId)?.delete(agentId));
     this.friends.get(agentId)?.delete(friendId);
     this.friends.get(friendId)?.delete(agentId);
     this.repository.removeAgentFriend(agentId, friendId);
@@ -215,6 +235,16 @@ export class AgentRegistry {
       entry.status = "error";
       entry.error = messageFromError(error);
     }
+    logger.info(
+      {
+        agentId: config.id,
+        agentName: config.name,
+        source: persisted.source ?? "unknown",
+        command: (config.config as Record<string, unknown>)?.command as string | undefined,
+        status: entry.status,
+      },
+      "Agent registered",
+    );
     this.broadcastStatus(config.id);
     return this.toAgent(entry);
   }
@@ -224,8 +254,9 @@ export class AgentRegistry {
     input: Partial<Pick<AgentConfig, "name" | "description" | "avatar" | "config">>,
   ): Promise<Agent | undefined> {
     const current = this.entries.get(id);
-    const existing = current?.persisted
-      ?? (await this.persistence.loadPersistedAgents()).find((agent) => agent.id === id);
+    const existing =
+      current?.persisted ??
+      (await this.persistence.loadPersistedAgents()).find((agent) => agent.id === id);
     if (!existing) return undefined;
     const config: AgentConfig = {
       ...existing,
@@ -329,12 +360,16 @@ export class AgentRegistry {
     const entry = this.entries.get(id);
     if (entry) return this.toAgent(entry);
     if (!includeDisabled) return undefined;
-    const persisted = this.persistence.loadPersistedAgentMetadata().find((agent) => agent.id === id);
+    const persisted = this.persistence
+      .loadPersistedAgentMetadata()
+      .find((agent) => agent.id === id);
     return persisted?.disabled ? this.toDisabledAgent(persisted) : undefined;
   }
 
   async disable(id: string): Promise<Agent | undefined> {
-    const persisted = (await this.persistence.loadPersistedAgents()).find((agent) => agent.id === id);
+    const persisted = (await this.persistence.loadPersistedAgents()).find(
+      (agent) => agent.id === id,
+    );
     if (!persisted) return undefined;
     const current = this.entries.get(id);
     current?.adapter.destroy?.();
@@ -345,7 +380,9 @@ export class AgentRegistry {
   }
 
   async enable(id: string): Promise<Agent | undefined> {
-    const persisted = (await this.persistence.loadPersistedAgents()).find((agent) => agent.id === id);
+    const persisted = (await this.persistence.loadPersistedAgents()).find(
+      (agent) => agent.id === id,
+    );
     if (!persisted) return undefined;
     const updated = await this.persistence.updatePersistedAgent(id, { disabled: false });
     return updated ? this.registerInMemory(updated) : undefined;
@@ -386,6 +423,18 @@ export class AgentRegistry {
       (candidate) => candidate.persisted.detectionFingerprint === fingerprint,
     );
     return entry ? this.toAgent(entry) : undefined;
+  }
+
+  async findByResolvedCommandPath(command: string): Promise<Agent | undefined> {
+    const resolvedCommand = await resolveCommandPath(command);
+    if (!resolvedCommand) return undefined;
+    for (const entry of this.entries.values()) {
+      const candidateCommand = commandFromConfig(entry.config);
+      if (!candidateCommand) continue;
+      const resolvedCandidate = await resolveCommandPath(candidateCommand, entry.config);
+      if (resolvedCandidate === resolvedCommand) return this.toAgent(entry);
+    }
+    return undefined;
   }
 
   private toAgent(entry: RegistryEntry): Agent {
@@ -462,23 +511,29 @@ export class AgentRegistry {
     if (this.healthCheckRunning) return;
     this.healthCheckRunning = true;
     try {
-      await Promise.all([...this.entries].map(async ([agentId, entry]) => {
-        if (entry.status === "busy") return;
-        try {
-          const healthy = entry.adapter.healthCheck
-            ? await entry.adapter.healthCheck()
-            : entry.adapter.getStatus() === "online";
-          if (!healthy) {
+      await Promise.all(
+        [...this.entries].map(async ([agentId, entry]) => {
+          if (entry.status === "busy") return;
+          try {
+            const healthy = entry.adapter.healthCheck
+              ? await entry.adapter.healthCheck()
+              : entry.adapter.getStatus() === "online";
+            if (!healthy) {
+              this.healthCheckFailures.add(agentId);
+              this.setStatus(agentId, "error", "Agent health check failed");
+            } else if (this.healthCheckFailures.delete(agentId)) {
+              this.setStatus(agentId, "online");
+            }
+          } catch (error) {
             this.healthCheckFailures.add(agentId);
-            this.setStatus(agentId, "error", "Agent health check failed");
-          } else if (this.healthCheckFailures.delete(agentId)) {
-            this.setStatus(agentId, "online");
+            this.setStatus(
+              agentId,
+              "error",
+              `Agent health check failed: ${messageFromError(error)}`,
+            );
           }
-        } catch (error) {
-          this.healthCheckFailures.add(agentId);
-          this.setStatus(agentId, "error", `Agent health check failed: ${messageFromError(error)}`);
-        }
-      }));
+        }),
+      );
     } finally {
       this.healthCheckRunning = false;
     }
@@ -505,4 +560,45 @@ function createAdapter(config: AgentConfig): AgentAdapter {
     return new LangChainAdapter(config.id, config.name, config.description);
   }
   return new MockAdapter(config.id, config.name, config.description);
+}
+
+function commandFromConfig(config: AgentConfig): string | undefined {
+  const command = config.config.command;
+  return typeof command === "string" && command.trim() ? command.trim() : undefined;
+}
+
+async function resolveCommandPath(
+  command: string,
+  config?: AgentConfig,
+): Promise<string | undefined> {
+  const configuredEnvironment = config?.config.env;
+  const environment =
+    configuredEnvironment && typeof configuredEnvironment === "object"
+      ? { ...process.env, ...(configuredEnvironment as Record<string, string>) }
+      : process.env;
+  const configuredCwd = config?.config.cwd;
+  const cwd = typeof configuredCwd === "string" ? configuredCwd : process.cwd();
+  const candidates =
+    command.includes("/") || command.includes("\\")
+      ? [isAbsolute(command) ? command : resolve(cwd, command)]
+      : (environment.PATH ?? "")
+          .split(delimiter)
+          .filter(Boolean)
+          .flatMap((directory) => {
+            if (process.platform !== "win32") return [resolve(directory, command)];
+            const extensions = command.includes(".")
+              ? [""]
+              : (environment.PATHEXT ?? ".EXE;.CMD;.BAT;.COM").split(";");
+            return extensions.map((extension) => resolve(directory, `${command}${extension}`));
+          });
+
+  for (const candidate of candidates) {
+    try {
+      const resolvedPath = normalize(await realpath(candidate));
+      return process.platform === "win32" ? resolvedPath.toLowerCase() : resolvedPath;
+    } catch {
+      // Try the next PATH candidate.
+    }
+  }
+  return undefined;
 }

@@ -16,12 +16,15 @@ import type { RelayClient } from "../hub/relay-client";
 export class AgentRuntime {
   private readonly controllers = new Map<string, AbortController>();
   private readonly a2aResults = new Map<string, string>();
-  private readonly pendingA2AConfirmations = new Map<string, {
-    resolve: (result: A2AAuthorizationResult) => void;
-    timeout: ReturnType<typeof setTimeout>;
-    signal?: AbortSignal;
-    abort?: () => void;
-  }>();
+  private readonly pendingA2AConfirmations = new Map<
+    string,
+    {
+      resolve: (result: A2AAuthorizationResult) => void;
+      timeout: ReturnType<typeof setTimeout>;
+      signal?: AbortSignal;
+      abort?: () => void;
+    }
+  >();
   private readonly a2aBus: A2ABus;
   private readonly a2aPermissions: A2APermissions;
   private readonly metrics = new AdapterMetrics();
@@ -34,11 +37,8 @@ export class AgentRuntime {
     relayClient?: RelayClient,
   ) {
     this.a2aPermissions = new A2APermissions(repository);
-    this.a2aBus = new A2ABus(
-      registry,
-      undefined,
-      relayClient,
-      (request) => this.authorizeA2A(request),
+    this.a2aBus = new A2ABus(registry, undefined, relayClient, (request) =>
+      this.authorizeA2A(request),
     );
   }
 
@@ -87,7 +87,8 @@ export class AgentRuntime {
       this.repository.listMessages(conversationId).map((message) => message.id),
     );
     await this.handleUserMessage(conversationId, content, [], targetAgentId);
-    return this.repository.listMessages(conversationId)
+    return this.repository
+      .listMessages(conversationId)
       .filter((message) => !previousIds.has(message.id) && message.fromType === "agent")
       .map((message) => message.content)
       .filter(Boolean)
@@ -103,7 +104,8 @@ export class AgentRuntime {
     const conversation = this.repository.getConversation(conversationId);
     if (!conversation) throw new Error("Conversation not found");
     const content = rawContent.trim();
-    if (!content || content.length > 32_000) throw new Error("Message must contain 1–32000 characters");
+    if (!content || content.length > 32_000)
+      throw new Error("Message must contain 1–32000 characters");
 
     const parsed = parseMentions(content, conversation.agentIds);
     const mentionedByName = parsed.mentionedAgentNames.flatMap((name) =>
@@ -112,28 +114,28 @@ export class AgentRuntime {
         return agent ? mentionKey(agent.name) === mentionKey(name) : false;
       }),
     );
-    const mentions = [...new Set([
-      ...explicitMentions,
-      ...parsed.mentionedAgents,
-      ...mentionedByName,
-    ])].filter((id) => conversation.agentIds.includes(id));
+    const mentions = [
+      ...new Set([...explicitMentions, ...parsed.mentionedAgents, ...mentionedByName]),
+    ].filter((id) => conversation.agentIds.includes(id));
     if (explicitAgentId && !conversation.agentIds.includes(explicitAgentId)) {
       throw new Error("Agent is not assigned to this conversation");
     }
-    const routingMentions = [...new Set([
-      ...mentions,
-      ...(explicitAgentId ? [explicitAgentId] : []),
-    ])];
+    const routingMentions = [
+      ...new Set([...mentions, ...(explicitAgentId ? [explicitAgentId] : [])]),
+    ];
     const firstOnlineAgentId = conversation.agentIds.find(
       (agentId) => this.registry.getStatus(agentId) === "online",
     );
-    const targetAgentIds = conversation.type === "group"
-      ? routingMentions.length > 0
-        ? routingMentions.filter((agentId) => this.registry.getStatus(agentId) === "online")
-        : firstOnlineAgentId ? [firstOnlineAgentId] : []
-      : [explicitAgentId ?? routingMentions[0] ?? conversation.agentIds[0]].filter(
-          (agentId): agentId is string => Boolean(agentId),
-        );
+    const targetAgentIds =
+      conversation.type === "group"
+        ? routingMentions.length > 0
+          ? routingMentions.filter((agentId) => this.registry.getStatus(agentId) === "online")
+          : firstOnlineAgentId
+            ? [firstOnlineAgentId]
+            : []
+        : [explicitAgentId ?? routingMentions[0] ?? conversation.agentIds[0]].filter(
+            (agentId): agentId is string => Boolean(agentId),
+          );
     if (conversation.type !== "group" && targetAgentIds.length === 0) {
       throw new Error("No Agent is assigned to this conversation");
     }
@@ -152,12 +154,14 @@ export class AgentRuntime {
     track("message_sent", {
       conversationId,
       from: "user",
-      to: targetAgentIds.length === 1 ? targetAgentIds[0] ?? "all" : "all",
+      to: targetAgentIds.length === 1 ? (targetAgentIds[0] ?? "all") : "all",
     });
 
-    await Promise.all(targetAgentIds.map((agentId) =>
-      this.routeMessageToAgent(conversationId, agentId, content, mentions),
-    ));
+    await Promise.all(
+      targetAgentIds.map((agentId) =>
+        this.routeMessageToAgent(conversationId, agentId, content, mentions),
+      ),
+    );
   }
 
   private async routeMessageToAgent(
@@ -220,7 +224,10 @@ export class AgentRuntime {
     const startedAt = Date.now();
     this.controllers.set(reply.id, controller);
     this.registry.setStatus(adapter.id, "busy");
-    logger.info({ agentId: adapter.id, conversationId: reply.conversationId }, "Agent invocation started");
+    logger.info(
+      { agentId: adapter.id, conversationId: reply.conversationId },
+      "Agent invocation started",
+    );
     track("agent_invoke_start", { agentId: adapter.id, conversationId: reply.conversationId });
     this.events.publish(reply.conversationId, {
       type: "typing",
@@ -234,11 +241,40 @@ export class AgentRuntime {
         this.repository.listMessages(reply.conversationId).filter((item) => item.id !== reply.id),
         this.config.history,
       );
-      for await (const chunk of adapter.handleMessage(content, {
+      const conversation = this.repository.getConversation(reply.conversationId);
+      const availableAgentIds = conversation?.agentIds ?? [adapter.id];
+      const otherAgentIds = availableAgentIds.filter((id) => id !== adapter.id);
+      let augmentedContent = content;
+      if (conversation?.type === "group" && otherAgentIds.length > 0) {
+        const contentLower = content.toLowerCase();
+        const mentionedAgents = otherAgentIds
+          .map((id) => {
+            const agent = this.registry.get(id);
+            return { id, name: agent?.name ?? id };
+          })
+          .filter(
+            ({ id, name }) =>
+              contentLower.includes(`@${name.toLowerCase()}`) ||
+              contentLower.includes(`@${id.toLowerCase()}`),
+          );
+
+        if (mentionedAgents.length > 0) {
+          const request = mentionedAgents
+            .map(({ name }) => `@${name}`)
+            .reduce((msg, mention) => msg.replace(mention, ""), content)
+            .replace(/@\S+/giu, "")
+            .trim();
+          const a2aInstructions = mentionedAgents
+            .map(({ id }) => `[A2A_CALL: ${id}: ${request}]`)
+            .join("\n");
+          augmentedContent = `${content}\n\n--- System: The user mentioned ${mentionedAgents.map(({ name }) => name).join(", ")}. If you need help from them, use:\n${a2aInstructions}`;
+        }
+      }
+      for await (const chunk of adapter.handleMessage(augmentedContent, {
         conversationId: reply.conversationId,
         history,
         mentionedAgents,
-        availableAgentIds: this.repository.getConversation(reply.conversationId)?.agentIds ?? [adapter.id],
+        availableAgentIds,
         a2aBus: this.a2aBus,
         callStack: [adapter.id],
         parentMessageId: reply.id,
@@ -252,16 +288,34 @@ export class AgentRuntime {
       this.finish(reply, output, "done", chunks, startedAt, adapter.id);
       this.metrics.recordInvocation(adapter.id, Date.now() - startedAt, true);
     } catch (error) {
-      const cancelled = controller.signal.aborted || (error instanceof DOMException && error.name === "AbortError");
+      const cancelled =
+        controller.signal.aborted || (error instanceof DOMException && error.name === "AbortError");
       const status: MessageStatus = output ? "partial" : "error";
       const detail = cancelled ? "生成已停止" : messageFromError(error);
       if (!cancelled) {
-        logger.error({ err: error, agentId: adapter.id, conversationId: reply.conversationId }, "Agent invocation failed");
+        logger.error(
+          {
+            err: error,
+            agentId: adapter.id,
+            conversationId: reply.conversationId,
+            errorMessage: detail,
+          },
+          "Agent invocation failed",
+        );
         track("error", { message: detail, source: "agent_runtime", agentId: adapter.id });
+      } else {
+        logger.warn(
+          { agentId: adapter.id, conversationId: reply.conversationId, reason: "cancelled" },
+          "Agent invocation cancelled",
+        );
       }
       const errorChunk: StreamChunk = { type: "error", content: detail };
       chunks.push(errorChunk);
-      this.events.publish(reply.conversationId, { type: "stream", messageId: reply.id, chunk: errorChunk });
+      this.events.publish(reply.conversationId, {
+        type: "stream",
+        messageId: reply.id,
+        chunk: errorChunk,
+      });
       this.finish(reply, output || detail, status, chunks, startedAt, adapter.id);
       this.metrics.recordInvocation(adapter.id, Date.now() - startedAt, false);
     } finally {
@@ -287,17 +341,35 @@ export class AgentRuntime {
       ...reply,
       content,
       status,
-      metadata: { model: this.registry.get(agentId)?.model, durationMs: Date.now() - startedAt, chunks },
+      metadata: {
+        model: this.registry.get(agentId)?.model,
+        durationMs: Date.now() - startedAt,
+        chunks,
+      },
     };
     this.repository.updateMessage(reply.id, content, status, finalMessage.metadata);
     this.events.publish(reply.conversationId, { type: "message", message: finalMessage });
     const durationMs = Date.now() - startedAt;
-    logger.info({ agentId, conversationId: reply.conversationId, status, durationMs }, "Agent invocation ended");
-    track("agent_invoke_end", { agentId, conversationId: reply.conversationId, status, durationMs });
+    logger.info(
+      { agentId, conversationId: reply.conversationId, status, durationMs },
+      "Agent invocation ended",
+    );
+    track("agent_invoke_end", {
+      agentId,
+      conversationId: reply.conversationId,
+      status,
+      durationMs,
+    });
     this.registry.setStatus(agentId, "online");
   }
 
-  private publishA2A(conversationId: string, parentMessageId: string, from: string, request: string, chunk: StreamChunk): void {
+  private publishA2A(
+    conversationId: string,
+    parentMessageId: string,
+    from: string,
+    request: string,
+    chunk: StreamChunk,
+  ): void {
     if (!chunk.threadId) return;
     if (chunk.type === "tool_call") {
       const to = String(chunk.metadata?.to ?? chunk.sourceAgentId ?? "agent");
@@ -393,7 +465,7 @@ export class AgentRuntime {
 
   private clearPendingA2AConfirmation(
     threadId: string,
-    pending: (typeof this.pendingA2AConfirmations extends Map<string, infer T> ? T : never),
+    pending: typeof this.pendingA2AConfirmations extends Map<string, infer T> ? T : never,
   ): void {
     clearTimeout(pending.timeout);
     if (pending.signal && pending.abort) {
@@ -404,7 +476,11 @@ export class AgentRuntime {
 }
 
 function mentionKey(value: string): string {
-  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
 }
 
 function createMessage(input: Omit<Message, "id" | "timestamp">): Message {

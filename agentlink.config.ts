@@ -8,19 +8,5 @@ export default {
   },
   auth: { enabled: false, tokens: {} },
   history: { maxMessages: 20, maxTokens: 8_000 },
-  agents: [
-    {
-      id: "claude",
-      name: "Claude Code",
-      description: "Claude Code CLI 本地 Agent",
-      type: "cli",
-      config: {
-        model: "claude-sonnet-4-20250514",
-        command: "claude",
-        args: ["-p", "--output-format", "stream-json", "--verbose", "--no-session-persistence"],
-        input: "argument",
-        output: "jsonl",
-      },
-    },
-  ],
+  agents: [],
 } satisfies AppConfig;

@@ -26,23 +26,28 @@ export interface A2AAuthorizationResult {
   error?: string;
 }
 
-export type A2AAuthorizer = (
-  request: A2AAuthorizationRequest,
-) => Promise<A2AAuthorizationResult>;
+export type A2AAuthorizer = (request: A2AAuthorizationRequest) => Promise<A2AAuthorizationResult>;
 
 export class A2ABus implements A2ABusLike {
   private readonly concurrency = new Map<string, number>();
-  private readonly activeCalls = new Map<string, {
-    controller: AbortController;
-    children: Set<string>;
-    parentThreadId?: string;
-  }>();
+  private readonly activeCalls = new Map<
+    string,
+    {
+      controller: AbortController;
+      children: Set<string>;
+      parentThreadId?: string;
+    }
+  >();
   private readonly callsByStack = new Map<string, string[]>();
   private hubMessageRouter?: HubMessageRouter;
 
   constructor(
     private readonly registry: AgentRegistry,
-    private readonly options: A2ABusOptions = { maxDepth: 5, chainTimeoutMs: 60_000, maxConcurrency: 3 },
+    private readonly options: A2ABusOptions = {
+      maxDepth: 5,
+      chainTimeoutMs: 60_000,
+      maxConcurrency: 3,
+    },
     private readonly relayClient?: RelayClient,
     private readonly authorize?: A2AAuthorizer,
   ) {}
@@ -60,7 +65,11 @@ export class A2ABus implements A2ABusLike {
     const stack = context.callStack ?? [fromAgentId];
     const threadId = context.a2aThreadId ?? randomUUID();
     if (stack.includes(toAgentId)) {
-      yield { type: "error", content: `检测到循环调用: ${stack.join(" → ")} → ${toAgentId}`, threadId };
+      yield {
+        type: "error",
+        content: `检测到循环调用: ${stack.join(" → ")} → ${toAgentId}`,
+        threadId,
+      };
       return;
     }
     if (stack.length >= this.options.maxDepth) {
@@ -94,12 +103,11 @@ export class A2ABus implements A2ABusLike {
         yield { type: "error", content: "Relay 当前未连接", threadId };
         return;
       }
-      const separatorIndex = toAgentId.startsWith(remoteHubId)
-        ? remoteHubId.length
-        : -1;
-      const remoteAgentId = separatorIndex >= 0 && [":", "/"].includes(toAgentId[separatorIndex] ?? "")
-        ? toAgentId.slice(separatorIndex + 1)
-        : toAgentId;
+      const separatorIndex = toAgentId.startsWith(remoteHubId) ? remoteHubId.length : -1;
+      const remoteAgentId =
+        separatorIndex >= 0 && [":", "/"].includes(toAgentId[separatorIndex] ?? "")
+          ? toAgentId.slice(separatorIndex + 1)
+          : toAgentId;
       const response = await this.hubMessageRouter.callRemoteAgent(
         remoteHubId,
         fromAgentId,
@@ -117,8 +125,26 @@ export class A2ABus implements A2ABusLike {
       return;
     }
     const adapter = this.registry.getAdapter(toAgentId);
-    if (!adapter?.handleA2ACall || this.registry.getStatus(toAgentId) !== "online") {
-      yield { type: "error", content: `Agent ${toAgentId} 当前不可用`, threadId };
+    if (
+      !adapter?.handleA2ACall ||
+      (this.registry.getStatus(toAgentId) !== "online" &&
+        this.registry.getStatus(toAgentId) !== "busy")
+    ) {
+      const status = this.registry.getStatus(toAgentId);
+      logger.warn(
+        {
+          toAgentId,
+          status,
+          hasAdapter: Boolean(adapter),
+          hasHandleA2A: Boolean(adapter?.handleA2ACall),
+        },
+        "A2A target agent unavailable",
+      );
+      yield {
+        type: "error",
+        content: `Agent ${toAgentId} 当前不可用 (status: ${status})`,
+        threadId,
+      };
       return;
     }
 
@@ -161,7 +187,10 @@ export class A2ABus implements A2ABusLike {
       }
     } catch (error) {
       logger.error({ err: error, fromAgentId, toAgentId, threadId }, "A2A call failed");
-      track("error", { message: error instanceof Error ? error.message : String(error), source: "a2a_bus" });
+      track("error", {
+        message: error instanceof Error ? error.message : String(error),
+        source: "a2a_bus",
+      });
       throw error;
     } finally {
       // Ensure the adapter generator is closed even when we bailed on abort/timeout

@@ -7,7 +7,12 @@
     "allAgents": "All Agents",
     "broadcastWarning": "Will send to all online Agents",
     "search": "Search agents…",
-    "noAgents": "No online agents"
+    "noAgents": "No online agents",
+    "selectAgents": "Select agents",
+    "agentsSelected_one": "{{count}} agent",
+    "agentsSelected_other": "{{count}} agents",
+    "selectedCount": "{{count}} selected",
+    "clearSelection": "Clear selection"
   },
   "defaultConversationTitle": "Direct message: My Agent",
   "inputPlaceholder": "Type a message… (Enter to send, Shift+Enter for a new line)",

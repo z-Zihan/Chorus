@@ -35,15 +35,18 @@ export function registerDetectionRoutes(
   app.post("/api/cli/detections/locate", async (request, reply) => {
     const parsed = locateSchema.safeParse(request.body);
     if (!parsed.success) {
-      return reply.code(400).send({ error: "INVALID_EXECUTABLE_PATH", issues: parsed.error.flatten() });
+      return reply
+        .code(400)
+        .send({ error: "INVALID_EXECUTABLE_PATH", issues: parsed.error.flatten() });
     }
     try {
       const controller = requestAbortController(request);
       return await detector.locate(parsed.data.path, parsed.data.descriptorId, controller.signal);
     } catch (error) {
-      const code = error instanceof Error && error.message === "UNSUPPORTED_CLI"
-        ? "UNSUPPORTED_CLI"
-        : "CLI_NOT_FOUND";
+      const code =
+        error instanceof Error && error.message === "UNSUPPORTED_CLI"
+          ? "UNSUPPORTED_CLI"
+          : "CLI_NOT_FOUND";
       return reply.code(code === "UNSUPPORTED_CLI" ? 400 : 404).send({ error: code });
     }
   });
@@ -55,6 +58,9 @@ export async function adoptDetection(
 ): Promise<Agent> {
   const existing = registry.findByDetectionFingerprint(detection.fingerprint);
   if (existing) return existing;
+
+  const existingForCommand = await registry.findByResolvedCommandPath(detection.resolvedPath);
+  if (existingForCommand) return existingForCommand;
 
   const descriptor = getCliDescriptor(detection.descriptorId);
   if (!descriptor) throw new Error("UNSUPPORTED_CLI");

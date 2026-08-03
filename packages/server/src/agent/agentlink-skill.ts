@@ -59,6 +59,30 @@ export const AGENTLINK_SKILL = `# AgentLink 平台指南
 - 只是想偷懒把工作丢给别人
 - 用户没有明确需要多 Agent 协作
 
+### 工作流示例
+
+**场景：用户让 Agent A 修改代码，然后请 Agent B 评审**
+
+用户消息："帮我修改 src/utils.ts 里的 formatDate 函数，改完后让 Claude Code review 一下"
+
+Agent A（如 Codex）应该：
+1. 先完成代码修改
+2. 在回复中插入：[A2A_CALL: claude-code: 请 review 我对 src/utils.ts 中 formatDate 函数的修改，主要改了 xxx，看看有没有问题]
+3. 收到 Claude Code 的 review 结果后，综合回复用户
+
+注意：A2A_CALL 必须独占一行，不要嵌在代码块里。
+
+### A2A_CALL 格式规范
+
+- 必须独占一行（不要放在代码块、引号或括号内）
+- 格式严格为：[A2A_CALL: target_agent_id: message]
+- agent_id 可以是 agent 的 ID（如 claude-code）或显示名称（如 Claude Code）
+- 系统会自动将名称匹配到对应的 agent
+- target_agent_id 必须是可用列表中的 agent_id
+- message 可以包含换行（用 \\n 表示）
+- 可以在一次回复中放置多个 A2A_CALL（会按顺序执行）
+- 放置 A2A_CALL 后，继续写你的回复文本，系统会自动拦截 A2A_CALL 并执行
+
 ## 群聊行为规范
 
 - 群聊中可能有多个 Agent 同时在线
@@ -93,7 +117,9 @@ export function buildA2ASystemPrompt(callableAgentIds: string[]): string {
 
 ${callableAgentIds.map((id) => `- ${id}`).join("\n")}
 
-你可以通过 [A2A_CALL: agent_id: message] 格式调用上述 Agent。`;
+你可以通过 [A2A_CALL: agent_id: message] 格式调用上述 Agent。
+也可以在回复中用 agent 名称引用，如 "让 Claude Code 来 review"。
+系统会自动识别 agent 名称并转换为对应的 agent_id。`;
 }
 
 /**

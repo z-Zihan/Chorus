@@ -7,7 +7,12 @@
     "allAgents": "全部 Agents",
     "broadcastWarning": "将发送给所有在线 Agent",
     "search": "搜索 Agents…",
-    "noAgents": "暂无在线 Agent"
+    "noAgents": "暂无在线 Agent",
+    "selectAgents": "选择 Agents",
+    "agentsSelected_one": "{{count}} 个 Agent",
+    "agentsSelected_other": "{{count}} 个 Agents",
+    "selectedCount": "已选择 {{count}} 个",
+    "clearSelection": "清除选择"
   },
   "defaultConversationTitle": "私聊：我的 Agent",
   "inputPlaceholder": "输入消息…（Enter 发送，Shift+Enter 换行）",

@@ -59,19 +59,36 @@ export function registerWebSocket(
     app.log.info("WebSocket client connected");
     track("ws_connect");
 
+    const heartbeatInterval = setInterval(() => {
+      if (ws.readyState === ws.OPEN) ws.ping();
+    }, 30_000);
+    ws.on("pong", () => {
+      // Heartbeat received; the connection is alive.
+    });
+
     ws.on("message", (data) => {
       let raw: unknown;
-      try { raw = JSON.parse(data.toString()); } catch (error) {
+      try {
+        raw = JSON.parse(data.toString());
+      } catch (error) {
         app.log.warn({ err: error }, "Invalid WebSocket JSON payload");
         events.sendDirect(ws, { type: "error", message: "Invalid JSON payload" });
         return;
       }
       const parsed = eventSchema.safeParse(raw);
       if (!parsed.success) {
-        const issues = parsed.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join('; ');
-        const rawType = typeof raw === 'object' && raw !== null ? (raw as Record<string, unknown>).type : 'unknown';
+        const issues = parsed.error.issues
+          .map((i) => `${i.path.join(".")}: ${i.message}`)
+          .join("; ");
+        const rawType =
+          typeof raw === "object" && raw !== null
+            ? (raw as Record<string, unknown>).type
+            : "unknown";
         app.log.warn({ raw, issues, rawType }, "WebSocket event validation failed");
-        events.sendDirect(ws, { type: "error", message: parsed.error.issues[0]?.message ?? "Invalid event" });
+        events.sendDirect(ws, {
+          type: "error",
+          message: parsed.error.issues[0]?.message ?? "Invalid event",
+        });
         return;
       }
       try {
@@ -82,6 +99,7 @@ export function registerWebSocket(
       }
     });
     ws.on("close", () => {
+      clearInterval(heartbeatInterval);
       app.log.info("WebSocket client disconnected");
       track("ws_disconnect");
       events.remove(ws);
@@ -108,12 +126,8 @@ function handleEvent(
   } else if (event.type === "cancel") {
     runtime.cancel(event.messageId);
   } else if (event.type === "message") {
-    void runtime.handleUserMessage(
-      event.conversationId,
-      event.content,
-      event.mentionedAgents,
-      event.agentId,
-    )
+    void runtime
+      .handleUserMessage(event.conversationId, event.content, event.mentionedAgents, event.agentId)
       .catch((error: unknown) => {
         app.log.error({ err: error }, "Agent runtime failed while handling WebSocket message");
         events.sendDirect(socket, {
