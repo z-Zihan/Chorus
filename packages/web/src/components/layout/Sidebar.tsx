@@ -55,6 +55,7 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
   const [isArchivedOpen, setIsArchivedOpen] = useState(false);
   const [isGroupsOpen, setIsGroupsOpen] = useState(true);
   const [isAgentsOpen, setIsAgentsOpen] = useState(true);
+  const [isAgentStatusOpen, setIsAgentStatusOpen] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -465,8 +466,17 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
         </div>
 
         <div className="border-t border-[var(--border-color)] px-2 py-3">
-          <div className="mb-2 px-2 text-xs font-medium uppercase tracking-wider text-[var(--text-tertiary)]">{t("sidebar:agentStatus")}</div>
+          <button
+            type="button"
+            onClick={() => setIsAgentStatusOpen(!isAgentStatusOpen)}
+            className="mb-2 flex w-full items-center justify-between px-2 text-xs font-medium uppercase tracking-wider text-[var(--text-tertiary)]"
+          >
+            <span>{t("sidebar:agentStatus")}</span>
+            <ChevronDown aria-hidden="true" className={`h-3.5 w-3.5 transition-transform ${isAgentStatusOpen ? "rotate-180" : ""}`} />
+          </button>
           <div className="space-y-1">
+            {isAgentStatusOpen && (
+              <>
             {agents.length === 0 && (
               <div className="px-2 py-2">
                 <p className="text-sm text-[var(--text-muted)]">{t("sidebar:noAgents")}</p>
@@ -476,7 +486,11 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
               </div>
             )}
             {agents.map((agent) => (
-              <button type="button" key={agent.id} onClick={() => selectAgent(agent.id)} className="group flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:bg-[var(--bg-hover)] focus:bg-[var(--bg-hover)] focus:outline-none">
+              <button type="button" key={agent.id} onClick={() => {
+                selectAgent(agent.id);
+                filterByAgent(agent.id);
+                void createConversation(undefined, agent.id);
+              }} className="group flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:bg-[var(--bg-hover)] focus:bg-[var(--bg-hover)] focus:outline-none">
                 <AgentAvatar name={agent.name} src={agent.avatar} size="sm" />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-medium text-[var(--text-primary)]">{agent.name}</div>
@@ -485,9 +499,10 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
                     {t(`common:status.${agent.status}`)}
                   </div>
                 </div>
-                <Settings aria-hidden="true" className="h-4 w-4 shrink-0 text-[var(--text-tertiary)] opacity-100 transition group-hover:text-[var(--text-primary)] md:opacity-0 md:group-hover:opacity-100 md:group-focus:opacity-100" />
               </button>
             ))}
+              </>
+            )}
             <Button
               variant="ghost"
               className="mt-2 w-full justify-start"
