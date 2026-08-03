@@ -35,7 +35,6 @@
   },
   "bundle": {
     "active": true,
-    "createUpdaterArtifacts": true,
     "targets": ["app", "dmg", "msi", "nsis"],
     "resources": {
       "../packages/server/dist/": "packages/server/dist/"
@@ -54,22 +53,17 @@
         "languages": ["SimpChinese", "English"],
         "displayLanguageSelector": true
       }
-    }
+    },
+    "createUpdaterArtifacts": true
   },
   "plugins": {
     "shell": {
       "open": true
     },
     "updater": {
-      // Signing key setup:
-      // 1. Run `pnpm tauri signer generate -w ~/.tauri/agentlink.key` outside the repository.
-      // 2. Replace the placeholder below with the generated public key.
-      // 3. Store the private key and password as TAURI_SIGNING_PRIVATE_KEY and
-      //    TAURI_SIGNING_PRIVATE_KEY_PASSWORD GitHub Actions secrets. Never commit the private key.
-      "pubkey": "REPLACE_WITH_TAURI_SIGNING_PUBLIC_KEY",
-      "endpoints": [
-        "https://releases.agentlink.app/{{target}}/{{arch}}/{{current_version}}?channel=stable"
-      ]
+      "active": true,
+      "endpoints": ["https://releases.agentlink.app/{{target}}/{{arch}}/{{current_version}}"],
+      "pubkey": ""
     }
   }
 }

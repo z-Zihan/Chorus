@@ -421,8 +421,8 @@ A4-01  A4-02  A4-03  (独立)
 | U-01 | 系统级密钥存储 | macOS Keychain + Windows Credential Manager + Linux libsecret + AES-256-GCM 文件兜底。credential-store.ts 400+ 行。 | 🔴 P0 | ✅ 已验证 |
 | U-02 | A2A 权限确认 UI | auto/confirm/deny 三模式 + 30s 超时 + 弹窗确认 + 3 个 API 端点 | 🟡 P1 | ✅ 已验证 |
 | U-03 | 群聊路由语义统一 | 无@→首个在线 Agent（不再广播）；显式 All→广播；AgentSelector 多选 | 🔴 P0 | ✅ 已验证 |
-| U-04 | E2E 验证冲刺 | 干净环境首启 ✅ + TTFM 7s ✅ + CLI adapter 修复 ✅ + WS lastEventId 修复 ✅ | 🔴 P0 | 🟡 部分完成 |
-| U-05 | A2A tool-calling 仅 OpenAI adapter | CLI adapter 不支持 tool-calling，A2A 只在 OpenAI API Agent 间工作。需 prompt-based A2A | 🟡 P1 | ⚠️ 设计限制 |
+| U-04 | E2E 验证冲刺 | 干净环境首启 ✅ + TTFM 7s ✅ + CLI adapter 修复 ✅ + WS lastEventId 修复 ✅ + Codex JSON 解析 ✅ + Catalog detected ✅ | 🔴 P0 | ✅ 已验证 |
+| U-05 | Prompt-based A2A for CLI adapters | CLI adapter 通过 [A2A_CALL: target: message] 协议支持 A2A。OpenAI adapter 用 tool-calling | 🟡 P1 | ✅ 已验证 |
 
 ## 验证冲刺（优先于所有新功能开发）
 
@@ -446,8 +446,8 @@ A4-01  A4-02  A4-03  (独立)
 | v0.2 多 Agent (M1-M5) | 17 | 12 | 5 | 0 |
 | v0.3 群聊+生态 (A1-A4) | 13 | 10 | 3 | 0 |
 | v1.0 跨用户 (R1-R6) | 29 | 24 | 4 | 1 |
-| 未排期 (U-01~05) | 5 | 3 | 1 | 1 |
-| **合计** | **139** | **116** | **21** | **2** |
+| 未排期 (U-01~05) | 5 | 5 | 0 | 0 |
+| **合计** | **139** | **118** | **19** | **2** |
 
 > ✅ 已验证 = 代码存在 + 单元/集成测试通过
 > 🟡 已写未验证 = 代码存在但无 E2E 验证或 PRD 验收测试

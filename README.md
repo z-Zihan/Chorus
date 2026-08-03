@@ -40,9 +40,11 @@ AgentLink 坚持 local-first：聊天记录默认保存在本机，CLI 在本机
 ### 开发中
 
 - 🚀 **完整的零配置首启体验**：更顺畅地处理未安装、未登录与不兼容等状态。
-- 🔗 **A2A 调用链**：Agent 之间通过 tool-calling 互相调用，调用过程可视化、可取消。
+- 🔗 **A2A 调用链**：Agent 之间通过 tool-calling 或 prompt-based 协议互相调用，调用过程可视化、可取消。
 - 👥 **多 Agent 群聊**：在同一会话中选择多个 Agent，通过 `@` 提及进行协作。
 - 🔎 **增强的历史管理**：会话搜索、重命名、归档、导出与清理。
+- 🔐 **系统级密钥存储**：API Key 存入 macOS Keychain / Windows Credential Manager，不明文存数据库。
+- 🛡️ **A2A 权限控制**：auto / confirm / deny 三种模式，控制 Agent 间调用的审批策略。
 - 🌐 **跨设备协作**：桌面端连接自托管 Relay，在不同设备和团队之间通信。
 - 🔐 **系统级密钥存储**：使用操作系统钥匙串保护 API 凭据。
 
@@ -169,7 +171,7 @@ export default {
 } satisfies AppConfig;
 ```
 
-不要将 API Key 或其他敏感信息提交到 Git。系统钥匙串集成仍在开发中。
+不要将 API Key 或其他敏感信息提交到 Git。AgentLink 使用系统级钥匙串（macOS Keychain / Windows Credential Manager / Linux libsecret）保护 API 凭据，不明文存入数据库。
 
 ## FAQ
 
