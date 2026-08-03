@@ -131,6 +131,29 @@ function formatJsonLine(rawEvent: unknown): string | null {
 
 function parseCodexJson(raw: unknown): string {
   if (!isRecord(raw)) return String(raw);
+
+  const eventType = getStringRecordValue(raw, ["type"]);
+
+  // Codex lifecycle events — skip
+  if (eventType === "thread.started" || eventType === "turn.started" || eventType === "turn.completed") {
+    return "";
+  }
+
+  // Codex item.completed — extract agent_message text
+  if (eventType === "item.completed") {
+    const item = raw.item;
+    if (isRecord(item)) {
+      const itemType = getStringRecordValue(item, ["type"]);
+      if (itemType === "agent_message" && typeof item.text === "string") {
+        return item.text;
+      }
+      // tool_call, reasoning, etc — skip for now
+      return "";
+    }
+    return "";
+  }
+
+  // Fallback: try message.content pattern (OpenAI-style)
   const message = raw.message;
   if (typeof message === "string") return message;
   if (isRecord(message)) {
@@ -148,7 +171,9 @@ function parseCodexJson(raw: unknown): string {
         .join("");
     }
   }
-  return JSON.stringify(raw);
+
+  // Unknown event — skip instead of dumping JSON
+  return "";
 }
 
 export class CliAdapter extends BaseAdapter {
