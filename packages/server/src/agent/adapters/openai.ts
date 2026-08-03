@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { ConversationContext, StreamChunk } from "@agentlink/shared";
 import { BaseAdapter, messageFromError } from "../adapter";
+import { buildOpenAIA2APrompt } from "../agentlink-skill";
 
 interface OpenAIToolCall {
   id: string;
@@ -116,7 +117,7 @@ export class OpenAIAdapter extends BaseAdapter {
     const callableAgentIds = availableAgentIds.filter((agentId) => agentId !== this.id);
     const toolsEnabled = availableAgentIds.length > 1 && callableAgentIds.length > 0;
     const directory = toolsEnabled
-      ? `\n\nAvailable agent IDs for call_agent: ${callableAgentIds.join(", ")}`
+      ? buildOpenAIA2APrompt(callableAgentIds)
       : "";
     const messages: OpenAIMessage[] = [
       {
