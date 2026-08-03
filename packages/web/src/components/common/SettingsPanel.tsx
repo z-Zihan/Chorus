@@ -224,9 +224,10 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
             </section>
 
             <section aria-labelledby="settings-hub">
-              <h2 id="settings-hub" className="mb-3 text-sm font-semibold text-[var(--text-primary)]">
+              <h2 id="settings-hub" className="mb-1 text-sm font-semibold text-[var(--text-primary)]">
                 {t("common:hub.hubConfig")}
               </h2>
+              <p className="mb-3 text-xs text-[var(--text-tertiary)]">{t("common:hub.hubConfigDesc")}</p>
               <div className="space-y-3 rounded-xl border border-[var(--border-color)] bg-[var(--bg-base)] p-4 text-sm">
                 {hubConfig && (
                   <>

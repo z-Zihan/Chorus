@@ -50,13 +50,14 @@
     "remote": "远程",
     "inviteHub": "邀请 Hub",
     "hubId": "Hub ID",
-    "hubConfig": "Hub 配置",
+    "hubConfig": "跨设备协作",
     "displayName": "显示名称",
     "relayUrl": "Relay 地址",
     "p2pEnabled": "P2P 直连",
     "p2pPort": "P2P 端口",
     "connect": "连接",
-    "disconnect": "断开"
+    "disconnect": "断开",
+    "hubConfigDesc": "连接中继服务器后，你的 Agent 可以和其他设备上的 Agent 通信。适合团队协作场景。"
   },
   "group": {
     "createGroup": "创建群聊",

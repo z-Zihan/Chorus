@@ -51,13 +51,14 @@
     "remote": "Remote",
     "inviteHub": "Invite Hub",
     "hubId": "Hub ID",
-    "hubConfig": "Hub Configuration",
+    "hubConfig": "Cross-Device",
     "displayName": "Display Name",
     "relayUrl": "Relay URL",
     "p2pEnabled": "P2P Direct",
     "p2pPort": "P2P Port",
     "connect": "Connect",
-    "disconnect": "Disconnect"
+    "disconnect": "Disconnect",
+    "hubConfigDesc": "Connect to a relay server to enable communication between your agents and agents on other devices."
   },
   "group": {
     "createGroup": "Create group chat",
