@@ -61,7 +61,7 @@ export const CLI_DESCRIPTORS: CliDescriptor[] = [
       linux: ["/usr/local/bin", "/usr/bin"],
     },
     versionProbe: { args: ["--version"], timeoutMs: 2_000, output: "text" },
-    adapterTemplate: { input: "argument", output: "codex-json", args: ["exec", "--json"] },
+    adapterTemplate: { input: "argument", output: "codex-json", args: ["exec", "--json", "--dangerously-bypass-approvals-and-sandbox"] },
   },
   {
     id: "copilot-cli",
