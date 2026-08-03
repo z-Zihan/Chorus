@@ -5,6 +5,20 @@ export type HubConnectionState =
   | "reconnecting"
   | "error";
 
+export type P2PConnectionState =
+  | "disconnected"
+  | "connecting"
+  | "authenticated"
+  | "error";
+
+export interface P2PDiscoveredHub {
+  hubId: string;
+  displayName: string;
+  host: string;
+  port: number;
+  txt: Record<string, string>;
+}
+
 export interface HubInfo {
   hubId: string;
   displayName: string;

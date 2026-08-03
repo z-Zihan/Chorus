@@ -41,6 +41,7 @@ export class RelayClient {
   private readonly stateListeners = new Set<StateListener>();
   private readonly roomEventListeners = new Set<RoomEventListener>();
   private readonly roomMembersListeners = new Set<RoomMembersListener>();
+  private readonly peerPublicKeys = new Map<string, string>();
 
   get state(): HubConnectionState {
     return this.connectionState;
@@ -60,6 +61,14 @@ export class RelayClient {
 
   sendEnvelope(envelope: HubEnvelope): void {
     this.send({ type: "message", envelope });
+  }
+
+  cachePeerPublicKey(hubId: string, publicKey: string): void {
+    if (hubId && publicKey) this.peerPublicKeys.set(hubId, publicKey);
+  }
+
+  getPeerPublicKey(hubId: string): string | undefined {
+    return this.peerPublicKeys.get(hubId);
   }
 
   disconnect(): void {
@@ -183,12 +192,16 @@ export class RelayClient {
     } else if (message.type === "offline_messages") {
       for (const listener of this.offlineListeners) listener(message.envelopes);
     } else if (message.type === "presence") {
+      this.cachePeerPublicKey(message.hubId, message.publicKey ?? message.hubId);
       for (const listener of this.presenceListeners) listener(message.hubId, message.status);
     } else if (message.type === "room:event") {
       for (const listener of this.roomEventListeners) {
         listener(message.roomId, message.event, message.hubId);
       }
     } else if (message.type === "room:members") {
+      for (const member of message.members) {
+        this.cachePeerPublicKey(member.hubId, member.publicKey);
+      }
       for (const listener of this.roomMembersListeners) listener(message.roomId, message.members);
     } else if (message.type === "pong") {
       this.receivedPong();

@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
+import type { P2PDiscoveredHub } from "@agentlink/shared";
 import Fastify from "fastify";
 import type { FastifyBaseLogger } from "fastify";
 import cors from "@fastify/cors";
@@ -23,6 +24,8 @@ import { PluginLoader } from "./plugins/index.js";
 import { HubIdentity } from "./hub/identity.js";
 import { RelayClient } from "./hub/relay-client.js";
 import { HubMessageRouter } from "./hub/message-router.js";
+import { P2PDiscovery } from "./hub/p2p-discovery.js";
+import { P2PListener } from "./hub/p2p-listener.js";
 
 process.on("uncaughtException", (error) => {
   logger.fatal({ err: error }, "Uncaught exception");
@@ -44,6 +47,8 @@ async function main(): Promise<void> {
   const repository = new Repository({ sqlite, db });
   let hubIdentity: HubIdentity | undefined;
   let relayClient: RelayClient | undefined;
+  let p2pDiscovery: P2PDiscovery | undefined;
+  let p2pListener: P2PListener | undefined;
   let relayToken = config.hub?.relay.token;
   if (config.hub?.enabled) {
     hubIdentity = new HubIdentity(resolve(rootDir, "data/hub-keypair.json"));
@@ -68,6 +73,28 @@ async function main(): Promise<void> {
     const hubConfig = config.hub;
     const messageRouter = new HubMessageRouter(identity, registry, runtime, client);
     runtime.setHubMessageRouter(messageRouter);
+    if (hubConfig.p2p?.enabled) {
+      const discovery = new P2PDiscovery();
+      const listener = new P2PListener(client);
+      const p2pPort = hubConfig.p2p.port ?? 3212;
+      const connectPeer = (hub: P2PDiscoveredHub) => {
+        if (listener.isConnected(hub.hubId)) return;
+        void listener.connectToHub(hub).catch((error: unknown) => {
+          logger.warn({ err: error, hubId: hub.hubId }, "P2P connection attempt failed");
+        });
+      };
+      await listener.start(p2pPort, identity);
+      messageRouter.setP2PListener(listener);
+      discovery.onDiscovered(connectPeer);
+      client.onPresence((hubId, status) => {
+        if (status !== "online") return;
+        const hub = discovery.discover().find((candidate) => candidate.hubId === hubId);
+        if (hub) connectPeer(hub);
+      });
+      discovery.start(identity.hubId, hubConfig.displayName, p2pPort);
+      p2pDiscovery = discovery;
+      p2pListener = listener;
+    }
     connectHub = async () => {
       relayToken ??= await registerHub(
         hubConfig.relay.url,
@@ -135,6 +162,8 @@ async function main(): Promise<void> {
   }
 
   const close = async () => {
+    p2pDiscovery?.stop();
+    await p2pListener?.stop();
     relayClient?.disconnect();
     await app.close();
     scheduler.destroy();

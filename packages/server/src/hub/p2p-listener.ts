@@ -1,0 +1,301 @@
+import type { HubEnvelope, P2PDiscoveredHub } from "@agentlink/shared";
+import WebSocket, { type RawData, WebSocketServer } from "ws";
+import { logger } from "../utils/logger.js";
+import type { HubIdentity } from "./identity.js";
+import { P2PHandshake } from "./p2p-handshake.js";
+import type { RelayClient } from "./relay-client.js";
+
+type PeerListener = (hubId: string) => void;
+type MessageListener = (hubId: string, envelope: HubEnvelope) => void;
+
+type P2PMessage =
+  | { type: "p2p_register"; hubId: string; nonce: string }
+  | { type: "p2p_challenge"; nonce: string }
+  | { type: "p2p_response"; signature: string }
+  | { type: "p2p_confirm"; signature: string }
+  | { type: "p2p_message"; envelope: HubEnvelope };
+
+interface SocketState {
+  outbound: boolean;
+  authenticated: boolean;
+  localNonce: string;
+  hubId?: string;
+  remoteNonce?: string;
+}
+
+const HANDSHAKE_TIMEOUT_MS = 10_000;
+
+export class P2PListener {
+  private server?: WebSocketServer;
+  private identity?: HubIdentity;
+  private readonly handshake = new P2PHandshake();
+  private readonly connections = new Map<string, WebSocket>();
+  private readonly socketStates = new WeakMap<WebSocket, SocketState>();
+  private readonly connectingPeers = new Set<string>();
+  private readonly connectedListeners = new Set<PeerListener>();
+  private readonly disconnectedListeners = new Set<PeerListener>();
+  private readonly messageListeners = new Set<MessageListener>();
+
+  constructor(private readonly relayClient: RelayClient) {}
+
+  async start(port: number, identity: HubIdentity): Promise<void> {
+    if (this.server) return;
+    this.identity = identity;
+    const server = new WebSocketServer({ port });
+    this.server = server;
+    server.on("connection", (socket) => this.acceptConnection(socket));
+    server.on("error", (error) => logger.warn({ err: error }, "P2P WebSocket server error"));
+    await new Promise<void>((resolve, reject) => {
+      const onListening = () => {
+        server.off("error", onError);
+        resolve();
+      };
+      const onError = (error: Error) => {
+        server.off("listening", onListening);
+        this.server = undefined;
+        reject(error);
+      };
+      server.once("listening", onListening);
+      server.once("error", onError);
+    });
+  }
+
+  isConnected(hubId: string): boolean {
+    return this.connections.get(hubId)?.readyState === WebSocket.OPEN;
+  }
+
+  async connectToHub(hub: P2PDiscoveredHub): Promise<void> {
+    const identity = this.requiredIdentity();
+    if (hub.hubId === identity.hubId || this.isConnected(hub.hubId)) return;
+    if (this.connectingPeers.has(hub.hubId)) return;
+    if (!this.relayClient.getPeerPublicKey(hub.hubId)) {
+      throw new Error(`No Relay public key cached for P2P Hub ${hub.hubId}`);
+    }
+
+    this.connectingPeers.add(hub.hubId);
+    const socket = new WebSocket(webSocketUrl(hub.host, hub.port));
+    const state: SocketState = {
+      outbound: true,
+      authenticated: false,
+      hubId: hub.hubId,
+      localNonce: this.handshake.createChallenge(),
+    };
+    this.socketStates.set(socket, state);
+
+    await new Promise<void>((resolve, reject) => {
+      let settled = false;
+      const timer = setTimeout(() => socket.close(1008, "P2P handshake timed out"), HANDSHAKE_TIMEOUT_MS);
+      timer.unref();
+      const finish = (error?: Error) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        this.connectingPeers.delete(hub.hubId);
+        if (error) reject(error);
+        else resolve();
+      };
+      socket.on("open", () => {
+        this.send(socket, {
+          type: "p2p_register",
+          hubId: identity.hubId,
+          nonce: state.localNonce,
+        });
+      });
+      socket.on("message", (data) => {
+        void this.handleOutgoingMessage(socket, state, data).then(() => {
+          if (state.authenticated) finish();
+        }).catch((error: unknown) => {
+          const reason = error instanceof Error ? error : new Error(String(error));
+          socket.close(1008, reason.message);
+          finish(reason);
+        });
+      });
+      socket.on("error", (error) => {
+        if (!state.authenticated) finish(error);
+      });
+      socket.on("close", () => {
+        this.handleClose(socket, state);
+        if (!state.authenticated) finish(new Error(`P2P connection to ${hub.hubId} closed`));
+      });
+    });
+  }
+
+  sendToHub(hubId: string, data: HubEnvelope): boolean {
+    const socket = this.connections.get(hubId);
+    if (socket?.readyState !== WebSocket.OPEN) return false;
+    this.send(socket, { type: "p2p_message", envelope: data });
+    return true;
+  }
+
+  onPeerConnected(callback: PeerListener): () => void {
+    this.connectedListeners.add(callback);
+    return () => this.connectedListeners.delete(callback);
+  }
+
+  onPeerDisconnected(callback: PeerListener): () => void {
+    this.disconnectedListeners.add(callback);
+    return () => this.disconnectedListeners.delete(callback);
+  }
+
+  onMessage(callback: MessageListener): () => void {
+    this.messageListeners.add(callback);
+    return () => this.messageListeners.delete(callback);
+  }
+
+  async stop(): Promise<void> {
+    const server = this.server;
+    this.server = undefined;
+    this.connectingPeers.clear();
+    for (const socket of this.connections.values()) socket.close(1001, "P2P listener stopped");
+    this.connections.clear();
+    if (!server) return;
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+
+  private acceptConnection(socket: WebSocket): void {
+    const state: SocketState = {
+      outbound: false,
+      authenticated: false,
+      localNonce: this.handshake.createChallenge(),
+    };
+    this.socketStates.set(socket, state);
+    const timer = setTimeout(() => socket.close(1008, "P2P registration required"), HANDSHAKE_TIMEOUT_MS);
+    timer.unref();
+    socket.on("message", (data) => {
+      void this.handleIncomingMessage(socket, state, data).then(() => {
+        if (state.authenticated) clearTimeout(timer);
+      }).catch((error: unknown) => {
+        const reason = error instanceof Error ? error : new Error(String(error));
+        socket.close(1008, reason.message);
+      });
+    });
+    socket.on("error", (error) => logger.warn({ err: error }, "P2P peer socket error"));
+    socket.on("close", () => {
+      clearTimeout(timer);
+      this.handleClose(socket, state);
+    });
+  }
+
+  private async handleIncomingMessage(
+    socket: WebSocket,
+    state: SocketState,
+    data: RawData,
+  ): Promise<void> {
+    const message = parseMessage(data);
+    if (!message) throw new Error("Invalid P2P message");
+    if (state.authenticated) {
+      this.deliverMessage(state, message);
+      return;
+    }
+    if (!state.hubId) {
+      if (message.type !== "p2p_register" || !message.hubId || !message.nonce) {
+        throw new Error("P2P registration required");
+      }
+      if (!this.relayClient.getPeerPublicKey(message.hubId)) {
+        throw new Error("P2P peer public key is not cached");
+      }
+      state.hubId = message.hubId;
+      state.remoteNonce = message.nonce;
+      this.send(socket, { type: "p2p_challenge", nonce: state.localNonce });
+      return;
+    }
+    if (message.type !== "p2p_response" || !state.remoteNonce) {
+      throw new Error("P2P challenge response required");
+    }
+    const publicKey = this.relayClient.getPeerPublicKey(state.hubId);
+    if (!publicKey
+      || !await this.handshake.verifyChallenge(state.localNonce, message.signature, publicKey)) {
+      throw new Error("Invalid P2P challenge signature");
+    }
+    const signature = await this.handshake.signChallenge(
+      state.remoteNonce,
+      this.requiredIdentity().getSecretKey(),
+    );
+    this.send(socket, { type: "p2p_confirm", signature });
+    this.authenticate(socket, state);
+  }
+
+  private async handleOutgoingMessage(
+    socket: WebSocket,
+    state: SocketState,
+    data: RawData,
+  ): Promise<void> {
+    const message = parseMessage(data);
+    if (!message) throw new Error("Invalid P2P message");
+    if (state.authenticated) {
+      this.deliverMessage(state, message);
+      return;
+    }
+    if (!state.remoteNonce) {
+      if (message.type !== "p2p_challenge" || !message.nonce) {
+        throw new Error("P2P challenge required");
+      }
+      state.remoteNonce = message.nonce;
+      const signature = await this.handshake.signChallenge(
+        message.nonce,
+        this.requiredIdentity().getSecretKey(),
+      );
+      this.send(socket, { type: "p2p_response", signature });
+      return;
+    }
+    if (message.type !== "p2p_confirm" || !state.hubId) {
+      throw new Error("P2P confirmation required");
+    }
+    const publicKey = this.relayClient.getPeerPublicKey(state.hubId);
+    if (!publicKey
+      || !await this.handshake.verifyChallenge(state.localNonce, message.signature, publicKey)) {
+      throw new Error("Invalid P2P confirmation signature");
+    }
+    this.authenticate(socket, state);
+  }
+
+  private authenticate(socket: WebSocket, state: SocketState): void {
+    const hubId = state.hubId;
+    if (!hubId) throw new Error("Cannot authenticate an unidentified P2P peer");
+    const existing = this.connections.get(hubId);
+    if (existing && existing !== socket) existing.close(1000, "P2P connection replaced");
+    state.authenticated = true;
+    this.connections.set(hubId, socket);
+    logger.info({ hubId }, "P2P peer authenticated");
+    for (const listener of this.connectedListeners) listener(hubId);
+  }
+
+  private deliverMessage(state: SocketState, message: P2PMessage): void {
+    if (message.type !== "p2p_message" || !state.hubId) return;
+    for (const listener of this.messageListeners) listener(state.hubId, message.envelope);
+  }
+
+  private handleClose(socket: WebSocket, state: SocketState): void {
+    const hubId = state.hubId;
+    if (!hubId || this.connections.get(hubId) !== socket) return;
+    this.connections.delete(hubId);
+    logger.info({ hubId }, "P2P peer disconnected");
+    for (const listener of this.disconnectedListeners) listener(hubId);
+  }
+
+  private requiredIdentity(): HubIdentity {
+    if (!this.identity) throw new Error("P2P listener has not been started");
+    return this.identity;
+  }
+
+  private send(socket: WebSocket, message: P2PMessage): void {
+    if (socket.readyState !== WebSocket.OPEN) throw new Error("P2P socket is not open");
+    socket.send(JSON.stringify(message));
+  }
+}
+
+function parseMessage(data: RawData): P2PMessage | null {
+  try {
+    const value = JSON.parse(data.toString()) as unknown;
+    return typeof value === "object" && value !== null && "type" in value
+      ? value as P2PMessage
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function webSocketUrl(host: string, port: number): string {
+  const formattedHost = host.includes(":") && !host.startsWith("[") ? `[${host}]` : host;
+  return `ws://${formattedHost}:${port}`;
+}

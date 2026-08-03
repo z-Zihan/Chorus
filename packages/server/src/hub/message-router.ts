@@ -5,6 +5,7 @@ import type { AgentRuntime } from "../agent/runtime.js";
 import { logger } from "../utils/logger.js";
 import { decryptPayload, encryptPayload, signEnvelope, verifySignature } from "./crypto.js";
 import type { HubIdentity } from "./identity.js";
+import type { P2PListener } from "./p2p-listener.js";
 import type { RelayClient } from "./relay-client.js";
 
 const REMOTE_CALL_TIMEOUT_MS = 120_000;
@@ -23,6 +24,8 @@ type OutboundMessage = string | HubPayload;
 export class HubMessageRouter {
   private readonly pendingOutbound = new Map<string, PendingMessage>();
   private readonly seenMessageIds = new Set<string>();
+  private p2pListener?: P2PListener;
+  private removeP2PMessageListener?: () => void;
 
   constructor(
     private readonly identity: HubIdentity,
@@ -42,6 +45,20 @@ export class HubMessageRouter {
 
   get pendingCount(): number {
     return this.pendingOutbound.size;
+  }
+
+  setP2PListener(listener: P2PListener): void {
+    this.removeP2PMessageListener?.();
+    this.p2pListener = listener;
+    this.removeP2PMessageListener = listener.onMessage((hubId, envelope) => {
+      if (envelope.from !== hubId || envelope.to !== this.identity.hubId) {
+        logger.warn({ hubId, envelopeId: envelope.id }, "Ignoring invalid P2P envelope routing");
+        return;
+      }
+      void this.onEnvelope(envelope, this.relayClient).catch((error: unknown) => {
+        logger.warn({ err: error, envelopeId: envelope.id }, "Unable to route P2P Hub envelope");
+      });
+    });
   }
 
   async onEnvelope(envelope: HubEnvelope, relayClient: RelayClient): Promise<void> {
@@ -113,7 +130,9 @@ export class HubMessageRouter {
       ...unsigned,
       signature: await signEnvelope(signingData(unsigned), this.identity.getSecretKey()),
     };
-    this.relayClient.sendEnvelope(envelope);
+    if (!this.p2pListener?.sendToHub(toHubId, envelope)) {
+      this.relayClient.sendEnvelope(envelope);
+    }
     return payload.messageId;
   }
 

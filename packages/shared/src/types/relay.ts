@@ -18,7 +18,12 @@ export type RelayServerMessage =
   | { type: "registered"; relayHubId: string }
   | { type: "message"; envelope: HubEnvelope }
   | { type: "offline_messages"; envelopes: HubEnvelope[] }
-  | { type: "presence"; hubId: string; status: "online" | "offline" }
+  | {
+      type: "presence";
+      hubId: string;
+      status: "online" | "offline";
+      publicKey?: string;
+    }
   | {
       type: "room:event";
       roomId: string;
