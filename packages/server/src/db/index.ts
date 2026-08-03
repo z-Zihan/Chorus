@@ -40,6 +40,10 @@ function ensureCredentialRefColumn(sqlite: Database.Database): void {
   if (!columns.some((column) => column.name === "credential_ref")) {
     sqlite.exec("ALTER TABLE agents ADD COLUMN credential_ref TEXT");
   }
+  const convColumns = sqlite.prepare("PRAGMA table_info(conversations)").all() as Array<{ name: string }>;
+  if (!convColumns.some((column) => column.name === "metadata")) {
+    sqlite.exec("ALTER TABLE conversations ADD COLUMN metadata TEXT");
+  }
 }
 
 function initializeMessageSearch(sqlite: Database.Database): void {

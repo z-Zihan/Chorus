@@ -263,4 +263,23 @@ export const api = {
   scanCliDetections: () => request<CliDetection[]>("/cli/detections/scan", { method: "POST" }),
   adoptDetection: (id: string) =>
     request<Agent>(`/cli/detections/${id}/adopt`, { method: "POST" }),
+
+  // Hub config
+  getHubConfig: () => request<{ displayName: string; relayUrl: string; p2pEnabled: boolean; p2pPort: number; hubId: string }>("/hub/config", undefined, true),
+  updateHubConfig: (config: { displayName?: string; relayUrl?: string; p2pEnabled?: boolean; p2pPort?: number }) =>
+    request<{ displayName: string; relayUrl: string; p2pEnabled: boolean; p2pPort: number }>("/hub/config", {
+      method: "PATCH",
+      body: JSON.stringify(config),
+    }),
+  // Hub rooms
+  createHubRoom: (name: string) =>
+    request<{ roomId: string; name: string }>("/hub/rooms", {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    }),
+  inviteHubToRoom: (roomId: string, hubId: string) =>
+    request<{ ok: boolean }>(`/hub/rooms/${encodeURIComponent(roomId)}/invite`, {
+      method: "POST",
+      body: JSON.stringify({ hubId }),
+    }),
 };

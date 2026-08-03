@@ -140,12 +140,13 @@ async function main(): Promise<void> {
     onboarding,
     undefined,
     undefined,
-    hubIdentity && relayClient && connectionManager && connectHub
+    hubIdentity && relayClient && connectionManager && connectHub && config.hub
       ? {
           identity: hubIdentity,
           relayClient,
           registry,
           connectionManager,
+          hubConfig: config.hub,
           connect: connectHub,
         }
       : undefined,

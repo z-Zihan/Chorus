@@ -30,6 +30,7 @@ export const conversations = sqliteTable("conversations", {
   type: text("type").notNull().default("dm"),
   pinned: integer("pinned", { mode: "boolean" }).notNull().default(false),
   archived: integer("archived", { mode: "boolean" }).notNull().default(false),
+  metadata: text("metadata"),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 });

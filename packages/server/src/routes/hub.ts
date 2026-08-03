@@ -9,6 +9,7 @@ export interface HubRouteDependencies {
   relayClient: RelayClient;
   registry: AgentRegistry;
   connectionManager: ConnectionManager;
+  hubConfig: import("@agentlink/shared").HubConfig;
   connect: () => Promise<void>;
 }
 
@@ -16,7 +17,7 @@ export function registerHubRoutes(
   app: FastifyInstance,
   dependencies: HubRouteDependencies,
 ): void {
-  const { identity, relayClient, registry, connectionManager, connect } = dependencies;
+  const { identity, relayClient, registry, connectionManager, hubConfig, connect } = dependencies;
 
   app.get("/api/hub/status", async () => ({
     relayState: relayClient.state,

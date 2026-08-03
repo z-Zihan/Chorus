@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { CircleAlert, CircleCheck, ExternalLink, FileText, RefreshCw, Trash2, X } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Input } from "@/components/ui/input";
 import { useTranslation } from "react-i18next";
 import { LogViewer } from "@/components/common/LogViewer";
 import { Button } from "@/components/ui/button";
@@ -35,10 +37,13 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
   const [credentialStatus, setCredentialStatus] = useState<CredentialStatus | null>(null);
   const [isLoadingCredentials, setIsLoadingCredentials] = useState(false);
   const [isClearingCredentials, setIsClearingCredentials] = useState(false);
+  const [hubConfig, setHubConfig] = useState<{ hubId: string; displayName: string; relayUrl: string; p2pEnabled: boolean; p2pPort: number } | null>(null);
+  const [isSavingHub, setIsSavingHub] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     let active = true;
+    void api.getHubConfig().then((config) => { if (active) setHubConfig(config); }).catch(() => undefined);
     setIsLoadingCredentials(true);
     void api.getCredentialStatus()
       .then((status) => { if (active) setCredentialStatus(status); })
@@ -62,6 +67,22 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
       setUpdateStatus(t("settings:updates.checkFailed"));
     } finally {
       setIsCheckingForUpdates(false);
+    }
+  };
+
+  const saveHubConfig = async () => {
+    if (!hubConfig) return;
+    setIsSavingHub(true);
+    try {
+      const updated = await api.updateHubConfig({
+        displayName: hubConfig.displayName,
+        relayUrl: hubConfig.relayUrl,
+        p2pEnabled: hubConfig.p2pEnabled,
+        p2pPort: hubConfig.p2pPort,
+      });
+      setHubConfig((prev) => prev ? { ...prev, ...updated } : prev);
+    } catch { /* toast shown by api */ } finally {
+      setIsSavingHub(false);
     }
   };
 
@@ -199,6 +220,40 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
                     ? t("common:settings.clearingCredentials")
                     : t("common:settings.clearCredentials")}
                 </Button>
+              </div>
+            </section>
+
+            <section aria-labelledby="settings-hub">
+              <h2 id="settings-hub" className="mb-3 text-sm font-semibold text-[var(--text-primary)]">
+                {t("common:hub.hubConfig")}
+              </h2>
+              <div className="space-y-3 rounded-xl border border-[var(--border-color)] bg-[var(--bg-base)] p-4 text-sm">
+                {hubConfig && (
+                  <>
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="text-[var(--text-secondary)]">{t("common:hub.hubId")}</span>
+                      <span className="font-mono text-xs text-[var(--text-primary)]">{hubConfig.hubId}</span>
+                    </div>
+                    <label className="block">
+                      <span className="mb-1 block text-xs text-[var(--text-secondary)]">{t("common:hub.displayName")}</span>
+                      <Input value={hubConfig.displayName} onChange={(e) => setHubConfig({ ...hubConfig, displayName: e.target.value })} />
+                    </label>
+                    <label className="block">
+                      <span className="mb-1 block text-xs text-[var(--text-secondary)]">{t("common:hub.relayUrl")}</span>
+                      <Input value={hubConfig.relayUrl} onChange={(e) => setHubConfig({ ...hubConfig, relayUrl: e.target.value })} />
+                    </label>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-[var(--text-secondary)]">{t("common:hub.p2pEnabled")}</span>
+                      <Switch checked={hubConfig.p2pEnabled} onCheckedChange={(checked) => setHubConfig({ ...hubConfig, p2pEnabled: checked })} />
+                    </div>
+                    <Button variant="secondary" size="sm" className="w-full" onClick={() => void saveHubConfig()} disabled={isSavingHub}>
+                      {isSavingHub ? t("common:buttons.saving") : t("common:buttons.save")}
+                    </Button>
+                  </>
+                )}
+                {!hubConfig && (
+                  <p className="text-xs text-[var(--text-muted)]">{t("common:hub.disconnected")}</p>
+                )}
               </div>
             </section>
 

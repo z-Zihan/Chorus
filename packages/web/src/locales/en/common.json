@@ -45,7 +45,19 @@
       "p2p": "P2P",
       "relay": "Relay",
       "none": "Offline"
-    }
+    },
+    "createCrossHubGroup": "Create cross-Hub group",
+    "crossHub": "Cross Hub",
+    "remote": "Remote",
+    "inviteHub": "Invite Hub",
+    "hubId": "Hub ID",
+    "hubConfig": "Hub Configuration",
+    "displayName": "Display Name",
+    "relayUrl": "Relay URL",
+    "p2pEnabled": "P2P Direct",
+    "p2pPort": "P2P Port",
+    "connect": "Connect",
+    "disconnect": "Disconnect"
   },
   "group": {
     "createGroup": "Create group chat",

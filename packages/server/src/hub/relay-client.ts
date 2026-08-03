@@ -4,6 +4,7 @@ import type {
   RelayClientMessage,
   RelayServerMessage,
   RoomMember,
+  RoomInfo,
 } from "@agentlink/shared";
 import WebSocket, { type RawData } from "ws";
 import { logger } from "../utils/logger.js";
@@ -47,6 +48,10 @@ export class RelayClient {
     return this.connectionState;
   }
 
+  get currentHubId(): string | undefined {
+    return this.hubId;
+  }
+
   async connect(url: string, hubId: string, token: string): Promise<void> {
     if (!url || !hubId || !token) throw new Error("Relay URL, Hub ID, and token are required");
     this.url = url;
@@ -61,6 +66,42 @@ export class RelayClient {
 
   sendEnvelope(envelope: HubEnvelope): void {
     this.send({ type: "message", envelope });
+  }
+
+  joinRoom(roomId: string): void {
+    this.send({ type: "room:join", roomId });
+  }
+
+  leaveRoom(roomId: string): void {
+    this.send({ type: "room:leave", roomId });
+  }
+
+  async createRoomRequest(relayUrl: string, name: string): Promise<RoomInfo> {
+    return this.roomRequest<RoomInfo>(relayUrl, "/api/rooms", {
+      method: "POST",
+      body: JSON.stringify({ name, createdBy: this.hubId }),
+    });
+  }
+
+  async inviteToRoomRequest(
+    relayUrl: string,
+    roomId: string,
+    hubId: string,
+  ): Promise<RoomMember[]> {
+    const response = await this.roomRequest<{ members: RoomMember[] }>(
+      relayUrl,
+      `/api/rooms/${encodeURIComponent(roomId)}/invite`,
+      { method: "POST", body: JSON.stringify({ hubId }) },
+    );
+    return response.members;
+  }
+
+  async getRoomMembersRequest(relayUrl: string, roomId: string): Promise<RoomMember[]> {
+    const room = await this.roomRequest<RoomInfo>(
+      relayUrl,
+      `/api/rooms/${encodeURIComponent(roomId)}`,
+    );
+    return room.members;
   }
 
   cachePeerPublicKey(hubId: string, publicKey: string): void {
@@ -224,6 +265,28 @@ export class RelayClient {
       throw new Error("Relay is not connected");
     }
     this.socket.send(JSON.stringify(message));
+  }
+
+  private async roomRequest<T>(
+    relayUrl: string,
+    path: string,
+    init: RequestInit = {},
+  ): Promise<T> {
+    if (!this.hubId) throw new Error("Hub identity is not configured");
+    const url = new URL(relayUrl);
+    url.protocol = url.protocol === "wss:" ? "https:" : "http:";
+    url.pathname = path;
+    url.search = "";
+    url.hash = "";
+    const response = await fetch(url, {
+      ...init,
+      headers: { "content-type": "application/json", ...init.headers },
+    });
+    if (!response.ok) {
+      const detail = await response.text();
+      throw new Error(detail || `Relay room request failed with HTTP ${response.status}`);
+    }
+    return response.json() as Promise<T>;
   }
 
   private startHeartbeat(): void {

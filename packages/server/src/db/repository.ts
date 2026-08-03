@@ -178,12 +178,24 @@ export class Repository {
     return this.context.db.delete(scheduledTasks).where(eq(scheduledTasks.id, id)).run().changes > 0;
   }
 
-  createConversation(title: string, type = "dm", agentIds: string[] = []): Conversation {
+  createConversation(
+    title: string,
+    type = "dm",
+    agentIds: string[] = [],
+    metadata?: Conversation["metadata"],
+  ): Conversation {
     const id = randomUUID();
     const now = Date.now();
     const uniqueAgentIds = [...new Set(agentIds)];
     const transaction = this.context.sqlite.transaction(() => {
-      this.context.db.insert(conversations).values({ id, title, type, createdAt: now, updatedAt: now }).run();
+      this.context.db.insert(conversations).values({
+        id,
+        title,
+        type,
+        metadata: metadata ? JSON.stringify(metadata) : null,
+        createdAt: now,
+        updatedAt: now,
+      }).run();
       if (uniqueAgentIds.length > 0) {
         this.context.db.insert(conversationAgents).values(
           uniqueAgentIds.map((agentId, position) => ({ conversationId: id, agentId, position })),
@@ -198,6 +210,7 @@ export class Repository {
       agentIds: uniqueAgentIds,
       pinned: false,
       archived: false,
+      metadata,
       createdAt: now,
       updatedAt: now,
     };
@@ -401,6 +414,7 @@ export class Repository {
       agentIds: links.map((link) => link.agentId),
       pinned: row.pinned,
       archived: row.archived,
+      metadata: safeJson(row.metadata, undefined),
       lastMessage: latest?.content,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,

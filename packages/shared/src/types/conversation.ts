@@ -7,6 +7,10 @@ export interface Conversation {
   agentIds: string[];
   pinned: boolean;
   archived: boolean;
+  metadata?: {
+    relayRoomId?: string;
+    [key: string]: unknown;
+  };
   lastMessage?: string;
   createdAt: number;
   updatedAt: number;

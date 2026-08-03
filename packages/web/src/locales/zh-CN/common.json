@@ -44,7 +44,19 @@
       "p2p": "P2P",
       "relay": "中继",
       "none": "离线"
-    }
+    },
+    "createCrossHubGroup": "创建跨 Hub 群聊",
+    "crossHub": "跨 Hub",
+    "remote": "远程",
+    "inviteHub": "邀请 Hub",
+    "hubId": "Hub ID",
+    "hubConfig": "Hub 配置",
+    "displayName": "显示名称",
+    "relayUrl": "Relay 地址",
+    "p2pEnabled": "P2P 直连",
+    "p2pPort": "P2P 端口",
+    "connect": "连接",
+    "disconnect": "断开"
   },
   "group": {
     "createGroup": "创建群聊",

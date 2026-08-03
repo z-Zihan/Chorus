@@ -31,6 +31,12 @@ interface RegistryEntry {
   error?: string;
 }
 
+export interface RemoteAgent {
+  id: string;
+  name: string;
+  hubId: string;
+}
+
 export class AgentRegistry {
   private readonly entries = new Map<string, RegistryEntry>();
   readonly friends = new Map<string, Set<string>>();
@@ -40,7 +46,7 @@ export class AgentRegistry {
   private readonly healthCheckFailures = new Set<string>();
   private readonly hubPublicKeys = new Map<string, string>();
   private readonly knownHubs = new Map<string, HubInfo>();
-  private readonly remoteAgentHubs = new Map<string, string>();
+  private readonly remoteAgents = new Map<string, RemoteAgent>();
   private configWatcher?: ConfigWatcher;
   private healthCheckTimer?: NodeJS.Timeout;
   private healthCheckRunning = false;
@@ -60,6 +66,9 @@ export class AgentRegistry {
           member.publicKey,
           member.displayName,
         );
+        if (member.hubId !== relayClient.currentHubId) {
+          this.registerRemoteAgent(member.hubId, member.hubId, member.displayName);
+        }
       }
     });
   }
@@ -99,12 +108,16 @@ export class AgentRegistry {
     return [...this.knownHubs.values()];
   }
 
-  registerRemoteAgent(agentId: string, hubId: string): void {
-    this.remoteAgentHubs.set(agentId, hubId);
+  registerRemoteAgent(agentId: string, hubId: string, agentName: string): void {
+    this.remoteAgents.set(agentId, { id: agentId, name: agentName, hubId });
+  }
+
+  getRemoteAgents(): RemoteAgent[] {
+    return [...this.remoteAgents.values()];
   }
 
   getRemoteAgentHub(agentId: string): string | undefined {
-    const registered = this.remoteAgentHubs.get(agentId);
+    const registered = this.remoteAgents.get(agentId)?.hubId;
     if (registered) return registered;
     for (const hubId of this.hubPublicKeys.keys()) {
       if (agentId.startsWith(`${hubId}:`) || agentId.startsWith(`${hubId}/`)) return hubId;
