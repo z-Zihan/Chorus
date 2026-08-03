@@ -9,6 +9,7 @@ import type { AgentRegistry } from "../agent/registry.js";
 import type { CliDetector } from "../cli-detector/index.js";
 import type { CatalogService } from "./index.js";
 import type { CatalogEntry, InstallRecipe } from "./schema.js";
+import { setCredential } from "../credential-store.js";
 
 export type InstallationStage =
   | "checking"
@@ -57,11 +58,11 @@ export class InstallExecutor extends EventEmitter {
   }
 
   install(entryId: string, options: InstallOptions = {}): InstallationStatus {
-    const entry = this.catalog.get(entryId);
+    const entry = this.catalog.getCached(entryId);
     if (!entry) throw new Error("CATALOG_ENTRY_NOT_FOUND");
     this.validateEntry(entry, options);
 
-    const existing = this.catalog.get(entryId);
+    const existing = this.catalog.getCached(entryId);
     if (existing?.installed && existing.agentId) {
       return {
         id: randomUUID(),
@@ -169,7 +170,7 @@ export class InstallExecutor extends EventEmitter {
 
   private async createApiAgent(entry: CatalogEntry, options: InstallOptions) {
     const id = availableAgentId(entry.id, this.registry);
-    return this.registry.registerAndPersist({
+    const agent = await this.registry.registerAndPersist({
       id,
       name: entry.name,
       description: entry.summary,
@@ -185,6 +186,9 @@ export class InstallExecutor extends EventEmitter {
       catalogEntryId: entry.id,
       disabled: false,
     } satisfies PersistedAgentConfig);
+    const apiKey = options.apiKey?.trim();
+    if (apiKey) await setCredential(agent.id, apiKey);
+    return agent;
   }
 
   private async verifyAndAdopt(entry: CatalogEntry, signal: AbortSignal): Promise<string> {

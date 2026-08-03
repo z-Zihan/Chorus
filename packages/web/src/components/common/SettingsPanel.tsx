@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { ExternalLink, FileText, RefreshCw, X } from "lucide-react";
+import { useEffect, useState } from "react";
+import { CircleAlert, CircleCheck, ExternalLink, FileText, RefreshCw, Trash2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { LogViewer } from "@/components/common/LogViewer";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { changeLanguage, currentLanguage, type AppLanguage } from "@/i18n";
+import { api, type CredentialStatus } from "@/services/api";
 import { getThemePreference, setThemePreference, type ThemePreference } from "@/services/theme";
 import { announceUpdate, checkForUpdates } from "@/services/updater";
 import { track } from "@/utils/analytics";
@@ -31,6 +32,20 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
   const [isLogViewerOpen, setIsLogViewerOpen] = useState(false);
   const [isCheckingForUpdates, setIsCheckingForUpdates] = useState(false);
   const [updateStatus, setUpdateStatus] = useState<string | null>(null);
+  const [credentialStatus, setCredentialStatus] = useState<CredentialStatus | null>(null);
+  const [isLoadingCredentials, setIsLoadingCredentials] = useState(false);
+  const [isClearingCredentials, setIsClearingCredentials] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    let active = true;
+    setIsLoadingCredentials(true);
+    void api.getCredentialStatus()
+      .then((status) => { if (active) setCredentialStatus(status); })
+      .catch(() => undefined)
+      .finally(() => { if (active) setIsLoadingCredentials(false); });
+    return () => { active = false; };
+  }, [open]);
 
   const handleCheckForUpdates = async () => {
     setIsCheckingForUpdates(true);
@@ -47,6 +62,18 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
       setUpdateStatus(t("settings:updates.checkFailed"));
     } finally {
       setIsCheckingForUpdates(false);
+    }
+  };
+
+  const handleClearCredentials = async () => {
+    setIsClearingCredentials(true);
+    try {
+      await api.clearAllCredentials();
+      setCredentialStatus((current) => current ? { ...current, agents: [] } : current);
+    } catch {
+      // The API client displays the localized request error.
+    } finally {
+      setIsClearingCredentials(false);
     }
   };
 
@@ -125,6 +152,53 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
                 {updateStatus && (
                   <p className="w-full text-xs text-[var(--text-secondary)]" role="status">{updateStatus}</p>
                 )}
+              </div>
+            </section>
+
+            <section aria-labelledby="settings-security">
+              <h2 id="settings-security" className="mb-3 text-sm font-semibold text-[var(--text-primary)]">
+                {t("common:settings.security")}
+              </h2>
+              <div className="space-y-4 rounded-xl border border-[var(--border-color)] bg-[var(--bg-base)] p-4">
+                {credentialStatus && (
+                  <div className={`flex items-start gap-2 text-sm ${credentialStatus.backend === "system-keychain" ? "text-emerald-400" : "text-amber-400"}`}>
+                    {credentialStatus.backend === "system-keychain"
+                      ? <CircleCheck aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
+                      : <CircleAlert aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />}
+                    <span>{credentialStatus.backend === "system-keychain"
+                      ? t("common:settings.keychainStorage")
+                      : t("common:settings.fileFallback")}</span>
+                  </div>
+                )}
+                <div>
+                  <p className="mb-2 text-xs font-medium text-[var(--text-secondary)]">
+                    {t("common:settings.storedCredentials")}
+                  </p>
+                  {isLoadingCredentials ? (
+                    <p className="text-xs text-[var(--text-muted)]">{t("common:loading")}</p>
+                  ) : credentialStatus?.agents.length ? (
+                    <div className="flex flex-wrap gap-2">
+                      {credentialStatus.agents.map((agent) => (
+                        <span key={agent.id} className="rounded-full bg-[var(--bg-elevated)] px-2.5 py-1 text-xs text-[var(--text-secondary)]">
+                          {agent.name}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-[var(--text-muted)]">{t("common:settings.noStoredCredentials")}</p>
+                  )}
+                </div>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  onClick={() => void handleClearCredentials()}
+                  disabled={isClearingCredentials || !credentialStatus?.agents.length}
+                >
+                  <Trash2 aria-hidden="true" className="h-4 w-4" />
+                  {isClearingCredentials
+                    ? t("common:settings.clearingCredentials")
+                    : t("common:settings.clearCredentials")}
+                </Button>
               </div>
             </section>
 

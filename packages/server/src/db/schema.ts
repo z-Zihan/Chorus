@@ -7,6 +7,7 @@ export const agents = sqliteTable("agents", {
   avatar: text("avatar"),
   type: text("type").notNull(),
   config: text("config"),
+  credentialRef: text("credential_ref"),
   source: text("source").notNull().default("user"),
   managed: integer("managed", { mode: "boolean" }).notNull().default(false),
   customizedFields: text("customized_fields").notNull().default("[]"),

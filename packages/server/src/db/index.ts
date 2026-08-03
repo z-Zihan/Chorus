@@ -30,8 +30,16 @@ export function createDatabase(dbPath: string) {
   sqlite.pragma("foreign_keys = ON");
   const db = drizzle(sqlite, { schema });
   migrate(db, { migrationsFolder: resolveMigrationsFolder() });
+  ensureCredentialRefColumn(sqlite);
   initializeMessageSearch(sqlite);
   return { sqlite, db };
+}
+
+function ensureCredentialRefColumn(sqlite: Database.Database): void {
+  const columns = sqlite.prepare("PRAGMA table_info(agents)").all() as Array<{ name: string }>;
+  if (!columns.some((column) => column.name === "credential_ref")) {
+    sqlite.exec("ALTER TABLE agents ADD COLUMN credential_ref TEXT");
+  }
 }
 
 function initializeMessageSearch(sqlite: Database.Database): void {

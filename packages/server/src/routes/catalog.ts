@@ -29,7 +29,10 @@ export function registerCatalogRoutes(
       return reply.code(400).send({ error: "INVALID_INSTALL_OPTIONS", issues: parsed.error.flatten() });
     }
     try {
-      return reply.code(202).send(installer.install(request.params.id, parsed.data));
+      const options = parsed.data.apiKey
+        ? { ...parsed.data, apiKey: parsed.data.apiKey.trim() }
+        : parsed.data;
+      return reply.code(202).send(installer.install(request.params.id, options));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return reply.code(message === "CATALOG_ENTRY_NOT_FOUND" ? 404 : 400).send({ error: message });

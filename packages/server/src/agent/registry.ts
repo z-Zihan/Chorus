@@ -116,7 +116,7 @@ export class AgentRegistry {
     this.loadFriends();
     this.configuredAgents.clear();
     for (const config of configs) this.configuredAgents.set(config.id, config);
-    const persistedAgents = this.persistence.loadPersistedAgents();
+    const persistedAgents = await this.persistence.loadPersistedAgents();
     for (const config of configs) {
       const persisted = persistedAgents.find((agent) => agent.id === config.id);
       if (persisted?.disabled) continue;
@@ -161,7 +161,7 @@ export class AgentRegistry {
   }
 
   async registerAndPersist(config: AgentConfig | PersistedAgentConfig): Promise<Agent> {
-    const persisted = this.persistence.persistAgent(config);
+    const persisted = await this.persistence.persistAgent(config);
     return this.registerInMemory(persisted);
   }
 
@@ -188,7 +188,7 @@ export class AgentRegistry {
   ): Promise<Agent | undefined> {
     const current = this.entries.get(id);
     const existing = current?.persisted
-      ?? this.persistence.loadPersistedAgents().find((agent) => agent.id === id);
+      ?? (await this.persistence.loadPersistedAgents()).find((agent) => agent.id === id);
     if (!existing) return undefined;
     const config: AgentConfig = {
       ...existing,
@@ -198,7 +198,7 @@ export class AgentRegistry {
     };
     const customizedFields = new Set(existing.customizedFields);
     for (const key of Object.keys(input)) customizedFields.add(key);
-    const updated = this.persistence.persistAgent({
+    const updated = await this.persistence.persistAgent({
       ...existing,
       ...config,
       customizedFields: [...customizedFields],
@@ -276,7 +276,7 @@ export class AgentRegistry {
     if (!includeDisabled) return active;
     const activeIds = new Set(active.map((agent) => agent.id));
     const disabled = this.persistence
-      .loadPersistedAgents()
+      .loadPersistedAgentMetadata()
       .filter((agent) => agent.disabled && !activeIds.has(agent.id))
       .map((persisted) => this.toDisabledAgent(persisted));
     return [...active, ...disabled];
@@ -292,43 +292,56 @@ export class AgentRegistry {
     const entry = this.entries.get(id);
     if (entry) return this.toAgent(entry);
     if (!includeDisabled) return undefined;
-    const persisted = this.persistence.loadPersistedAgents().find((agent) => agent.id === id);
+    const persisted = this.persistence.loadPersistedAgentMetadata().find((agent) => agent.id === id);
     return persisted?.disabled ? this.toDisabledAgent(persisted) : undefined;
   }
 
   async disable(id: string): Promise<Agent | undefined> {
-    const persisted = this.persistence.loadPersistedAgents().find((agent) => agent.id === id);
+    const persisted = (await this.persistence.loadPersistedAgents()).find((agent) => agent.id === id);
     if (!persisted) return undefined;
     const current = this.entries.get(id);
     current?.adapter.destroy?.();
     this.entries.delete(id);
     this.broadcastStatus(id, "offline");
-    const updated = this.persistence.updatePersistedAgent(id, { disabled: true });
+    const updated = await this.persistence.updatePersistedAgent(id, { disabled: true });
     return updated ? this.toDisabledAgent(updated) : undefined;
   }
 
   async enable(id: string): Promise<Agent | undefined> {
-    const persisted = this.persistence.loadPersistedAgents().find((agent) => agent.id === id);
+    const persisted = (await this.persistence.loadPersistedAgents()).find((agent) => agent.id === id);
     if (!persisted) return undefined;
-    const updated = this.persistence.updatePersistedAgent(id, { disabled: false });
+    const updated = await this.persistence.updatePersistedAgent(id, { disabled: false });
     return updated ? this.registerInMemory(updated) : undefined;
   }
 
-  remove(id: string): boolean {
+  remove(id: string): Promise<boolean> {
     return this.unregisterAndDelete(id);
   }
 
-  unregisterAndDelete(id: string): boolean {
+  async unregisterAndDelete(id: string): Promise<boolean> {
     const entry = this.entries.get(id);
     entry?.adapter.destroy?.();
     this.entries.delete(id);
     if (entry) this.broadcastStatus(id, "offline");
-    const deleted = this.persistence.deletePersistedAgent(id);
+    const deleted = await this.persistence.deletePersistedAgent(id);
     if (deleted) {
       this.friends.delete(id);
       for (const friendIds of this.friends.values()) friendIds.delete(id);
     }
     return deleted;
+  }
+
+  getCredentialStatus() {
+    return this.persistence.getCredentialStatus();
+  }
+
+  async clearAllCredentials(): Promise<void> {
+    await this.persistence.clearAllCredentials();
+    for (const entry of this.entries.values()) {
+      delete entry.config.config.apiKey;
+      delete entry.persisted.config.apiKey;
+      delete entry.adapter.config.apiKey;
+    }
   }
 
   findByDetectionFingerprint(fingerprint: string): Agent | undefined {
@@ -390,7 +403,7 @@ export class AgentRegistry {
   private async reloadConfiguredAgents(config: AppConfig): Promise<void> {
     const nextAgents = new Map(config.agents.map((agent) => [agent.id, agent]));
     for (const agentId of this.configuredAgents.keys()) {
-      if (!nextAgents.has(agentId)) this.unregisterAndDelete(agentId);
+      if (!nextAgents.has(agentId)) await this.unregisterAndDelete(agentId);
     }
     for (const [agentId, next] of nextAgents) {
       const previous = this.configuredAgents.get(agentId);

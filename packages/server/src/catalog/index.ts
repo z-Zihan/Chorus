@@ -1,10 +1,11 @@
+import type { CliDetection } from "@agentlink/shared";
 import type { CliDetector } from "../cli-detector/index.js";
 import type { AgentRegistry } from "../agent/registry.js";
 import { defaultCatalog } from "./default-catalog.js";
 import type { CatalogEntry, CatalogEntryWithStatus } from "./schema.js";
 
 export class CatalogService {
-  private detectionCache: { detections: import("../cli-detector/index.js").CliDetection[]; ts: number } | null = null;
+  private detectionCache: { detections: CliDetection[]; ts: number } | null = null;
   private scanning: Promise<void> | null = null;
 
   constructor(
@@ -19,6 +20,10 @@ export class CatalogService {
 
   async get(id: string): Promise<CatalogEntryWithStatus | undefined> {
     await this.ensureDetections();
+    return this.getCached(id);
+  }
+
+  getCached(id: string): CatalogEntryWithStatus | undefined {
     const entry = defaultCatalog.entries.find((candidate) => candidate.id === id);
     return entry ? this.withInstalledStatus(entry) : undefined;
   }

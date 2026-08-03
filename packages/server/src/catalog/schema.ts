@@ -1,8 +1,17 @@
+import type { AgentType } from "@agentlink/shared";
+
 export type CatalogKind = "detected-cli" | "managed-cli" | "api-connector";
 export type CatalogPlatform = "darwin" | "linux" | "win32";
+export type InstallMethod = "brew" | "npm" | "winget" | "download" | "pip";
+
+export interface InstallRecipe {
+  method: InstallMethod;
+  executable: string;
+  args: string[];
+  requiresElevation: boolean;
+}
 
 export interface CatalogEntry {
-  schemaVersion: 1;
   id: string;
   name: string;
   summary: string;
@@ -14,9 +23,9 @@ export interface CatalogEntry {
   homepage: string;
   license?: string;
   descriptorId?: string;
-  installRecipes: { method: "brew" | "npm" | "winget" | "download" | "pip"; executable: string; args: string[]; requiresElevation: boolean }[];
-  uninstallRecipes: { method: "brew" | "npm" | "winget" | "download" | "pip"; executable: string; args: string[]; requiresElevation: boolean }[];
-  adapterTemplate: { type: string; config: Record<string, unknown> };
+  installRecipes: InstallRecipe[];
+  uninstallRecipes: InstallRecipe[];
+  adapterTemplate: { type: AgentType; config: Record<string, unknown> };
 }
 
 export interface CatalogFile {

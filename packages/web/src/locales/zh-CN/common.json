@@ -69,6 +69,13 @@
     "diagnostics": "诊断",
     "viewLogs": "查看日志",
     "checkUpdates": "检查更新",
+    "security": "安全",
+    "keychainStorage": "API 密钥存储在系统钥匙串中",
+    "fileFallback": "正在使用加密文件备用存储",
+    "storedCredentials": "已存储凭据的 Agent",
+    "noStoredCredentials": "尚未存储凭据",
+    "clearCredentials": "清除所有凭据",
+    "clearingCredentials": "正在清除…",
     "about": "关于",
     "version": "版本"
   },

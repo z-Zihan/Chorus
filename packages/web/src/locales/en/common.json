@@ -69,6 +69,13 @@
     "diagnostics": "Diagnostics",
     "viewLogs": "View Logs",
     "checkUpdates": "Check for Updates",
+    "security": "Security",
+    "keychainStorage": "API Keys are stored in system keychain",
+    "fileFallback": "Using encrypted file fallback",
+    "storedCredentials": "Agents with stored credentials",
+    "noStoredCredentials": "No credentials stored",
+    "clearCredentials": "Clear all credentials",
+    "clearingCredentials": "Clearing…",
     "about": "About",
     "version": "Version"
   },

@@ -30,7 +30,10 @@ export class Repository {
     this.agentStatusResolver = resolver;
   }
 
-  upsertAgent(agent: AgentConfig | PersistedAgentConfig): void {
+  upsertAgent(
+    agent: AgentConfig | PersistedAgentConfig,
+    credentialRef?: string | null,
+  ): void {
     const now = Date.now();
     const persisted = toPersistedAgent(agent);
     this.context.db.insert(agents).values({
@@ -40,6 +43,7 @@ export class Repository {
       avatar: persisted.avatar,
       type: persisted.type,
       config: JSON.stringify(persisted.config),
+      credentialRef,
       source: persisted.source,
       managed: persisted.managed,
       customizedFields: JSON.stringify(persisted.customizedFields),
@@ -56,6 +60,7 @@ export class Repository {
         avatar: persisted.avatar,
         type: persisted.type,
         config: JSON.stringify(persisted.config),
+        ...(credentialRef !== undefined ? { credentialRef } : {}),
         source: persisted.source,
         managed: persisted.managed,
         customizedFields: JSON.stringify(persisted.customizedFields),
@@ -73,6 +78,10 @@ export class Repository {
 
   listAgentRows() {
     return this.context.db.select().from(agents).orderBy(asc(agents.createdAt)).all();
+  }
+
+  clearAgentCredentialRefs(): void {
+    this.context.db.update(agents).set({ credentialRef: null, updatedAt: Date.now() }).run();
   }
 
   deleteAgent(id: string): boolean {

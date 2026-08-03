@@ -33,6 +33,11 @@ export interface ServerLogEntry {
 
 export type A2APermissionMode = "auto" | "confirm" | "deny";
 
+export interface CredentialStatus {
+  backend: "system-keychain" | "file";
+  agents: Array<{ id: string; name: string }>;
+}
+
 // ===== API =====
 
 let lastOfflineToastAt = 0;
@@ -114,6 +119,10 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ disabled }),
     }),
+
+  getCredentialStatus: () => request<CredentialStatus>("/credentials"),
+  clearAllCredentials: () =>
+    request<{ ok: boolean }>("/credentials", { method: "DELETE" }),
 
   // Catalog
   getCatalog: () => request<CatalogEntry[]>("/catalog"),
