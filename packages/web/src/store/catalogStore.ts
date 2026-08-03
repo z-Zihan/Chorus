@@ -64,6 +64,7 @@ interface CatalogState {
   fetchCatalog: () => Promise<void>;
   selectEntry: (entry: CatalogEntry | null) => void;
   installAgent: (entryId: string, options?: InstallOptions) => Promise<void>;
+  adoptDetectedAgent: (descriptorId: string) => Promise<void>;
   cancelInstall: () => Promise<void>;
 }
 
@@ -128,6 +129,25 @@ export const useCatalogStore = create<CatalogState>((set, get) => ({
     } catch (error) {
       logger.error("Failed to install catalog entry", error);
       set({ installation: null });
+    }
+  },
+
+  adoptDetectedAgent: async (descriptorId: string) => {
+    try {
+      const detections = await api.getCliDetections();
+      const detection = detections.find((d) => d.descriptorId === descriptorId);
+      if (!detection) {
+        useUIStore.getState().addToast(i18n.t("catalog.notDetected"), "error");
+        return;
+      }
+      const agent = await api.adoptDetection(detection.id);
+      await Promise.all([get().fetchCatalog(), useAgentStore.getState().fetchAgents()]);
+      useAgentStore.getState().selectAgent(agent.id);
+      useUIStore.getState().addToast(i18n.t("catalog.success"), "success");
+      set({ selectedEntry: null });
+    } catch (error) {
+      logger.error("Failed to adopt detected agent", error);
+      useUIStore.getState().addToast(i18n.t("catalog.failed"), "error");
     }
   },
 

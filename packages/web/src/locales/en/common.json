@@ -104,7 +104,10 @@
       "verifying": "Verifying installation…",
       "done": "Installation complete",
       "error": "Installation failed"
-    }
+    },
+    "notDetected": "CLI not detected, please install first",
+    "detectedReady": "CLI detected, ready to add",
+    "add": "Add"
   },
   "onboarding": {
     "bootstrapping": "Initializing…",

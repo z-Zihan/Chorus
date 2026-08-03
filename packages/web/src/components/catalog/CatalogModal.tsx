@@ -29,6 +29,7 @@ export function CatalogModal({ open, onOpenChange }: CatalogModalProps) {
   const fetchCatalog = useCatalogStore((state) => state.fetchCatalog);
   const selectEntry = useCatalogStore((state) => state.selectEntry);
   const installAgent = useCatalogStore((state) => state.installAgent);
+  const adoptDetectedAgent = useCatalogStore((state) => state.adoptDetectedAgent);
   const cancelInstall = useCatalogStore((state) => state.cancelInstall);
   const [filter, setFilter] = useState<Filter>("all");
   const [confirming, setConfirming] = useState(false);
@@ -116,6 +117,13 @@ export function CatalogModal({ open, onOpenChange }: CatalogModalProps) {
               <aside className="rounded-xl border border-[var(--border-color)] bg-[var(--bg-base)] p-5">
                 {selectedEntry.installed && !installation ? (
                   <div className="flex items-center gap-2 text-sm text-[var(--text-secondary)]"><Check className="h-5 w-5 text-green-500" />{t("catalog.installed")}</div>
+                ) : selectedEntry.detected && !installation ? (
+                  <div className="space-y-4">
+                    <p className="text-sm text-[var(--text-secondary)]">{t("catalog.detectedReady")}</p>
+                    <Button className="w-full" onClick={() => void adoptDetectedAgent(selectedEntry.descriptorId ?? selectedEntry.id)}>
+                      <Plus className="h-4 w-4" />{t("catalog.add")}
+                    </Button>
+                  </div>
                 ) : installation ? (
                   <InstallationProgress onCancel={() => void cancelInstall()} />
                 ) : confirming ? (

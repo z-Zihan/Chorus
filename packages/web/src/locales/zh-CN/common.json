@@ -104,7 +104,10 @@
       "verifying": "正在验证安装…",
       "done": "安装完成",
       "error": "安装失败"
-    }
+    },
+    "notDetected": "未检测到该 CLI，请先安装",
+    "detectedReady": "已检测到该 CLI，可直接添加",
+    "add": "添加"
   },
   "onboarding": {
     "bootstrapping": "正在初始化…",
