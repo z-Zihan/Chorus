@@ -27,9 +27,7 @@ export function AgentSettingsPanel() {
   if (!displayedAgent) return null;
 
   return (
-    <Dialog open={Boolean(selectedAgentId)} onOpenChange={(open) => {
-      if (!open && !isSaving) cancel();
-    }}>
+    <Dialog open={false} onOpenChange={() => {}}>
       <DialogContent
         variant="drawer"
         aria-describedby={undefined}
