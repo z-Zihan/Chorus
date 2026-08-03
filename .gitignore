@@ -15,3 +15,4 @@ src-tauri/gen/
 .DS_Store
 packages/server/build/
 src-tauri/Cargo.lock
+packages/relay/data/
