@@ -82,6 +82,7 @@ pnpm tauri:build
 Windows 打包细节见 [Windows 构建指南](docs/WINDOWS_BUILD.md)。
 
 完整使用指南见 [docs/GUIDE.md](docs/GUIDE.md)，涵盖 Agent 管理、多 Agent 协作、跨设备通信等。
+开发者文档见 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)，涵盖项目结构、启动方式、开发注意事项。
 
 ## 工作原理
 
