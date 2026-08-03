@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CircleAlert, CircleCheck, ExternalLink, FileText, RefreshCw, Trash2, X } from "lucide-react";
+import { BookOpen, CircleAlert, CircleCheck, ExternalLink, FileText, RefreshCw, Trash2, X } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { useTranslation } from "react-i18next";
@@ -267,6 +267,15 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
                   <span className="text-[var(--text-secondary)]">{t("common:settings.version")}</span>
                   <span className="text-[var(--text-primary)]">{APP_VERSION}</span>
                 </div>
+                <a
+                  href="https://github.com/z-Zihan/agent-link/blob/main/docs/GUIDE.md"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-[var(--accent-hover)] hover:underline"
+                >
+                  <BookOpen aria-hidden="true" className="h-3.5 w-3.5" />
+                  {t("settings:guide")}
+                </a>
                 <a
                   href={HOMEPAGE_URL}
                   target="_blank"

@@ -64,5 +64,6 @@
   },
   "errors": {
     "nameRequired": "Agent 名称不能为空"
-  }
+  },
+  "guide": "使用指南"
 }

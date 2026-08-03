@@ -64,5 +64,6 @@
   },
   "errors": {
     "nameRequired": "Agent name is required"
-  }
+  },
+  "guide": "Usage Guide"
 }
