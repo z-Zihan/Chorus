@@ -33,21 +33,27 @@ AgentLink 坚持 local-first：聊天记录默认保存在本机，CLI 在本机
 - 💬 **统一流式聊天**：在一个界面中使用不同 Agent，支持 Markdown、代码块、停止生成和错误提示。
 - 🧩 **Agent 目录**：添加本机 CLI，或配置 OpenAI-compatible API Connector。
 - 🗂️ **本地会话历史**：使用 SQLite 保存聊天记录，支持创建、切换和删除会话。
-
 - 🖥️ **跨平台桌面端**：基于 Tauri，面向 macOS、Windows 与 Linux 提供原生桌面体验。
 - 🏠 **可自托管 Relay**：提供 Hub 注册、消息转发、离线消息与房间管理能力。
+- 🔐 **系统级密钥存储**：使用操作系统钥匙串保护 API 凭据。
+- 🔎 **历史管理**：会话搜索、重命名、归档、导出与清理。
+- 📊 **Agent 健康检查**：60s 定时健康检查 + UI 状态指示器。
+- 🔌 **插件系统**：Agent 适配器插件加载与管理。
+- 🗓️ **定时任务**：cron 表达式定时触发 Agent 任务。
 
 ### 已实现
 
-- 🔗 **A2A 调用链**：Agent 之间通过 tool-calling 或 prompt-based 协议互相调用，调用过程可视化、可取消。
-- 👥 **多 Agent 群聊**：在同一会话中选择多个 Agent，通过 `@` 提及进行协作。
-- 🔎 **历史管理**：会话搜索、重命名、归档、导出与清理。
-- 🔐 **系统级密钥存储**：使用操作系统钥匙串保护 API 凭据。
-- 🛡️ **A2A 权限控制**：auto / confirm / deny 三种模式控制 Agent 间调用。
-- 🌐 **跨设备协作**：自托管 Relay + P2P 直连 + 端到端加密。
-- 🗓️ **定时任务**：cron 表达式定时触发 Agent 任务。
-- 🔌 **插件系统**：Agent 适配器插件加载与管理。
-- 📊 **Agent 健康检查**：60s 定时健康检查 + UI 状态指示器。
+- 🔗 **A2A 通信**：三种模式可切换——`@mention` 异步转发、`A2A_CALL` 同步调用、`off` 关闭。Agent 回复中 @了其他 Agent → 自动转发 → 目标 Agent 独立回复。
+- 👥 **多 Agent 群聊**：在同一会话中选择多个 Agent，通过 AgentSelector 指定接收者，@mention 触发 Agent 间协作。
+- 🛡️ **A2A 权限控制**：会话级 `auto / confirm / deny` 三种模式控制 Agent 间调用权限。
+- 👤 **多用户身份体系**：User → Hub → Agent 三层身份模型。一个用户可拥有多个 Agent，不同用户的 Agent 通过 Relay 互相发现和通信。
+- 🔑 **信任管理**：Hub 间配对码认证、`pending/trusted/blocked` 信任状态、公钥变化自动重配对。
+- 🌐 **跨设备协作**：自托管 Relay + P2P 直连 + 端到端加密 + 群组密钥管理。
+- 📡 **签名目录发现**：Hub 间交换签名 Agent 目录，支持版本/TTL/撤销、可见性过滤（trusted/room/public）。
+- 📮 **离线消息**：queued → delivered → accepted/denied → done/error 状态机，TTL 7 天，幂等投递。
+- 🔌 **标准协议适配**：Agent 能力映射到 Google A2A Agent Card、MCP Tool、ACP Service。
+- 🛠️ **外部 Agent 接入**：通过 `GET /api/skill` 发现 AgentLink，REST API 完整接入，Scoped Client Token 认证。
+- 🛡️ **Relay 加固**：消息大小限制、频率限制、房间容量限制、保留策略，全部可配置。
 
 ## 产品预览
 
@@ -201,5 +207,13 @@ CLI 以当前系统用户权限运行，其文件与命令权限由 CLI 自身�
 
 ### 多 Agent 群聊和跨设备聊天可用吗？
 
-多 Agent 群聊和 A2A 调用链已实现。跨设备协作需要自部署 Relay 服务器，代码已就绪但建议先在本地测试。
+多 Agent 群聊、A2A 通信（@mention 转发 + A2A_CALL 同步调用）、跨设备协作均已实现。跨设备协作需要自部署 Relay 服务器。支持多用户身份体系，不同用户的 Agent 可以通过 Relay 互相发现和协作。
+
+### 外部 Agent 怎么接入 AgentLink？
+
+AgentLink 启动后暴露 `GET /api/skill` 端点，返回完整的 Platform Skill 文档（Markdown 格式）。外部 Agent 读取该文档后即可通过 REST API 发送消息、创建会话、管理 Agent。非本机访问支持 Scoped Client Token 认证。
+
+### AgentLink 支持哪些标准协议？
+
+Agent 能力可映射到 Google A2A Agent Card（`/.well-known/agent-card.json`）、MCP Tool 列表（`/api/mcp/tools`）、ACP 服务列表（`/api/acp/services`）。
 
