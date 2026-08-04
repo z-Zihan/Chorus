@@ -20,6 +20,7 @@ import { registerPluginRoutes } from "./plugins.js";
 import { registerSchedulerRoutes } from "./scheduler.js";
 import { registerMetricsRoutes } from "./metrics.js";
 import { registerHubRoutes, type HubRouteDependencies } from "./hub.js";
+import { registerSkillRoutes } from "./skill.js";
 
 export function registerRoutes(
   app: FastifyInstance,
@@ -35,6 +36,7 @@ export function registerRoutes(
   hub?: HubRouteDependencies,
 ): void {
   registerHealthRoutes(app);
+  registerSkillRoutes(app);
   registerLogRoutes(app);
   registerAgentRoutes(app, registry, repository);
   registerMetricsRoutes(app, registry, runtime);

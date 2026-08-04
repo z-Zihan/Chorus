@@ -35,9 +35,15 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["app", "dmg", "msi", "nsis"],
+    "targets": [
+      "app",
+      "dmg",
+      "msi",
+      "nsis"
+    ],
     "resources": {
-      "../packages/server/dist/": "packages/server/dist/"
+      "../packages/server/dist/": "packages/server/dist/",
+      "../skills/": "skills/"
     },
     "icon": [
       "icons/32x32.png",
@@ -50,7 +56,10 @@
       "nsis": {
         "installerIcon": "icons/icon.ico",
         "installMode": "perMachine",
-        "languages": ["SimpChinese", "English"],
+        "languages": [
+          "SimpChinese",
+          "English"
+        ],
         "displayLanguageSelector": true
       }
     },
@@ -62,7 +71,9 @@
     },
     "updater": {
       "active": true,
-      "endpoints": ["https://releases.agentlink.app/{{target}}/{{arch}}/{{current_version}}"],
+      "endpoints": [
+        "https://releases.agentlink.app/{{target}}/{{arch}}/{{current_version}}"
+      ],
       "pubkey": ""
     }
   }
