@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   Archive,
+  Bot,
   ArchiveRestore,
   PanelLeftClose,
   PanelLeftOpen,
@@ -398,7 +399,7 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
             title={t("common:catalog.addAgent")}
             className="h-8 w-8"
           >
-            <Users aria-hidden="true" className="h-4 w-4" />
+            <Bot aria-hidden="true" className="h-4 w-4" />
           </Button>
           <Button
             variant="ghost"
