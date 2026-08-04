@@ -50,5 +50,8 @@
   "jumpToSource": "Jump to group chat",
   "remoteAgent": "Remote Agent",
   "crossHub": "Cross Hub",
-  "owner": "Owner"
+  "owner": "Owner",
+  "a2aMention": "@Mention",
+  "a2aCall": "A2A Call",
+  "a2aOff": "A2A Off"
 }

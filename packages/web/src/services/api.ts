@@ -185,6 +185,15 @@ export const api = {
   // Plugins
   getPlugins: () => request<PluginInfo[]>("/plugins"),
 
+  // A2A mode per conversation
+  getA2AMode: (conversationId: string) =>
+    request<{ mode: "mention" | "call" | "off" }>(`/conversations/${conversationId}/a2a-mode`),
+  setA2AMode: (conversationId: string, mode: "mention" | "call" | "off") =>
+    request<{ mode: string }>(`/conversations/${conversationId}/a2a-mode`, {
+      method: "PATCH",
+      body: JSON.stringify({ mode }),
+    }),
+
   // Trust management
   getTrustList: () => request<Array<{ hubId: string; hubFingerprint: string; userName?: string; trustLevel: string; lastSeenAt?: number; pairedAt?: number }>>("/trust"),
   blockHub: (hubId: string) =>

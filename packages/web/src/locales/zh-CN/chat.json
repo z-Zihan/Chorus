@@ -50,5 +50,8 @@
   "jumpToSource": "跳转到群聊",
   "remoteAgent": "远程 Agent",
   "crossHub": "跨 Hub",
-  "owner": "拥有者"
+  "owner": "拥有者",
+  "a2aMention": "@转发",
+  "a2aCall": "同步调用",
+  "a2aOff": "关闭"
 }

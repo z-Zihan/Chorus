@@ -26,7 +26,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { A2APermissionMode } from "@/services/api";
 import { ConnectionStatus } from "@/components/hub/ConnectionStatus";
 
 export function ChatArea() {
@@ -39,8 +38,6 @@ export function ChatArea() {
   const pendingConfirmation = useChatStore((s) => s.a2aConfirmations[0]);
   const dismissA2AConfirmation = useChatStore((s) => s.dismissA2AConfirmation);
   const openSidebar = useUIStore((s) => s.openSidebar);
-  const [a2aPermission, setA2APermission] = useState<A2APermissionMode>("auto");
-  const [permissionLoading, setPermissionLoading] = useState(false);
   const [confirmationSubmitting, setConfirmationSubmitting] = useState(false);
   const currentConv = [...conversations, ...groupConversations, ...archivedConversations]
     .find((c) => c.id === currentConversationId);
@@ -48,24 +45,7 @@ export function ChatArea() {
     .map((agentId) => agents.find((agent) => agent.id === agentId))
     .filter((agent): agent is NonNullable<typeof agent> => Boolean(agent)) ?? [];
 
-  useEffect(() => {
-    let cancelled = false;
-    if (!currentConv || currentConv.type !== "group") {
-      setA2APermission("auto");
-      setPermissionLoading(false);
-      return;
-    }
-    setPermissionLoading(true);
-    void api.getA2APermission(currentConv.id)
-      .then(({ mode }) => {
-        if (!cancelled) setA2APermission(mode);
-      })
-      .catch((error: unknown) => logger.error("Failed to load A2A permission", error))
-      .finally(() => {
-        if (!cancelled) setPermissionLoading(false);
-      });
-    return () => { cancelled = true; };
-  }, [currentConv]);
+
 
   useEffect(() => {
     if (!pendingConfirmation) return;
@@ -81,18 +61,7 @@ export function ChatArea() {
     return () => clearTimeout(timeout);
   }, [dismissA2AConfirmation, pendingConfirmation]);
 
-  const handlePermissionChange = async (mode: string) => {
-    if (!currentConv || !isA2APermissionMode(mode)) return;
-    setPermissionLoading(true);
-    try {
-      const updated = await api.setA2APermission(currentConv.id, mode);
-      setA2APermission(updated.mode);
-    } catch (error) {
-      logger.error("Failed to update A2A permission", error);
-    } finally {
-      setPermissionLoading(false);
-    }
-  };
+
 
   const handleA2AConfirmation = async (approved: boolean) => {
     if (!pendingConfirmation || confirmationSubmitting) return;
@@ -111,6 +80,24 @@ export function ChatArea() {
     ?? pendingConfirmation?.from;
   const confirmationTo = agents.find((agent) => agent.id === pendingConfirmation?.to)?.name
     ?? pendingConfirmation?.to;
+
+  const [a2aMode, setA2aMode] = useState<"mention" | "call" | "off">("mention");
+
+  useEffect(() => {
+    if (!currentConv || currentConv.type !== "group") return;
+    void api.getA2AMode(currentConv.id).then((res) => setA2aMode(res.mode)).catch(() => {});
+  }, [currentConv]);
+
+  const handleA2AModeChange = async (mode: "mention" | "call" | "off") => {
+    setA2aMode(mode);
+    if (currentConv) {
+      try {
+        await api.setA2AMode(currentConv.id, mode);
+      } catch (error) {
+        logger.error("Failed to set A2A mode", error);
+      }
+    }
+  };
 
   const handleExport = async (format: "markdown" | "json") => {
     if (!currentConv) return;
@@ -169,22 +156,16 @@ export function ChatArea() {
           </div>
         </div>
         <ConnectionStatus />
+
         {currentConv?.type === "group" && (
-          <Select
-            value={a2aPermission}
-            onValueChange={(mode) => void handlePermissionChange(mode)}
-            disabled={permissionLoading}
-          >
-            <SelectTrigger
-              className="mr-2 h-8 w-auto min-w-28"
-              aria-label={t("chat:a2aPermission.label")}
-            >
+          <Select value={a2aMode} onValueChange={(v) => void handleA2AModeChange(v as "mention" | "call" | "off")}>
+            <SelectTrigger className="h-8 w-auto gap-1.5 rounded-md border-[var(--border-color)] bg-[var(--bg-base)] px-2.5 text-xs text-[var(--text-secondary)]">
               <SelectValue />
             </SelectTrigger>
-            <SelectContent align="end">
-              <SelectItem value="auto">{t("chat:a2aPermission.auto")}</SelectItem>
-              <SelectItem value="confirm">{t("chat:a2aPermission.confirm")}</SelectItem>
-              <SelectItem value="deny">{t("chat:a2aPermission.deny")}</SelectItem>
+            <SelectContent>
+              <SelectItem value="mention">{t("chat:a2aMention")}</SelectItem>
+              <SelectItem value="call">{t("chat:a2aCall")}</SelectItem>
+              <SelectItem value="off">{t("chat:a2aOff")}</SelectItem>
             </SelectContent>
           </Select>
         )}
@@ -258,6 +239,3 @@ export function ChatArea() {
   );
 }
 
-function isA2APermissionMode(value: string): value is A2APermissionMode {
-  return value === "auto" || value === "confirm" || value === "deny";
-}
