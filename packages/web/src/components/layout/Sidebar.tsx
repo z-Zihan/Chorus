@@ -3,6 +3,7 @@ import {
   Archive,
   ArchiveRestore,
   PanelLeftClose,
+  PanelLeftOpen,
   ChevronDown,
   Ellipsis,
   Pencil,
@@ -368,6 +369,17 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
 
   return (
     <>
+      {isSidebarCollapsed && (
+        <button
+          type="button"
+          onClick={toggleSidebarCollapse}
+          aria-label={t("sidebar:expand")}
+          title={t("sidebar:expand")}
+          className="fixed left-0 top-0 z-30 hidden h-14 w-10 items-center justify-center text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] md:flex"
+        >
+          <PanelLeftOpen aria-hidden="true" className="h-5 w-5" />
+        </button>
+      )}
       <aside
         className={`absolute inset-y-0 left-0 z-30 flex h-full w-72 max-w-[85vw] shrink-0 flex-col border-r border-[var(--border-color)] bg-[var(--bg-surface)] shadow-2xl transition-[transform,width] duration-200 md:static md:max-w-none md:translate-x-0 md:shadow-none ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"} ${isSidebarCollapsed ? "md:w-0 md:overflow-hidden md:border-r-0" : ""}`}
       >
