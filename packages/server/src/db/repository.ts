@@ -13,7 +13,7 @@ import type {
   User,
   UserWithAgents,
 } from "@agentlink/shared";
-import { and, asc, desc, eq, inArray, isNull, lt } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, lt, sql } from "drizzle-orm";
 import { getUserKey, setUserKey } from "../credential-store.js";
 import { deriveUserId, generateUserKeyPair } from "../identity/user-keys.js";
 import type { TrustedHub, TrustLevel } from "../hub/trust-store.js";
@@ -63,6 +63,12 @@ export interface UserHubSummary {
   hubId: string;
   displayName: string | null;
   lastSeenAt: number | null;
+}
+
+export interface PersistedRoomState {
+  revision: number;
+  keyEpoch: number;
+  managementState: "managed" | "unmanaged";
 }
 
 export class Repository {
@@ -654,6 +660,9 @@ export class Repository {
           id,
           title,
           type,
+          revision: 1,
+          keyEpoch: 1,
+          managementState: "managed",
           relayRoomId,
           metadata: metadata ? JSON.stringify(metadata) : null,
           createdAt: now,
@@ -704,6 +713,61 @@ export class Repository {
 
   removeAgentFromConversation(conversationId: string, agentId: string): Conversation | undefined {
     return this.removeAgentsFromConversation(conversationId, [agentId]);
+  }
+
+  incrementRoomRevision(roomId: string): PersistedRoomState | undefined {
+    const result = this.context.db
+      .update(conversations)
+      .set({
+        revision: sql`${conversations.revision} + 1`,
+        updatedAt: Date.now(),
+      })
+      .where(eq(conversations.id, roomId))
+      .run();
+    return result.changes > 0 ? this.getRoomState(roomId) : undefined;
+  }
+
+  incrementRoomKeyEpoch(roomId: string): PersistedRoomState | undefined {
+    const result = this.context.db
+      .update(conversations)
+      .set({
+        revision: sql`${conversations.revision} + 1`,
+        keyEpoch: sql`${conversations.keyEpoch} + 1`,
+        updatedAt: Date.now(),
+      })
+      .where(eq(conversations.id, roomId))
+      .run();
+    return result.changes > 0 ? this.getRoomState(roomId) : undefined;
+  }
+
+  getRoomState(roomId: string): PersistedRoomState | undefined {
+    const row = this.context.db
+      .select({
+        revision: conversations.revision,
+        keyEpoch: conversations.keyEpoch,
+        managementState: conversations.managementState,
+      })
+      .from(conversations)
+      .where(eq(conversations.id, roomId))
+      .get();
+    if (!row) return undefined;
+    return {
+      revision: row.revision,
+      keyEpoch: row.keyEpoch,
+      managementState: row.managementState as PersistedRoomState["managementState"],
+    };
+  }
+
+  setRoomManagementState(
+    roomId: string,
+    state: PersistedRoomState["managementState"],
+  ): PersistedRoomState | undefined {
+    const result = this.context.db
+      .update(conversations)
+      .set({ managementState: state, updatedAt: Date.now() })
+      .where(eq(conversations.id, roomId))
+      .run();
+    return result.changes > 0 ? this.getRoomState(roomId) : undefined;
   }
 
   getConversationMembers(conversationId: string): Array<

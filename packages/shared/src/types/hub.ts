@@ -159,3 +159,22 @@ export interface RoomInfo {
   createdAt: number;
   createdBy: string;
 }
+
+export interface RoomStateEvent {
+  eventId: string;
+  roomId: string;
+  revision: number;
+  keyEpoch: number;
+  eventType:
+    | "member_added"
+    | "member_removed"
+    | "agent_added"
+    | "agent_removed"
+    | "role_changed"
+    | "rekey"
+    | "block";
+  actorUserId: string;
+  actorSignature: string;
+  timestamp: number;
+  data: Record<string, unknown>;
+}

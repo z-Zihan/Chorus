@@ -32,6 +32,7 @@ export function createDatabase(dbPath: string) {
   migrate(db, { migrationsFolder: resolveMigrationsFolder() });
   ensureCredentialRefColumn(sqlite);
   ensureConversationColumns(sqlite);
+  ensureRoomStateColumns(sqlite);
   ensureUserColumns(sqlite);
   ensureUserHubsTable(sqlite);
   ensureAgentDiscoveryColumns(sqlite);
@@ -39,6 +40,23 @@ export function createDatabase(dbPath: string) {
   ensureClientTokensTable(sqlite);
   initializeMessageSearch(sqlite);
   return { sqlite, db };
+}
+
+export function ensureRoomStateColumns(sqlite: Database.Database): void {
+  const columns = sqlite.prepare("PRAGMA table_info(conversations)").all() as Array<{
+    name: string;
+  }>;
+  if (!columns.some((column) => column.name === "revision")) {
+    sqlite.exec("ALTER TABLE conversations ADD COLUMN revision INTEGER NOT NULL DEFAULT 1");
+  }
+  if (!columns.some((column) => column.name === "key_epoch")) {
+    sqlite.exec("ALTER TABLE conversations ADD COLUMN key_epoch INTEGER NOT NULL DEFAULT 1");
+  }
+  if (!columns.some((column) => column.name === "management_state")) {
+    sqlite.exec(
+      "ALTER TABLE conversations ADD COLUMN management_state TEXT NOT NULL DEFAULT 'managed'",
+    );
+  }
 }
 
 export function ensureClientTokensTable(sqlite: Database.Database): void {
