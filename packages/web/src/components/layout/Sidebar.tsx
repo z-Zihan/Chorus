@@ -375,7 +375,7 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
           onClick={toggleSidebarCollapse}
           aria-label={t("sidebar:expand")}
           title={t("sidebar:expand")}
-          className="fixed left-0 top-0 z-30 hidden h-14 w-10 items-center justify-center text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] md:flex"
+          className="hidden h-14 w-10 shrink-0 items-center justify-center border-r border-[var(--border-color)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] md:flex"
         >
           <PanelLeftOpen aria-hidden="true" className="h-5 w-5" />
         </button>
