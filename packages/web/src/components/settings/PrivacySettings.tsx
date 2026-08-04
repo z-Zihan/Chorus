@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Shield, ShieldAlert, Trash2, Ban, Eye } from "lucide-react";
 import { api } from "@/services/api";
@@ -21,7 +21,9 @@ type A2AMode = "auto" | "confirm" | "deny";
 export function PrivacySettings() {
   const { t } = useTranslation(["common", "settings"]);
   const agents = useAgentStore((s) => s.agents);
-  const conversations = useChatStore((s) => [...s.conversations, ...s.groupConversations]);
+  const dmConversations = useChatStore((s) => s.conversations);
+  const groupConversations = useChatStore((s) => s.groupConversations);
+  const conversations = useMemo(() => [...dmConversations, ...groupConversations], [dmConversations, groupConversations]);
   const [trustList, setTrustList] = useState<TrustedHub[]>([]);
   const [a2aModes, setA2aModes] = useState<Record<string, A2AMode>>({});
   const [isLoading, setIsLoading] = useState(true);
