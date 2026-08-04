@@ -225,6 +225,22 @@ export function InputBar() {
               <div className="mx-2 h-6 w-px shrink-0 bg-[var(--border-color)]" />
             </>
           )}
+          {currentConversation?.type === "group" && (() => {
+            const routedAgent = selectedAgentIds.length > 0
+              ? agents.find((a) => a.id === selectedAgentIds[0])
+              : agents.find((a) =>
+                  currentConversation.agentIds.includes(a.id) &&
+                  !a.stale &&
+                  (a.ownerType === "remote" || a.status === "online" || a.status === "busy")
+                );
+            const displayName = routedAgent?.name ?? t("chat:noAgentAvailable");
+            return (
+              <span className="hidden shrink-0 items-center gap-1 text-[10px] text-[var(--text-tertiary)] sm:flex">
+                <span aria-hidden="true">→</span>
+                {displayName}
+              </span>
+            );
+          })()}
           <textarea
             ref={textareaRef}
             value={input}

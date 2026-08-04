@@ -2,6 +2,7 @@ import { MessageList } from "@/components/message/MessageList";
 import {
   ArrowLeftRight,
   AtSign,
+  Bot,
   Ban,
   Check,
   Download,
@@ -99,6 +100,7 @@ export function ChatArea() {
     ?? pendingConfirmation?.to;
 
   const [a2aMode, setA2aMode] = useState<A2AMode>("mention");
+  const [isAddAgentOpen, setIsAddAgentOpen] = useState(false);
 
   useEffect(() => {
     if (!currentConv || currentConv.type !== "group") return;
@@ -164,7 +166,39 @@ export function ChatArea() {
               {currentConv?.title ?? t("chat:defaultConversationTitle")}
             </h2>
             {currentConv?.type === "group" ? (
+              <>
               <GroupMemberList conversation={currentConv} />
+              <Dialog open={isAddAgentOpen} onOpenChange={setIsAddAgentOpen}>
+        <DialogContent>
+          <DialogTitle>{t("sidebar:addAgentToRoom")}</DialogTitle>
+          <DialogDescription>{t("sidebar:selectAgentToAdd")}</DialogDescription>
+          <div className="mt-4 space-y-1">
+            {agents
+              .filter((a) => a.ownerType !== "remote" && a.status !== "offline" && !a.stale)
+              .map((agent) => (
+                <button
+                  key={agent.id}
+                  type="button"
+                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left hover:bg-[var(--bg-hover)]"
+                  onClick={() => {
+                    if (currentConv) {
+                      void api.addAgentToConversation(currentConv.id, agent.id).then(() => {
+                        setIsAddAgentOpen(false);
+                      });
+                    }
+                  }}
+                >
+                  <AgentAvatar name={agent.name} src={agent.avatar} size="sm" />
+                  <span className="text-sm text-[var(--text-primary)]">{agent.name}</span>
+                </button>
+              ))}
+            {agents.filter((a) => a.ownerType !== "remote" && a.status !== "offline" && !a.stale).length === 0 && (
+              <p className="py-4 text-center text-sm text-[var(--text-muted)]">{t("sidebar:noAgents")}</p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+              </>
             ) : currentAgents.length > 0 && (
               <div className="mt-1 flex -space-x-1" aria-label={t("chat:participatingAgents")}>
                 {currentAgents.map((agent) => (
@@ -183,6 +217,18 @@ export function ChatArea() {
         </div>
         <ConnectionStatus />
 
+        {currentConv?.type === "group" && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setIsAddAgentOpen(true)}
+            aria-label={t("sidebar:addMyAgent")}
+            title={t("sidebar:addMyAgent")}
+            className="h-8 w-8"
+          >
+            <Bot aria-hidden="true" className="h-4 w-4" />
+          </Button>
+        )}
         {currentConv?.type === "group" && (
           <DropdownMenu>
             <TooltipProvider delayDuration={250}>

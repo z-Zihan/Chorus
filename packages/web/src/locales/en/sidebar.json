@@ -43,5 +43,13 @@
   "pairingCodeLabel": "Your pairing code",
   "pairingCodeHint": "Share this code with the other person. They enter it to confirm the pairing.",
   "sendPairRequest": "Send Pair Request",
-  "pairing": "Sending..."
+  "pairing": "Sending...",
+  "collabGuide": "Collaboration Guide",
+  "collabStep1": "Add a friend",
+  "collabStep2": "Create a room",
+  "collabStep3": "Invite friend",
+  "collabStep4": "Add your Agent",
+  "addMyAgent": "Add My Agent",
+  "addAgentToRoom": "Add Agent to Room",
+  "selectAgentToAdd": "Select an agent to add to this room"
 }

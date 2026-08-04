@@ -20,7 +20,9 @@ import {
 } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import { useChatStore, type Conversation } from "@/store/chatStore";
+import { api } from "@/services/api";
 import { useAgentStore, type AgentGroup } from "@/store/agentStore";
+import { useHubStore } from "@/store/hubStore";
 import { useUIStore } from "@/store/uiStore";
 import {
   AgentAvatar } from "@/components/agent/AgentAvatar";
@@ -94,6 +96,9 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
   const [isPairing, setIsPairing] = useState(false);
   const [collapsedOwnerIds, setCollapsedOwnerIds] = useState<Set<string>>(new Set());
   const [agentGroups, setAgentGroups] = useState<AgentGroup[]>([]);
+  const [contacts, setContacts] = useState<Array<{ hubId: string; userName?: string; trustLevel: string }>>([]);
+  const hubConnectionState = useHubStore((s) => s.hubConnectionState);
+  const fetchHubStatus = useHubStore((s) => s.fetchHubStatus);
   const [searchQuery, setSearchQuery] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
@@ -122,7 +127,9 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
   );
   useEffect(() => {
     void fetchGroupedAgents().then(setAgentGroups).catch(() => {});
-  }, [agents, fetchGroupedAgents]);
+    void fetchHubStatus();
+    void api.getTrustList().then(setContacts).catch(() => {});
+  }, [agents, fetchGroupedAgents, fetchHubStatus]);
 
   const normalizedSearch = searchQuery.trim().toLocaleLowerCase();
   const matchesSearch = (conversation: Conversation) =>
@@ -473,6 +480,31 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
                 </Button>
               </div>
             )}
+        {hubConnectionState === "connected" && (() => {
+          const hasContacts = contacts.length > 0;
+          const hasRooms = groupConversations.length > 0;
+          const allStepsDone = hasContacts && hasRooms;
+          if (allStepsDone) return null;
+          return (
+            <div className="mx-2 mb-2 rounded-lg border border-[var(--border-color)] bg-[var(--bg-base)] px-3 py-2">
+              <p className="mb-1.5 text-xs font-medium text-[var(--text-secondary)]">{t("sidebar:collabGuide")}</p>
+              <ol className="space-y-1">
+                <li className={`text-xs ${hasContacts ? "text-[var(--text-muted)] line-through" : "text-[var(--text-primary)]"}`}>
+                  ① {t("sidebar:collabStep1")}
+                </li>
+                <li className={`text-xs ${hasRooms ? "text-[var(--text-muted)] line-through" : "text-[var(--text-primary)]"}`}>
+                  ② {t("sidebar:collabStep2")}
+                </li>
+                <li className={`text-xs ${hasContacts ? "text-[var(--text-muted)] line-through" : "text-[var(--text-primary)]"}`}>
+                  ③ {t("sidebar:collabStep3")}
+                </li>
+                <li className={`text-xs ${hasRooms ? "text-[var(--text-muted)] line-through" : "text-[var(--text-primary)]"}`}>
+                  ④ {t("sidebar:collabStep4")}
+                </li>
+              </ol>
+            </div>
+          );
+        })()}
             {(() => {
               const allAgentIds = new Set(agents.map((a) => a.id));
               const groupsWithConversations = agentGroups
