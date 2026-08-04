@@ -26,6 +26,7 @@ import { registerTrustRoutes } from "./trust.js";
 import type { TokenStore } from "../auth/token-store.js";
 import type { AppConfig } from "@agentlink/shared";
 import { registerTokenRoutes } from "./tokens.js";
+import { registerStandardRoutes } from "./standards.js";
 
 export function registerRoutes(
   app: FastifyInstance,
@@ -47,6 +48,7 @@ export function registerRoutes(
   registerSkillRoutes(app);
   registerLogRoutes(app);
   registerAgentRoutes(app, registry, repository);
+  registerStandardRoutes(app, registry);
   registerMetricsRoutes(app, registry, runtime);
   registerConversationRoutes(app, repository, registry, runtime);
   registerCleanupRoutes(app, repository);

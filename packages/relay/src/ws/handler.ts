@@ -14,6 +14,15 @@ interface WebSocketDependencies {
   roomManager: RoomManager;
   messageRouter: MessageRouter;
   jwtSecret: string;
+  maxMessagesPerMinute?: number;
+}
+
+const DEFAULT_MAX_MESSAGES_PER_MINUTE = 60;
+const RATE_LIMIT_WINDOW_MS = 60_000;
+
+interface RateWindow {
+  startedAt: number;
+  count: number;
 }
 
 function parseMessage(data: { toString(): string }): RelayClientMessage | null {
@@ -62,6 +71,19 @@ function validEnvelope(value: unknown): value is HubEnvelope {
 
 export function registerWebSocket(app: FastifyInstance, dependencies: WebSocketDependencies): void {
   const { registry, offlineStore, roomManager, messageRouter, jwtSecret } = dependencies;
+  const maxMessagesPerMinute = dependencies.maxMessagesPerMinute ?? DEFAULT_MAX_MESSAGES_PER_MINUTE;
+  const rateWindows = new Map<string, RateWindow>();
+
+  const exceedsRateLimit = (hubId: string): boolean => {
+    const now = Date.now();
+    const current = rateWindows.get(hubId);
+    if (!current || now - current.startedAt >= RATE_LIMIT_WINDOW_MS) {
+      rateWindows.set(hubId, { startedAt: now, count: 1 });
+      return false;
+    }
+    current.count += 1;
+    return current.count > maxMessagesPerMinute;
+  };
 
   app.get("/ws", { websocket: true }, (rawSocket) => {
     const socket = rawSocket as unknown as RelaySocket;
@@ -117,6 +139,23 @@ export function registerWebSocket(app: FastifyInstance, dependencies: WebSocketD
         if (message.type === "message") {
           if (!validEnvelope(message.envelope) || message.envelope.from !== hubId) {
             socket.close(1008, "Envelope sender does not match registered hub");
+            return;
+          }
+          const messageSize = JSON.stringify(message.envelope).length;
+          if (messageSize > offlineStore.maxMessageSize) {
+            app.log.warn(
+              { hubId, messageSize, maxMessageSize: offlineStore.maxMessageSize },
+              "Relay message size limit exceeded",
+            );
+            socket.close(1009, "Message too large");
+            return;
+          }
+          if (exceedsRateLimit(hubId)) {
+            app.log.warn(
+              { hubId, maxMessagesPerMinute },
+              "Relay message rate limit exceeded",
+            );
+            socket.close(1008, "Message rate limit exceeded");
             return;
           }
           messageRouter.routeMessage(message.envelope, registry, offlineStore);

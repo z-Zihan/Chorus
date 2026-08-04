@@ -21,6 +21,15 @@ async function main(): Promise<void> {
   const port = positiveInteger(process.env.RELAY_PORT, 3211);
   const jwtSecret = process.env.RELAY_JWT_SECRET?.trim() || "agentlink-relay-development-secret";
   const ttlDays = positiveInteger(process.env.RELAY_OFFLINE_TTL_DAYS, 7);
+  const retentionMs = positiveInteger(
+    process.env.RELAY_OFFLINE_RETENTION_MS,
+    ttlDays * 24 * 60 * 60 * 1_000,
+  );
+  const maxMessageSize = positiveInteger(process.env.RELAY_MAX_MESSAGE_SIZE, 256 * 1_024);
+  const maxMessagesPerHub = positiveInteger(process.env.RELAY_MAX_MESSAGES_PER_HUB, 1_000);
+  const maxMessagesPerMinute = positiveInteger(process.env.RELAY_MAX_MESSAGES_PER_MINUTE, 60);
+  const maxRoomsPerHub = positiveInteger(process.env.RELAY_MAX_ROOMS_PER_HUB, 50);
+  const maxMembersPerRoom = positiveInteger(process.env.RELAY_MAX_MEMBERS_PER_ROOM, 100);
   const maxHubs = positiveInteger(process.env.RELAY_MAX_HUBS, 1_000);
   const dbPath = resolve(process.env.RELAY_DB_PATH?.trim() || "./data/relay.db");
 
@@ -30,15 +39,27 @@ async function main(): Promise<void> {
 
   const database = createDatabase(dbPath);
   const registry = new HubRegistry(database);
-  const offlineStore = new OfflineStore(database, ttlDays);
-  const roomManager = new RoomManager(database);
+  const offlineStore = new OfflineStore(
+    database,
+    retentionMs,
+    maxMessageSize,
+    maxMessagesPerHub,
+  );
+  const roomManager = new RoomManager(database, maxRoomsPerHub, maxMembersPerRoom);
   const messageRouter = new MessageRouter(roomManager);
   const app = Fastify({ loggerInstance: logger as FastifyBaseLogger });
 
   await app.register(cors, { origin: true });
   await app.register(websocket);
   registerRoutes(app, { registry, roomManager, jwtSecret, maxHubs });
-  registerWebSocket(app, { registry, offlineStore, roomManager, messageRouter, jwtSecret });
+  registerWebSocket(app, {
+    registry,
+    offlineStore,
+    roomManager,
+    messageRouter,
+    jwtSecret,
+    maxMessagesPerMinute,
+  });
 
   offlineStore.cleanupExpired();
   const cleanupTimer = setInterval(() => {
