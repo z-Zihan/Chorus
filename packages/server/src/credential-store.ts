@@ -5,10 +5,12 @@ import { access, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { homedir, hostname, userInfo } from "node:os";
 import { dirname, resolve } from "node:path";
 import { promisify } from "node:util";
+import type { UserKeyPair } from "./identity/user-keys.js";
 import { logger } from "./utils/logger.js";
 
 const execFileAsync = promisify(execFile);
 const SERVICE_NAME = "AgentLink";
+const USER_KEY_IDENTIFIER = "agentlink:user-key";
 const FILE_VERSION = 1;
 const FALLBACK_FILE = resolve(
   process.env.AGENTLINK_CREDENTIAL_FILE?.trim() || resolve(homedir(), ".agentlink", "credentials.enc"),
@@ -74,6 +76,25 @@ export async function deleteCredential(agentId: string): Promise<void> {
 
 export async function hasCredential(agentId: string): Promise<boolean> {
   return (await getCredential(agentId)) !== null;
+}
+
+export async function getUserKey(): Promise<UserKeyPair | null> {
+  const serialized = await getCredential(USER_KEY_IDENTIFIER);
+  if (serialized === null) return null;
+
+  try {
+    const key = JSON.parse(serialized) as Partial<UserKeyPair>;
+    if (typeof key.publicKey !== "string" || typeof key.privateKey !== "string") {
+      throw new Error("User key is missing public or private key material");
+    }
+    return { publicKey: key.publicKey, privateKey: key.privateKey };
+  } catch (error) {
+    throw new Error("Stored User key is invalid", { cause: error });
+  }
+}
+
+export async function setUserKey(key: UserKeyPair): Promise<void> {
+  await setCredential(USER_KEY_IDENTIFIER, JSON.stringify(key));
 }
 
 export async function getCredentialStorageBackend(): Promise<CredentialStorageBackend> {

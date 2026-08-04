@@ -1,5 +1,6 @@
 import type { Message, StreamChunk } from "./message";
 import type { A2AMode } from "./conversation";
+import type { UserKind } from "./user";
 
 export type AgentStatus = "online" | "offline" | "busy" | "error";
 export type AgentType = "openai" | "openclaw" | "dify" | "cli" | "mock" | "custom" | "langchain";
@@ -37,6 +38,7 @@ export interface Agent {
   catalogEntryId?: string;
   ownerId?: string;
   ownerType?: "local" | "remote" | "system";
+  owner?: { id: string; name: string; kind: UserKind };
   createdAt: number;
   updatedAt: number;
 }

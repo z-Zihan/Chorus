@@ -11,3 +11,13 @@ export interface User {
   updatedAt: number;
   lastSeenAt?: number;
 }
+
+export interface UserHubBinding {
+  userId: string;
+  userPublicKey: string;
+  hubId: string;
+  issuedAt: number;
+  expiresAt: number;
+  userSignature: string;
+  hubSignature: string;
+}

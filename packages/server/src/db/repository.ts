@@ -12,6 +12,8 @@ import type {
   User,
 } from "@agentlink/shared";
 import { and, asc, desc, eq, isNull, lt } from "drizzle-orm";
+import { getUserKey, setUserKey } from "../credential-store.js";
+import { deriveUserId, generateUserKeyPair } from "../identity/user-keys.js";
 import type { DatabaseContext } from "./index";
 import {
   agentFriends,
@@ -45,6 +47,8 @@ export class Repository {
     const current = this.getAgentRow(persisted.id);
     const ownerId = agent.ownerId ?? current?.ownerId ?? "usr_local";
     const ownerType = agent.ownerType ?? current?.ownerType ?? "system";
+    const storedConfig = ownerType === "remote" ? {} : persisted.config;
+    const storedCredentialRef = ownerType === "remote" ? null : credentialRef;
     this.context.db
       .insert(agents)
       .values({
@@ -53,8 +57,8 @@ export class Repository {
         description: persisted.description ?? "",
         avatar: persisted.avatar,
         type: persisted.type,
-        config: JSON.stringify(persisted.config),
-        credentialRef,
+        config: JSON.stringify(storedConfig),
+        credentialRef: storedCredentialRef,
         source: persisted.source,
         managed: persisted.managed,
         customizedFields: JSON.stringify(persisted.customizedFields),
@@ -73,8 +77,12 @@ export class Repository {
           description: persisted.description ?? "",
           avatar: persisted.avatar,
           type: persisted.type,
-          config: JSON.stringify(persisted.config),
-          ...(credentialRef !== undefined ? { credentialRef } : {}),
+          config: JSON.stringify(storedConfig),
+          ...(ownerType === "remote"
+            ? { credentialRef: null }
+            : credentialRef !== undefined
+              ? { credentialRef: storedCredentialRef }
+              : {}),
           source: persisted.source,
           managed: persisted.managed,
           customizedFields: JSON.stringify(persisted.customizedFields),
@@ -89,28 +97,45 @@ export class Repository {
       .run();
   }
 
-  getOrCreateLocalUser(name: string): User {
+  async getOrCreateLocalUser(name: string): Promise<User> {
+    let keyPair = await getUserKey();
+    if (!keyPair) {
+      keyPair = generateUserKeyPair();
+      await setUserKey(keyPair);
+    }
+
+    // The stable protocol identity is derived now, while v1 keeps usr_local as its DB alias.
+    void deriveUserId(keyPair.publicKey);
+    const publicKey = keyPair.publicKey;
     const transaction = this.context.sqlite.transaction(() => {
       let row = this.context.db.select().from(users).where(eq(users.id, "usr_local")).get();
+      const now = Date.now();
       if (!row) {
-        const now = Date.now();
         this.context.db
           .insert(users)
           .values({
             id: "usr_local",
             name,
+            publicKey,
             kind: "local",
             createdAt: now,
             updatedAt: now,
+            lastSeenAt: now,
           })
           .run();
-        row = this.context.db.select().from(users).where(eq(users.id, "usr_local")).get();
+      } else {
+        this.context.db
+          .update(users)
+          .set({ publicKey, updatedAt: now, lastSeenAt: now })
+          .where(eq(users.id, "usr_local"))
+          .run();
       }
       this.context.db
         .update(agents)
         .set({ ownerId: "usr_local" })
         .where(isNull(agents.ownerId))
         .run();
+      row = this.context.db.select().from(users).where(eq(users.id, "usr_local")).get();
       return toUser(row as NonNullable<typeof row>);
     });
     return transaction();

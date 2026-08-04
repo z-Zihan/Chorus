@@ -33,7 +33,7 @@ const testConfig: AppConfig = {
 export async function buildTestApp(): Promise<FastifyInstance> {
   const database = createDatabase(":memory:");
   const repository = new Repository(database);
-  repository.getOrCreateLocalUser("Test User");
+  await repository.getOrCreateLocalUser("Test User");
   const registry = new AgentRegistry(repository);
   await registry.initialize(testConfig.agents);
 

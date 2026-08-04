@@ -439,6 +439,7 @@ export class AgentRegistry {
 
   private toAgent(entry: RegistryEntry): Agent {
     const row = this.repository.getAgentRow(entry.config.id);
+    const owner = row?.ownerId ? this.repository.getUser(row.ownerId) : undefined;
     return {
       id: entry.config.id,
       name: entry.config.name,
@@ -452,6 +453,7 @@ export class AgentRegistry {
       catalogEntryId: entry.persisted.catalogEntryId,
       ownerId: row?.ownerId ?? undefined,
       ownerType: row?.ownerType as Agent["ownerType"],
+      owner: owner ? { id: owner.id, name: owner.name, kind: owner.kind } : undefined,
       createdAt: row?.createdAt ?? Date.now(),
       updatedAt: row?.updatedAt ?? Date.now(),
     };
@@ -459,6 +461,7 @@ export class AgentRegistry {
 
   private toDisabledAgent(persisted: PersistedAgentConfig): Agent {
     const row = this.repository.getAgentRow(persisted.id);
+    const owner = row?.ownerId ? this.repository.getUser(row.ownerId) : undefined;
     return {
       id: persisted.id,
       name: persisted.name,
@@ -471,6 +474,7 @@ export class AgentRegistry {
       catalogEntryId: persisted.catalogEntryId,
       ownerId: row?.ownerId ?? undefined,
       ownerType: row?.ownerType as Agent["ownerType"],
+      owner: owner ? { id: owner.id, name: owner.name, kind: owner.kind } : undefined,
       createdAt: row?.createdAt ?? Date.now(),
       updatedAt: row?.updatedAt ?? Date.now(),
     };
