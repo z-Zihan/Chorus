@@ -111,9 +111,26 @@ export const conversationAgents = sqliteTable(
     agentNameSnapshot: text("agent_name_snapshot"),
     ownerNameSnapshot: text("owner_name_snapshot"),
     hubIdSnapshot: text("hub_id_snapshot"),
+    ownerProof: text("owner_proof"),
     joinedAt: integer("joined_at").notNull().default(0),
   },
   (table) => ({ pk: primaryKey({ columns: [table.conversationId, table.agentId] }) }),
+);
+
+export const roomStateEvents = sqliteTable(
+  "room_state_events",
+  {
+    eventId: text("event_id").primaryKey(),
+    roomId: text("room_id").notNull(),
+    revision: integer("revision").notNull(),
+    keyEpoch: integer("key_epoch").notNull(),
+    eventType: text("event_type").notNull(),
+    actorUserId: text("actor_user_id").notNull(),
+    actorSignature: text("actor_signature").notNull(),
+    timestamp: integer("timestamp").notNull(),
+    data: text("data").notNull(),
+  },
+  (table) => ({ roomRevisionIdx: index("idx_room_state_events_room_revision").on(table.roomId, table.revision) }),
 );
 
 export const agentFriends = sqliteTable(

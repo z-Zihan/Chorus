@@ -33,6 +33,7 @@ export function createDatabase(dbPath: string) {
   ensureCredentialRefColumn(sqlite);
   ensureConversationColumns(sqlite);
   ensureRoomStateColumns(sqlite);
+  ensureRoomStateEventStorage(sqlite);
   ensureUserColumns(sqlite);
   ensureUserHubsTable(sqlite);
   ensureAgentDiscoveryColumns(sqlite);
@@ -57,6 +58,28 @@ export function ensureRoomStateColumns(sqlite: Database.Database): void {
       "ALTER TABLE conversations ADD COLUMN management_state TEXT NOT NULL DEFAULT 'managed'",
     );
   }
+}
+
+function ensureRoomStateEventStorage(sqlite: Database.Database): void {
+  const memberColumns = sqlite.prepare("PRAGMA table_info(conversation_agents)").all() as Array<{
+    name: string;
+  }>;
+  if (!memberColumns.some((column) => column.name === "owner_proof")) {
+    sqlite.exec("ALTER TABLE conversation_agents ADD COLUMN owner_proof TEXT");
+  }
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS room_state_events (
+    event_id TEXT PRIMARY KEY,
+    room_id TEXT NOT NULL,
+    revision INTEGER NOT NULL,
+    key_epoch INTEGER NOT NULL,
+    event_type TEXT NOT NULL,
+    actor_user_id TEXT NOT NULL,
+    actor_signature TEXT NOT NULL,
+    timestamp INTEGER NOT NULL,
+    data TEXT NOT NULL
+  )`);
+  sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_room_state_events_room_revision
+    ON room_state_events(room_id, revision)`);
 }
 
 export function ensureClientTokensTable(sqlite: Database.Database): void {

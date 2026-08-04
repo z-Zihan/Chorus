@@ -14,6 +14,7 @@ import type { RelayClient } from "./relay-client.js";
 import type { DirectoryService } from "./directory.js";
 import type { TrustStore } from "./trust-store.js";
 import { OfflineStore } from "./offline-store.js";
+import { ResyncService } from "./resync.js";
 
 const REMOTE_CALL_TIMEOUT_MS = 120_000;
 const MAX_SEEN_MESSAGES = 1_000;
@@ -43,9 +44,12 @@ export class HubMessageRouter {
   private readonly seenMessageIds = new Set<string>();
   private readonly offlineHubIds = new Set<string>();
   private readonly authorizationService: AuthorizationService;
+  private readonly resyncService: ResyncService;
   private readonly offlinePurgeTimer: NodeJS.Timeout;
   private p2pListener?: P2PListener;
   private removeP2PMessageListener?: () => void;
+  private removeRelayStateListener?: () => void;
+  private removeRoomMembersListener?: () => void;
 
   constructor(
     private readonly identity: HubIdentity,
@@ -56,10 +60,18 @@ export class HubMessageRouter {
     private readonly localUser: LocalUserIdentity,
     private readonly directoryService: DirectoryService,
     private readonly trustStore: TrustStore,
-    repository: Repository,
+    private readonly repository: Repository,
     private readonly offlineStore = new OfflineStore(),
   ) {
     this.authorizationService = new AuthorizationService(trustStore, repository);
+    this.resyncService = new ResyncService(
+      repository,
+      relayClient,
+      (toHubId, payload, roomId) => this.handleOutbound(toHubId, payload, roomId),
+      identity.hubId,
+      (ownerId) => repository.getUser(ownerId)?.publicKey
+        ?? trustStore.listTrusted().find((hub) => hub.userId === ownerId)?.userPublicKey,
+    );
     this.offlineStore.purgeExpired();
     this.offlinePurgeTimer = setInterval(() => {
       const purged = this.offlineStore.purgeExpired();
@@ -82,6 +94,19 @@ export class HubMessageRouter {
       this.offlineHubIds.delete(hubId);
       void this.deliverPendingForHub(hubId);
     });
+    this.removeRelayStateListener = relayClient.onStateChange?.((state) => {
+      if (state !== "connected") return;
+      for (const roomId of repository.listRoomIds()) relayClient.joinRoom(roomId);
+      void this.resyncService.requestAllRooms().catch((error: unknown) => {
+        logger.warn({ err: error }, "Unable to request Room resync after Relay connection");
+      });
+    });
+    this.removeRoomMembersListener = relayClient.onRoomMembers?.((roomId) => {
+      if (!repository.listRoomIds().includes(roomId)) return;
+      void this.resyncService.requestResync(roomId).catch((error: unknown) => {
+        logger.warn({ err: error, roomId }, "Unable to request Room resync");
+      });
+    });
   }
 
   get pendingCount(): number {
@@ -90,6 +115,8 @@ export class HubMessageRouter {
 
   destroy(): void {
     clearInterval(this.offlinePurgeTimer);
+    this.removeRelayStateListener?.();
+    this.removeRoomMembersListener?.();
   }
 
   setP2PListener(listener: P2PListener): void {
@@ -177,6 +204,11 @@ export class HubMessageRouter {
       this.handleDirectoryUpdate(envelope.from, payload);
     } else if (payload.messageType === "delivery_ack") {
       this.handleDeliveryAck(payload);
+    } else if (payload.messageType === "resync_request") {
+      await this.handleResyncRequest(envelope.from, payload);
+    } else if (payload.messageType === "resync_response") {
+      if (!payload.resyncResponse) throw new Error("Inbound resync response has no payload");
+      this.resyncService.handleResyncResponse(payload.resyncResponse);
     }
   }
 
@@ -378,6 +410,19 @@ export class HubMessageRouter {
     } else {
       logger.warn({ messageId, status }, "Ignoring delivery ACK with invalid status");
     }
+  }
+
+  private async handleResyncRequest(fromHubId: string, payload: HubPayload): Promise<void> {
+    if (!payload.resyncRequest) throw new Error("Inbound resync request has no payload");
+    const response = this.resyncService.handleResyncRequest(payload.resyncRequest);
+    await this.handleOutbound(fromHubId, {
+      messageType: "resync_response",
+      messageId: randomUUID(),
+      conversationId: response.roomId,
+      toUserId: payload.fromUserId,
+      resyncResponse: response,
+      metadata: { correlationId: payload.messageId },
+    }, response.roomId);
   }
 
   private async sendResponse(

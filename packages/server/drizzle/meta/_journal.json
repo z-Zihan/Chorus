@@ -64,6 +64,13 @@
       "when": 1785835372187,
       "tag": "0008_tan_lord_tyger",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1785859200000,
+      "tag": "0009_owner_proof_resync",
+      "breakpoints": true
     }
   ]
 }

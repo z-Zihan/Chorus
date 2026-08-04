@@ -52,6 +52,7 @@ export class RelayClient {
   private readonly roomEventListeners = new Set<RoomEventListener>();
   private readonly roomMembersListeners = new Set<RoomMembersListener>();
   private readonly peerPublicKeys = new Map<string, string>();
+  private readonly roomMembers = new Map<string, RoomMember[]>();
   private readonly pendingRoomCas = new Map<string, PendingRoomCas[]>();
 
   get state(): HubConnectionState {
@@ -118,10 +119,12 @@ export class RelayClient {
   }
 
   async createRoomRequest(relayUrl: string, name: string): Promise<RoomInfo> {
-    return this.roomRequest<RoomInfo>(relayUrl, "/api/rooms", {
+    const room = await this.roomRequest<RoomInfo>(relayUrl, "/api/rooms", {
       method: "POST",
       body: JSON.stringify({ name, createdBy: this.hubId }),
     });
+    this.cacheRoomMembers(room.id, room.members);
+    return room;
   }
 
   async inviteToRoomRequest(
@@ -134,6 +137,7 @@ export class RelayClient {
       `/api/rooms/${encodeURIComponent(roomId)}/invite`,
       { method: "POST", body: JSON.stringify({ hubId }) },
     );
+    this.cacheRoomMembers(roomId, response.members);
     return response.members;
   }
 
@@ -142,6 +146,7 @@ export class RelayClient {
       relayUrl,
       `/api/rooms/${encodeURIComponent(roomId)}`,
     );
+    this.cacheRoomMembers(roomId, room.members);
     return room.members;
   }
 
@@ -151,6 +156,12 @@ export class RelayClient {
 
   getPeerPublicKey(hubId: string): string | undefined {
     return this.peerPublicKeys.get(hubId);
+  }
+
+  getOnlineRoomMembers(roomId: string): RoomMember[] {
+    return (this.roomMembers.get(roomId) ?? [])
+      .filter(({ online }) => online)
+      .map((member) => ({ ...member }));
   }
 
   disconnect(): void {
@@ -277,15 +288,19 @@ export class RelayClient {
       for (const listener of this.offlineListeners) listener(message.envelopes);
     } else if (message.type === "presence") {
       this.cachePeerPublicKey(message.hubId, message.publicKey ?? message.hubId);
+      for (const [roomId, members] of this.roomMembers) {
+        if (!members.some(({ hubId }) => hubId === message.hubId)) continue;
+        this.roomMembers.set(roomId, members.map((member) =>
+          member.hubId === message.hubId ? { ...member, online: message.status === "online" } : member
+        ));
+      }
       for (const listener of this.presenceListeners) listener(message.hubId, message.status);
     } else if (message.type === "room:event") {
       for (const listener of this.roomEventListeners) {
         listener(message.roomId, message.event, message.hubId);
       }
     } else if (message.type === "room:members") {
-      for (const member of message.members) {
-        this.cachePeerPublicKey(member.hubId, member.publicKey);
-      }
+      this.cacheRoomMembers(message.roomId, message.members);
       for (const listener of this.roomMembersListeners) listener(message.roomId, message.members);
     } else if (message.type === "room_cas_result") {
       const queue = this.pendingRoomCas.get(message.roomId);
@@ -301,6 +316,11 @@ export class RelayClient {
     } else if (message.type === "pong") {
       this.receivedPong();
     }
+  }
+
+  private cacheRoomMembers(roomId: string, members: RoomMember[]): void {
+    this.roomMembers.set(roomId, members.map((member) => ({ ...member })));
+    for (const member of members) this.cachePeerPublicKey(member.hubId, member.publicKey);
   }
 
   private parseMessage(data: RawData): RelayServerMessage | null {

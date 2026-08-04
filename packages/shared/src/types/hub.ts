@@ -83,7 +83,9 @@ export interface HubPayload {
     | "directory_request"
     | "directory_announce"
     | "directory_revoke"
-    | "delivery_ack";
+    | "delivery_ack"
+    | "resync_request"
+    | "resync_response";
   /** 会话 ID */
   conversationId?: string;
   /** 消息 ID */
@@ -104,6 +106,10 @@ export interface HubPayload {
   agentId?: string;
   /** User/Agent 目录声明 */
   directory?: DirectoryManifest;
+  /** Room 状态补同步请求 */
+  resyncRequest?: ResyncRequestPayload;
+  /** Room 状态补同步响应 */
+  resyncResponse?: ResyncResponsePayload;
   /** 附加元数据 */
   metadata?: Record<string, unknown>;
 }
@@ -177,4 +183,25 @@ export interface RoomStateEvent {
   actorSignature: string;
   timestamp: number;
   data: Record<string, unknown>;
+}
+
+/** 可持久化的 Room 当前状态。 */
+export interface PersistedRoomState {
+  revision: number;
+  keyEpoch: number;
+  managementState: "managed" | "unmanaged";
+}
+
+export interface ResyncRequestPayload {
+  roomId: string;
+  lastKnownRevision: number;
+  lastKnownKeyEpoch: number;
+}
+
+export interface ResyncResponsePayload {
+  roomId: string;
+  currentRevision: number;
+  currentKeyEpoch: number;
+  missedEvents: RoomStateEvent[];
+  snapshot: PersistedRoomState;
 }

@@ -9,11 +9,13 @@ import type {
   ConversationType,
   Message,
   MessageStatus,
+  PersistedRoomState,
   PersistedAgentConfig,
+  RoomStateEvent,
   User,
   UserWithAgents,
 } from "@agentlink/shared";
-import { and, asc, desc, eq, inArray, isNull, lt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import { getUserKey, setUserKey } from "../credential-store.js";
 import { deriveUserId, generateUserKeyPair } from "../identity/user-keys.js";
 import type { TrustedHub, TrustLevel } from "../hub/trust-store.js";
@@ -27,6 +29,7 @@ import {
   conversations,
   clientTokens,
   messages,
+  roomStateEvents,
   scheduledTasks,
   trustedHubs,
   userHubs,
@@ -63,12 +66,6 @@ export interface UserHubSummary {
   hubId: string;
   displayName: string | null;
   lastSeenAt: number | null;
-}
-
-export interface PersistedRoomState {
-  revision: number;
-  keyEpoch: number;
-  managementState: "managed" | "unmanaged";
 }
 
 export class Repository {
@@ -649,6 +646,7 @@ export class Repository {
     agentIds: string[] = [],
     relayRoomId?: string,
     metadata?: Conversation["metadata"],
+    ownerProofs: Record<string, string> = {},
   ): Conversation {
     const id = randomUUID();
     const now = Date.now();
@@ -672,7 +670,7 @@ export class Repository {
       if (uniqueAgentIds.length > 0) {
         this.context.db
           .insert(conversationAgents)
-          .values(this.buildConversationMemberSnapshots(id, uniqueAgentIds, 0, now))
+          .values(this.buildConversationMemberSnapshots(id, uniqueAgentIds, 0, now, ownerProofs))
           .run();
       }
     });
@@ -722,7 +720,7 @@ export class Repository {
         revision: sql`${conversations.revision} + 1`,
         updatedAt: Date.now(),
       })
-      .where(eq(conversations.id, roomId))
+      .where(or(eq(conversations.id, roomId), eq(conversations.relayRoomId, roomId)))
       .run();
     return result.changes > 0 ? this.getRoomState(roomId) : undefined;
   }
@@ -735,7 +733,7 @@ export class Repository {
         keyEpoch: sql`${conversations.keyEpoch} + 1`,
         updatedAt: Date.now(),
       })
-      .where(eq(conversations.id, roomId))
+      .where(or(eq(conversations.id, roomId), eq(conversations.relayRoomId, roomId)))
       .run();
     return result.changes > 0 ? this.getRoomState(roomId) : undefined;
   }
@@ -748,7 +746,7 @@ export class Repository {
         managementState: conversations.managementState,
       })
       .from(conversations)
-      .where(eq(conversations.id, roomId))
+      .where(or(eq(conversations.id, roomId), eq(conversations.relayRoomId, roomId)))
       .get();
     if (!row) return undefined;
     return {
@@ -758,6 +756,60 @@ export class Repository {
     };
   }
 
+  listRoomIds(): string[] {
+    return this.context.db
+      .select({ roomId: conversations.relayRoomId })
+      .from(conversations)
+      .where(isNotNull(conversations.relayRoomId))
+      .all()
+      .flatMap(({ roomId }) => roomId ? [roomId] : []);
+  }
+
+  setRoomState(roomId: string, state: PersistedRoomState): PersistedRoomState | undefined {
+    if (!isPersistedRoomState(state)) throw new Error("Invalid persisted Room state");
+    const result = this.context.db
+      .update(conversations)
+      .set({
+        revision: state.revision,
+        keyEpoch: state.keyEpoch,
+        managementState: state.managementState,
+        updatedAt: Date.now(),
+      })
+      .where(or(eq(conversations.id, roomId), eq(conversations.relayRoomId, roomId)))
+      .run();
+    return result.changes > 0 ? this.getRoomState(roomId) : undefined;
+  }
+
+  getRoomStateEvents(roomId: string, afterRevision: number, limit = 101): RoomStateEvent[] {
+    return this.context.db
+      .select()
+      .from(roomStateEvents)
+      .where(and(eq(roomStateEvents.roomId, roomId), sql`${roomStateEvents.revision} > ${afterRevision}`))
+      .orderBy(asc(roomStateEvents.revision))
+      .limit(limit)
+      .all()
+      .map((row) => ({
+        eventId: row.eventId,
+        roomId: row.roomId,
+        revision: row.revision,
+        keyEpoch: row.keyEpoch,
+        eventType: row.eventType as RoomStateEvent["eventType"],
+        actorUserId: row.actorUserId,
+        actorSignature: row.actorSignature,
+        timestamp: row.timestamp,
+        data: safeJson<Record<string, unknown>>(row.data, {}),
+      }));
+  }
+
+  saveRoomStateEvent(event: RoomStateEvent): boolean {
+    const result = this.context.db
+      .insert(roomStateEvents)
+      .values({ ...event, data: JSON.stringify(event.data) })
+      .onConflictDoNothing()
+      .run();
+    return result.changes > 0;
+  }
+
   setRoomManagementState(
     roomId: string,
     state: PersistedRoomState["managementState"],
@@ -765,7 +817,7 @@ export class Repository {
     const result = this.context.db
       .update(conversations)
       .set({ managementState: state, updatedAt: Date.now() })
-      .where(eq(conversations.id, roomId))
+      .where(or(eq(conversations.id, roomId), eq(conversations.relayRoomId, roomId)))
       .run();
     return result.changes > 0 ? this.getRoomState(roomId) : undefined;
   }
@@ -775,6 +827,7 @@ export class Repository {
       agentNameSnapshot?: string;
       ownerNameSnapshot?: string;
       hubIdSnapshot?: string;
+      ownerProof?: string;
       joinedAt: number;
     }
   > {
@@ -800,13 +853,18 @@ export class Repository {
       agentNameSnapshot: membership.agentNameSnapshot ?? undefined,
       ownerNameSnapshot: membership.ownerNameSnapshot ?? undefined,
       hubIdSnapshot: membership.hubIdSnapshot ?? undefined,
+      ownerProof: membership.ownerProof ?? undefined,
       joinedAt: membership.joinedAt,
       createdAt: agent.createdAt,
       updatedAt: agent.updatedAt,
     }));
   }
 
-  addAgentsToConversation(conversationId: string, agentIds: string[]): Conversation | undefined {
+  addAgentsToConversation(
+    conversationId: string,
+    agentIds: string[],
+    ownerProofs: Record<string, string> = {},
+  ): Conversation | undefined {
     const conversation = this.getConversation(conversationId);
     const uniqueAgentIds = [...new Set(agentIds)];
     if (!conversation || uniqueAgentIds.some((agentId) => !this.getAgentRow(agentId)))
@@ -830,6 +888,7 @@ export class Repository {
             uniqueAgentIds,
             nextPosition,
             Date.now(),
+            ownerProofs,
           ),
         )
         .onConflictDoNothing()
@@ -838,6 +897,32 @@ export class Repository {
     });
     transaction();
     return this.getConversation(conversationId);
+  }
+
+  setConversationAgentOwnerProof(
+    conversationId: string,
+    agentId: string,
+    ownerProof: string,
+  ): boolean {
+    return this.context.db
+      .update(conversationAgents)
+      .set({ ownerProof })
+      .where(and(
+        eq(conversationAgents.conversationId, conversationId),
+        eq(conversationAgents.agentId, agentId),
+      ))
+      .run().changes > 0;
+  }
+
+  getConversationAgentOwnerProof(conversationId: string, agentId: string): string | undefined {
+    return this.context.db
+      .select({ ownerProof: conversationAgents.ownerProof })
+      .from(conversationAgents)
+      .where(and(
+        eq(conversationAgents.conversationId, conversationId),
+        eq(conversationAgents.agentId, agentId),
+      ))
+      .get()?.ownerProof ?? undefined;
   }
 
   removeAgentsFromConversation(
@@ -1022,6 +1107,7 @@ export class Repository {
     agentIds: string[],
     startPosition: number,
     joinedAt: number,
+    ownerProofs: Record<string, string> = {},
   ): Array<typeof conversationAgents.$inferInsert> {
     return agentIds.map((agentId, index) => {
       const agent = this.getAgentRow(agentId);
@@ -1037,6 +1123,7 @@ export class Repository {
         agentNameSnapshot: agent.name,
         ownerNameSnapshot: owner?.name,
         hubIdSnapshot: owner?.hubId,
+        ownerProof: ownerProofs[agentId],
         joinedAt,
       };
     });
@@ -1072,6 +1159,14 @@ export class Repository {
       updatedAt: row.updatedAt,
     };
   }
+}
+
+function isPersistedRoomState(value: PersistedRoomState): boolean {
+  return Number.isSafeInteger(value.revision)
+    && value.revision >= 0
+    && Number.isSafeInteger(value.keyEpoch)
+    && value.keyEpoch >= 1
+    && (value.managementState === "managed" || value.managementState === "unmanaged");
 }
 
 function toPersistedAgent(agent: AgentConfig | PersistedAgentConfig): PersistedAgentConfig {
