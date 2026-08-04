@@ -55,6 +55,18 @@ export const appSettings = sqliteTable("app_settings", {
   updatedAt: integer("updated_at").notNull(),
 });
 
+export const clientTokens = sqliteTable("client_tokens", {
+  id: text("id").primaryKey(),
+  hash: text("hash").notNull().unique(),
+  clientId: text("client_id").notNull(),
+  userId: text("user_id"),
+  scopes: text("scopes").notNull().default("[]"),
+  expiresAt: integer("expires_at").notNull(),
+  createdAt: integer("created_at").notNull(),
+  lastUsedAt: integer("last_used_at"),
+  revoked: integer("revoked", { mode: "boolean" }).notNull().default(false),
+});
+
 export const conversations = sqliteTable("conversations", {
   id: text("id").primaryKey(),
   title: text("title"),

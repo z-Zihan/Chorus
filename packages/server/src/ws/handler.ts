@@ -6,7 +6,8 @@ import type { AgentRuntime } from "../agent/runtime";
 import type { AgentRegistry } from "../agent/registry";
 import type { EventHub } from "./events";
 import { track } from "../analytics.js";
-import { isValidAuthToken } from "../middleware/auth.js";
+import { isLoopbackAddress, verifyAuthToken } from "../middleware/auth.js";
+import { tokenHasScope, type TokenStore } from "../auth/token-store.js";
 
 const eventSchema = z.discriminatedUnion("type", [
   z.object({
@@ -32,6 +33,7 @@ export function registerWebSocket(
   runtime: AgentRuntime,
   registry: AgentRegistry,
   auth: AppConfig["auth"] = { enabled: false, tokens: {} },
+  tokenStore?: TokenStore,
 ): void {
   const unsubscribe = registry.subscribeStatusChanges((status) => {
     events.broadcastStatus(status);
@@ -40,12 +42,9 @@ export function registerWebSocket(
 
   app.get("/ws", { websocket: true }, (socket, request) => {
     const ws = socket as WebSocket;
-    if (auth.enabled) {
-      const token = new URL(request.url, "http://localhost").searchParams.get("token");
-      if (!token || !isValidAuthToken(token, auth.tokens)) {
-        ws.close(1008, "Unauthorized");
-        return;
-      }
+    if (!isWebSocketAuthorized(request.ip, request.url, auth, tokenStore)) {
+      ws.close(1008, "Unauthorized");
+      return;
     }
     events.add(ws);
     events.sendStatusBatch(
@@ -110,6 +109,20 @@ export function registerWebSocket(
       events.remove(ws);
     });
   });
+}
+
+export function isWebSocketAuthorized(
+  remoteAddress: string | undefined,
+  requestUrl: string,
+  auth: AppConfig["auth"],
+  tokenStore?: TokenStore,
+): boolean {
+  if (!auth.enabled || isLoopbackAddress(remoteAddress)) return true;
+  const plaintext = new URL(requestUrl, "http://localhost").searchParams.get("token");
+  const verified = plaintext ? verifyAuthToken(plaintext, auth, tokenStore) : null;
+  return Boolean(
+    verified && (verified === "configured" || tokenHasScope(verified, "ws:connect")),
+  );
 }
 
 function handleEvent(

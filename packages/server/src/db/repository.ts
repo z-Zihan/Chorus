@@ -17,6 +17,7 @@ import { and, asc, desc, eq, inArray, isNull, lt } from "drizzle-orm";
 import { getUserKey, setUserKey } from "../credential-store.js";
 import { deriveUserId, generateUserKeyPair } from "../identity/user-keys.js";
 import type { TrustedHub, TrustLevel } from "../hub/trust-store.js";
+import type { ClientToken } from "../auth/token-store.js";
 import type { DatabaseContext } from "./index";
 import {
   agentFriends,
@@ -24,6 +25,7 @@ import {
   appSettings,
   conversationAgents,
   conversations,
+  clientTokens,
   messages,
   scheduledTasks,
   trustedHubs,
@@ -52,6 +54,52 @@ export class Repository {
 
   setAgentStatusResolver(resolver: (agentId: string) => AgentStatus): void {
     this.agentStatusResolver = resolver;
+  }
+
+  createClientToken(token: ClientToken): void {
+    this.context.db
+      .insert(clientTokens)
+      .values({
+        ...token,
+        userId: token.userId ?? null,
+        scopes: JSON.stringify(token.scopes),
+        lastUsedAt: token.lastUsedAt ?? null,
+      })
+      .run();
+  }
+
+  getClientTokenByHash(hash: string): ClientToken | undefined {
+    const row = this.context.db.select().from(clientTokens).where(eq(clientTokens.hash, hash)).get();
+    return row ? toClientToken(row) : undefined;
+  }
+
+  listClientTokens(): ClientToken[] {
+    return this.context.db
+      .select()
+      .from(clientTokens)
+      .orderBy(desc(clientTokens.createdAt))
+      .all()
+      .map(toClientToken);
+  }
+
+  updateClientTokenLastUsed(id: string, lastUsedAt: number): boolean {
+    return this.context.db
+      .update(clientTokens)
+      .set({ lastUsedAt })
+      .where(eq(clientTokens.id, id))
+      .run().changes > 0;
+  }
+
+  revokeClientToken(id: string): boolean {
+    return this.context.db
+      .update(clientTokens)
+      .set({ revoked: true })
+      .where(eq(clientTokens.id, id))
+      .run().changes > 0;
+  }
+
+  purgeExpiredClientTokens(now = Date.now()): number {
+    return this.context.db.delete(clientTokens).where(lt(clientTokens.expiresAt, now)).run().changes;
   }
 
   upsertAgent(
@@ -927,5 +975,21 @@ function toTrustedHub(row: typeof trustedHubs.$inferSelect): TrustedHub {
     pairedAt: row.pairedAt ?? undefined,
     lastSeenAt: row.lastSeenAt ?? undefined,
     notes: row.notes ?? undefined,
+  };
+}
+
+function toClientToken(row: typeof clientTokens.$inferSelect): ClientToken {
+  return {
+    id: row.id,
+    hash: row.hash,
+    clientId: row.clientId,
+    userId: row.userId ?? undefined,
+    scopes: safeJson<unknown[]>(row.scopes, []).filter(
+      (scope): scope is string => typeof scope === "string",
+    ),
+    expiresAt: row.expiresAt,
+    createdAt: row.createdAt,
+    lastUsedAt: row.lastUsedAt ?? undefined,
+    revoked: row.revoked,
   };
 }

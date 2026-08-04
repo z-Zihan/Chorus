@@ -35,8 +35,23 @@ export function createDatabase(dbPath: string) {
   ensureUserColumns(sqlite);
   ensureAgentDiscoveryColumns(sqlite);
   ensureTrustedHubsTable(sqlite);
+  ensureClientTokensTable(sqlite);
   initializeMessageSearch(sqlite);
   return { sqlite, db };
+}
+
+export function ensureClientTokensTable(sqlite: Database.Database): void {
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS client_tokens (
+    id TEXT PRIMARY KEY,
+    hash TEXT NOT NULL UNIQUE,
+    client_id TEXT NOT NULL,
+    user_id TEXT,
+    scopes TEXT NOT NULL DEFAULT '[]',
+    expires_at INTEGER NOT NULL,
+    created_at INTEGER NOT NULL,
+    last_used_at INTEGER,
+    revoked INTEGER NOT NULL DEFAULT 0
+  )`);
 }
 
 function ensureAgentDiscoveryColumns(sqlite: Database.Database): void {

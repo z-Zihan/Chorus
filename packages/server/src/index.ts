@@ -30,6 +30,7 @@ import { ConnectionManager } from "./hub/connection-manager.js";
 import { deriveUserId } from "./identity/user-keys.js";
 import { DirectoryService } from "./hub/directory.js";
 import { TrustStore } from "./hub/trust-store.js";
+import { TokenStore } from "./auth/token-store.js";
 
 process.on("uncaughtException", (error) => {
   logger.fatal({ err: error }, "Uncaught exception");
@@ -49,6 +50,7 @@ async function main(): Promise<void> {
 
   const { sqlite, db } = createDatabase(dbPath);
   const repository = new Repository({ sqlite, db });
+  const tokenStore = new TokenStore(repository);
   const trustStore = new TrustStore(repository);
   const localUser = await repository.getOrCreateLocalUser("本机用户");
   if (!localUser.publicKey) throw new Error("Local User public key is unavailable");
@@ -147,7 +149,7 @@ async function main(): Promise<void> {
       "Request completed",
     );
   });
-  if (config.auth.enabled) app.addHook("onRequest", authMiddleware(config.auth));
+  app.addHook("onRequest", authMiddleware(config.auth, tokenStore));
 
   await app.register(cors, { origin: config.cors.origin });
   await app.register(websocket);
@@ -174,8 +176,10 @@ async function main(): Promise<void> {
         }
       : undefined,
     trustStore,
+    tokenStore,
+    config.auth,
   );
-  registerWebSocket(app, events, runtime, registry, config.auth);
+  registerWebSocket(app, events, runtime, registry, config.auth, tokenStore);
 
   const hasAgentsAtStartup = registry.list().length > 0;
   if (hasAgentsAtStartup) await onboarding.bootstrap();

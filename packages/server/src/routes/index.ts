@@ -23,6 +23,9 @@ import { registerHubRoutes, type HubRouteDependencies } from "./hub.js";
 import { registerSkillRoutes } from "./skill.js";
 import type { TrustStore } from "../hub/trust-store.js";
 import { registerTrustRoutes } from "./trust.js";
+import type { TokenStore } from "../auth/token-store.js";
+import type { AppConfig } from "@agentlink/shared";
+import { registerTokenRoutes } from "./tokens.js";
 
 export function registerRoutes(
   app: FastifyInstance,
@@ -37,6 +40,8 @@ export function registerRoutes(
   loader?: import("../plugins/loader.js").PluginLoader,
   hub?: HubRouteDependencies,
   trustStore?: TrustStore,
+  tokenStore?: TokenStore,
+  auth: AppConfig["auth"] = { enabled: false, tokens: {} },
 ): void {
   registerHealthRoutes(app);
   registerSkillRoutes(app);
@@ -54,4 +59,5 @@ export function registerRoutes(
   if (loader) registerPluginRoutes(app, loader);
   if (hub) registerHubRoutes(app, hub);
   if (trustStore) registerTrustRoutes(app, trustStore);
+  if (tokenStore) registerTokenRoutes(app, tokenStore, auth);
 }
