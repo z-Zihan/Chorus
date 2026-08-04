@@ -1,5 +1,14 @@
 import type { HubEnvelope, RoomMember } from "./hub";
 
+export interface RoomCasState {
+  revision: number;
+  keyEpoch: number;
+}
+
+export interface RoomCasResult extends RoomCasState {
+  accepted: boolean;
+}
+
 /**
  * Hub → Relay 的 WebSocket 消息
  */
@@ -9,6 +18,14 @@ export type RelayClientMessage =
   | { type: "presence"; status: "online" | "offline" }
   | { type: "room:join"; roomId: string }
   | { type: "room:leave"; roomId: string }
+  | {
+      type: "room_cas";
+      roomId: string;
+      expectedRevision: number;
+      expectedKeyEpoch: number;
+      newRevision: number;
+      newKeyEpoch: number;
+    }
   | { type: "ping" };
 
 /**
@@ -31,4 +48,5 @@ export type RelayServerMessage =
       hubId: string;
     }
   | { type: "room:members"; roomId: string; members: RoomMember[] }
+  | ({ type: "room_cas_result"; roomId: string } & RoomCasResult)
   | { type: "pong" };

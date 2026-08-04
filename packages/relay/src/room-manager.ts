@@ -85,7 +85,7 @@ export class RoomManager {
     return room ? { ...room, members: this.getMembers(roomId) } : null;
   }
 
-  private isMember(roomId: string, hubId: string): boolean {
+  isMember(roomId: string, hubId: string): boolean {
     return Boolean(this.database.db
       .select({ roomId: roomMembers.roomId })
       .from(roomMembers)

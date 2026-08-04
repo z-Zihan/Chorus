@@ -4,6 +4,7 @@ import { verifyHubToken } from "../auth.js";
 import type { HubRegistry } from "../hub-registry.js";
 import type { MessageRouter } from "../message-router.js";
 import type { OfflineStore } from "../offline-store.js";
+import type { RoomCasStore } from "../room-cas.js";
 import type { RoomManager } from "../room-manager.js";
 import type { RelaySocket } from "../socket.js";
 import { sendJson } from "../socket.js";
@@ -12,6 +13,7 @@ interface WebSocketDependencies {
   registry: HubRegistry;
   offlineStore: OfflineStore;
   roomManager: RoomManager;
+  roomCasStore: RoomCasStore;
   messageRouter: MessageRouter;
   jwtSecret: string;
   maxMessagesPerMinute?: number;
@@ -70,7 +72,7 @@ function validEnvelope(value: unknown): value is HubEnvelope {
 }
 
 export function registerWebSocket(app: FastifyInstance, dependencies: WebSocketDependencies): void {
-  const { registry, offlineStore, roomManager, messageRouter, jwtSecret } = dependencies;
+  const { registry, offlineStore, roomManager, roomCasStore, messageRouter, jwtSecret } = dependencies;
   const maxMessagesPerMinute = dependencies.maxMessagesPerMinute ?? DEFAULT_MAX_MESSAGES_PER_MINUTE;
   const rateWindows = new Map<string, RateWindow>();
 
@@ -170,6 +172,23 @@ export function registerWebSocket(app: FastifyInstance, dependencies: WebSocketD
         } else if (message.type === "room:leave" && typeof message.roomId === "string") {
           roomManager.leaveRoom(message.roomId, hubId);
           broadcastRoomEvent(registry, roomManager, message.roomId, "leave", hubId);
+        } else if (message.type === "room_cas") {
+          if (!validRoomCasMessage(message) || !roomManager.isMember(message.roomId, hubId)) {
+            socket.close(1008, "Invalid or unauthorized Room CAS");
+            return;
+          }
+          const result = roomCasStore.cas(
+            message.roomId,
+            message.expectedRevision,
+            message.expectedKeyEpoch,
+            message.newRevision,
+            message.newKeyEpoch,
+          );
+          sendJson(socket, {
+            type: "room_cas_result",
+            roomId: message.roomId,
+            ...result,
+          } satisfies RelayServerMessage);
         } else if (message.type === "ping") {
           sendJson(socket, { type: "pong" } satisfies RelayServerMessage);
         }
@@ -193,4 +212,18 @@ export function registerWebSocket(app: FastifyInstance, dependencies: WebSocketD
       disconnect();
     });
   });
+}
+
+function validRoomCasMessage(
+  message: Extract<RelayClientMessage, { type: "room_cas" }>,
+): boolean {
+  return message.roomId.length > 0
+    && Number.isSafeInteger(message.expectedRevision)
+    && message.expectedRevision >= 0
+    && Number.isSafeInteger(message.expectedKeyEpoch)
+    && message.expectedKeyEpoch >= 0
+    && Number.isSafeInteger(message.newRevision)
+    && message.newRevision >= 0
+    && Number.isSafeInteger(message.newKeyEpoch)
+    && message.newKeyEpoch >= 0;
 }

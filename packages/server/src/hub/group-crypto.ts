@@ -1,7 +1,9 @@
 import {
   createCipheriv,
   createDecipheriv,
+  createHmac,
   randomBytes,
+  timingSafeEqual,
 } from "node:crypto";
 
 const GROUP_KEY_BYTES = 32;
@@ -13,6 +15,40 @@ export interface GroupKey {
   key: string;
   createdAt: number;
   version: number;
+}
+
+export interface CommittedGroupKey extends GroupKey {
+  keyCommitment: string;
+}
+
+export function computeKeyCommitment(
+  roomKey: string | Uint8Array,
+  roomId: string,
+  keyEpoch: number,
+): string {
+  if (!Number.isSafeInteger(keyEpoch) || keyEpoch < 0) {
+    throw new RangeError("keyEpoch must be a non-negative safe integer");
+  }
+  const epoch = Buffer.allocUnsafe(8);
+  epoch.writeBigUInt64BE(BigInt(keyEpoch));
+  const message = Buffer.concat([Buffer.from(roomId, "utf8"), epoch]);
+  return createHmac("sha256", roomKey).update(message).digest("hex");
+}
+
+export function verifyKeyCommitment(
+  roomKey: string | Uint8Array,
+  roomId: string,
+  keyEpoch: number,
+  commitment: string,
+): boolean {
+  if (!/^[0-9a-fA-F]{64}$/.test(commitment)) return false;
+  try {
+    const expected = Buffer.from(computeKeyCommitment(roomKey, roomId, keyEpoch), "hex");
+    const received = Buffer.from(commitment, "hex");
+    return timingSafeEqual(expected, received);
+  } catch {
+    return false;
+  }
 }
 
 export interface EncryptedGroupKey {
@@ -56,15 +92,46 @@ export class GroupKeyManager {
   }
 
   /** Rekey when membership changes. */
-  rekey(conversationId: string): GroupKey {
-    return this.generateKey(conversationId);
+  rekey(conversationId: string): CommittedGroupKey {
+    const groupKey = this.generateKey(conversationId);
+    return {
+      ...groupKey,
+      keyCommitment: computeKeyCommitment(
+        Buffer.from(groupKey.key, "base64url"),
+        conversationId,
+        groupKey.version,
+      ),
+    };
+  }
+
+  /** Install a rekey only after validating its commitment. */
+  installRekey(
+    conversationId: string,
+    groupKey: GroupKey,
+    keyCommitment: string,
+  ): boolean {
+    if (!verifyKeyCommitment(
+      Buffer.from(groupKey.key, "base64url"),
+      conversationId,
+      groupKey.version,
+      keyCommitment,
+    )) {
+      return false;
+    }
+    return this.setKey(conversationId, groupKey);
   }
 
   /** Encrypt a message with the current group key using AES-256-GCM. */
   encryptMessage(
     conversationId: string,
     plaintext: string,
-  ): { ciphertext: string; nonce: string; keyId: string } | null {
+  ): {
+    ciphertext: string;
+    nonce: string;
+    keyId: string;
+    keyEpoch: number;
+    keyCommitment: string;
+  } | null {
     const groupKey = this.getKey(conversationId);
     if (!groupKey) return null;
 
@@ -77,6 +144,12 @@ export class GroupKeyManager {
       ciphertext: ciphertext.toString("base64url"),
       nonce: nonce.toString("base64url"),
       keyId: groupKey.id,
+      keyEpoch: groupKey.version,
+      keyCommitment: computeKeyCommitment(
+        Buffer.from(groupKey.key, "base64url"),
+        conversationId,
+        groupKey.version,
+      ),
     };
   }
 

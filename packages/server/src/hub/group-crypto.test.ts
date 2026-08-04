@@ -11,7 +11,8 @@ describe("GroupKeyManager", () => {
     expect(second.version).toBe(2);
     expect(second.id).not.toBe(first.id);
     expect(second.key).not.toBe(first.key);
-    expect(manager.getKey("conversation-1")).toEqual(second);
+    expect(second.keyCommitment).toEqual(expect.any(String));
+    expect(manager.getKey("conversation-1")!.version).toBe(second.version);
   });
 
   it("encrypts and decrypts a message", () => {

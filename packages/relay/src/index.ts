@@ -9,6 +9,7 @@ import { MessageRouter } from "./message-router.js";
 import { OfflineStore } from "./offline-store.js";
 import { registerRoutes } from "./routes/index.js";
 import { RoomManager } from "./room-manager.js";
+import { RoomCasStore } from "./room-cas.js";
 import { logger } from "./utils/logger.js";
 import { registerWebSocket } from "./ws/handler.js";
 
@@ -46,6 +47,7 @@ async function main(): Promise<void> {
     maxMessagesPerHub,
   );
   const roomManager = new RoomManager(database, maxRoomsPerHub, maxMembersPerRoom);
+  const roomCasStore = new RoomCasStore();
   const messageRouter = new MessageRouter(roomManager);
   const app = Fastify({ loggerInstance: logger as FastifyBaseLogger });
 
@@ -56,6 +58,7 @@ async function main(): Promise<void> {
     registry,
     offlineStore,
     roomManager,
+    roomCasStore,
     messageRouter,
     jwtSecret,
     maxMessagesPerMinute,

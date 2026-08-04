@@ -3,6 +3,8 @@ import type {
   HubEnvelope,
   RelayClientMessage,
   RelayServerMessage,
+  RoomCasResult,
+  RoomCasState,
   RoomMember,
   RoomInfo,
 } from "@agentlink/shared";
@@ -23,6 +25,13 @@ type RoomMembersListener = (roomId: string, members: RoomMember[]) => void;
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const PONG_TIMEOUT_MS = 10_000;
 const MAX_RECONNECT_DELAY_MS = 30_000;
+const ROOM_CAS_TIMEOUT_MS = 10_000;
+
+interface PendingRoomCas {
+  resolve: (result: RoomCasResult) => void;
+  reject: (error: Error) => void;
+  timer: NodeJS.Timeout;
+}
 
 export class RelayClient {
   private socket?: WebSocket;
@@ -43,6 +52,7 @@ export class RelayClient {
   private readonly roomEventListeners = new Set<RoomEventListener>();
   private readonly roomMembersListeners = new Set<RoomMembersListener>();
   private readonly peerPublicKeys = new Map<string, string>();
+  private readonly pendingRoomCas = new Map<string, PendingRoomCas[]>();
 
   get state(): HubConnectionState {
     return this.connectionState;
@@ -74,6 +84,37 @@ export class RelayClient {
 
   leaveRoom(roomId: string): void {
     this.send({ type: "room:leave", roomId });
+  }
+
+  roomCas(roomId: string, expected: RoomCasState, next: RoomCasState): Promise<RoomCasResult> {
+    return new Promise<RoomCasResult>((resolve, reject) => {
+      const pending: PendingRoomCas = {
+        resolve,
+        reject,
+        timer: setTimeout(() => {
+          this.removePendingRoomCas(roomId, pending);
+          reject(new Error(`Room CAS timed out for ${roomId}`));
+        }, ROOM_CAS_TIMEOUT_MS),
+      };
+      pending.timer.unref();
+      const queue = this.pendingRoomCas.get(roomId) ?? [];
+      queue.push(pending);
+      this.pendingRoomCas.set(roomId, queue);
+      try {
+        this.send({
+          type: "room_cas",
+          roomId,
+          expectedRevision: expected.revision,
+          expectedKeyEpoch: expected.keyEpoch,
+          newRevision: next.revision,
+          newKeyEpoch: next.keyEpoch,
+        });
+      } catch (error) {
+        clearTimeout(pending.timer);
+        this.removePendingRoomCas(roomId, pending);
+        reject(error instanceof Error ? error : new Error(String(error)));
+      }
+    });
   }
 
   async createRoomRequest(relayUrl: string, name: string): Promise<RoomInfo> {
@@ -117,6 +158,7 @@ export class RelayClient {
     this.connectionGeneration += 1;
     this.clearReconnectTimer();
     this.stopHeartbeat();
+    this.rejectPendingRoomCas(new Error("Relay disconnected before Room CAS completed"));
     const socket = this.socket;
     this.socket = undefined;
     if (socket && socket.readyState !== WebSocket.CLOSED) socket.close(1000, "Hub disconnected");
@@ -208,6 +250,7 @@ export class RelayClient {
         if (generation !== this.connectionGeneration) return;
         this.stopHeartbeat();
         this.socket = undefined;
+        this.rejectPendingRoomCas(new Error("Relay connection closed before Room CAS completed"));
         if (!settled) {
           settled = true;
           reject(new Error(`Relay connection closed before registration (${code}): ${reason.toString()}`));
@@ -244,6 +287,17 @@ export class RelayClient {
         this.cachePeerPublicKey(member.hubId, member.publicKey);
       }
       for (const listener of this.roomMembersListeners) listener(message.roomId, message.members);
+    } else if (message.type === "room_cas_result") {
+      const queue = this.pendingRoomCas.get(message.roomId);
+      const pending = queue?.shift();
+      if (!pending) return;
+      clearTimeout(pending.timer);
+      if (queue && queue.length === 0) this.pendingRoomCas.delete(message.roomId);
+      pending.resolve({
+        accepted: message.accepted,
+        revision: message.revision,
+        keyEpoch: message.keyEpoch,
+      });
     } else if (message.type === "pong") {
       this.receivedPong();
     }
@@ -344,5 +398,23 @@ export class RelayClient {
     if (this.connectionState === state) return;
     this.connectionState = state;
     for (const listener of this.stateListeners) listener(state);
+  }
+
+  private removePendingRoomCas(roomId: string, pending: PendingRoomCas): void {
+    const queue = this.pendingRoomCas.get(roomId);
+    if (!queue) return;
+    const index = queue.indexOf(pending);
+    if (index >= 0) queue.splice(index, 1);
+    if (queue && queue.length === 0) this.pendingRoomCas.delete(roomId);
+  }
+
+  private rejectPendingRoomCas(error: Error): void {
+    for (const queue of this.pendingRoomCas.values()) {
+      for (const pending of queue) {
+        clearTimeout(pending.timer);
+        pending.reject(error);
+      }
+    }
+    this.pendingRoomCas.clear();
   }
 }
