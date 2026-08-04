@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import {
   Archive,
   ArchiveRestore,
-  CheckSquare,
+  PanelLeftClose,
   ChevronDown,
   Ellipsis,
   Pencil,
@@ -12,6 +12,7 @@ import {
   Search,
   Settings,
   Trash2,
+  UserPlus,
   Users,
   X,
 } from "lucide-react";
@@ -19,24 +20,36 @@ import { Trans, useTranslation } from "react-i18next";
 import { useChatStore, type Conversation } from "@/store/chatStore";
 import { useAgentStore, type AgentGroup } from "@/store/agentStore";
 import { useUIStore } from "@/store/uiStore";
-import { AgentAvatar } from "@/components/agent/AgentAvatar";
-import { AgentHealthBadge } from "@/components/agent/AgentHealthBadge";
-import { ConfirmDialog } from "@/components/common/ConfirmDialog";
-import { Button } from "@/components/ui/button";
 import {
+  AgentAvatar } from "@/components/agent/AgentAvatar";
+import {
+  AgentHealthBadge } from "@/components/agent/AgentHealthBadge";
+import {
+  ConfirmDialog } from "@/components/common/ConfirmDialog";
+import {
+  Button } from "@/components/ui/button";
+import {
+  
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
-import { STATUS_COLORS } from "@/constants/agent";
-import { formatConversationTime } from "@/lib/date";
-import { useHotkey } from "@/hooks/useHotkey";
-import { useOnboardingStore } from "@/store/onboardingStore";
-import { CatalogModal } from "@/components/catalog/CatalogModal";
+import {
+  Input } from "@/components/ui/input";
+import {
+  Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import {
+  STATUS_COLORS } from "@/constants/agent";
+import {
+  formatConversationTime } from "@/lib/date";
+import {
+  useHotkey } from "@/hooks/useHotkey";
+import {
+  useOnboardingStore } from "@/store/onboardingStore";
+import {
+  CatalogModal } from "@/components/catalog/CatalogModal";
 
 interface SidebarProps {
   onOpenSettings: () => void;
@@ -71,15 +84,18 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
   const [isArchivedOpen, setIsArchivedOpen] = useState(false);
   const [isGroupsOpen, setIsGroupsOpen] = useState(true);
   const [collapsedAgentIds, setCollapsedAgentIds] = useState<Set<string>>(new Set());
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isAddFriendOpen, setIsAddFriendOpen] = useState(false);
+  const [remoteHubId, setRemoteHubId] = useState("");
+  const [pairingCode, setPairingCode] = useState<string | null>(null);
+  const [pairingError, setPairingError] = useState<string | null>(null);
+  const [isPairing, setIsPairing] = useState(false);
   const [collapsedOwnerIds, setCollapsedOwnerIds] = useState<Set<string>>(new Set());
   const [agentGroups, setAgentGroups] = useState<AgentGroup[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
-  const [isSelectMode, setIsSelectMode] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [showBatchConfirmation, setShowBatchConfirmation] = useState(false);
   const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
   const [isCreatingGroup, setIsCreatingGroup] = useState(false);
   const [selectedGroupAgentIds, setSelectedGroupAgentIds] = useState<Set<string>>(new Set());
@@ -94,7 +110,6 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
   const togglePin = useChatStore((s) => s.togglePin);
   const toggleArchive = useChatStore((s) => s.toggleArchive);
   const deleteConversation = useChatStore((s) => s.deleteConversation);
-  const deleteConversations = useChatStore((s) => s.deleteConversations);
   const agents = useAgentStore((s) => s.agents);
   const fetchGroupedAgents = useAgentStore((s) => s.fetchGroupedAgents);
   const isSidebarOpen = useUIStore((s) => s.isSidebarOpen);
@@ -113,17 +128,37 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
   const visibleGroupConversations = groupConversations.filter(matchesSearch);
   const visibleArchivedConversations = archivedConversations.filter(matchesSearch);
   const handleSelectConversation = (id: string) => {
-    if (isSelectMode) {
-      setSelectedIds((current) => {
-        const next = new Set(current);
-        if (next.has(id)) next.delete(id);
-        else next.add(id);
-        return next;
-      });
-      return;
-    }
     setCurrentConversation(id);
     closeSidebar();
+  };
+
+  const toggleSidebarCollapse = () => {
+    setIsSidebarCollapsed((collapsed) => !collapsed);
+  };
+
+  const handlePairFriend = async () => {
+    const hubId = remoteHubId.trim();
+    if (!hubId) return;
+
+    setIsPairing(true);
+    setPairingCode(null);
+    setPairingError(null);
+    try {
+      const response = await fetch("/api/trust/pair", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hubId }),
+      });
+      const result = await response.json() as { code?: string; error?: string; message?: string };
+      if (!response.ok || !result.code) {
+        throw new Error(result.error ?? result.message ?? "发送配对请求失败");
+      }
+      setPairingCode(result.code);
+    } catch (error) {
+      setPairingError(error instanceof Error ? error.message : "发送配对请求失败");
+    } finally {
+      setIsPairing(false);
+    }
   };
 
   const handleCreateConversation = async (agentId?: string) => {
@@ -174,15 +209,6 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
     if (deleted) setConversationToDelete(null);
   };
 
-  const handleBatchDelete = async () => {
-    setIsDeleting(true);
-    await deleteConversations([...selectedIds]);
-    setIsDeleting(false);
-    setShowBatchConfirmation(false);
-    setSelectedIds(new Set());
-    setIsSelectMode(false);
-  };
-
   const startRename = (conversation: Conversation) => {
     setEditingId(conversation.id);
     setEditingTitle(conversation.title);
@@ -197,10 +223,6 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
     if (title && title !== conversation?.title) await renameConversation(editingId, title);
   };
 
-  const toggleSelectMode = () => {
-    setIsSelectMode((value) => !value);
-    setSelectedIds(new Set());
-  };
 
   const toggleAgent = (agentId: string) => {
     setCollapsedAgentIds((current) => {
@@ -214,13 +236,12 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
   const renderConversation = (conv: Conversation, nested = false) => {
     const conversationAgent = agents.find((agent) => agent.id === conv.agentIds[0]);
     const isAgentOffline = conv.type === "dm" && conversationAgent?.status === "offline";
-    const selected = selectedIds.has(conv.id);
 
     return (
       <div
         key={conv.id}
         onContextMenu={(event) => {
-          if (isSelectMode) return;
+          
           event.preventDefault();
           setOpenMenuId(conv.id);
         }}
@@ -230,19 +251,10 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
             : "text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]"
         }`}
       >
-        {isSelectMode && (
-          <input
-            type="checkbox"
-            checked={selected}
-            onChange={() => handleSelectConversation(conv.id)}
-            aria-label={t("sidebar:selectConversation", { title: conv.title })}
-            className={`${nested ? "ml-2" : "ml-3"} h-4 w-4 shrink-0 accent-[var(--accent-color)]`}
-          />
-        )}
         <button
           type="button"
           onClick={() => handleSelectConversation(conv.id)}
-          className={`flex min-w-0 flex-1 items-center text-left ${nested ? "gap-2 px-2 py-1.5" : "gap-3 px-3 py-2.5"} ${isSelectMode ? "pl-2" : ""}`}
+          className={`flex min-w-0 flex-1 items-center text-left ${nested ? "gap-2 px-2 py-1.5" : "gap-3 px-3 py-2.5"}`}
         >
           {!nested && conv.type === "dm" ? (
             <AgentAvatar
@@ -306,11 +318,10 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
           />
         )}
 
-        {!isSelectMode && (
-          <DropdownMenu
-            open={openMenuId === conv.id}
-            onOpenChange={(open) => setOpenMenuId(open ? conv.id : null)}
-          >
+        <DropdownMenu
+          open={openMenuId === conv.id}
+          onOpenChange={(open) => setOpenMenuId(open ? conv.id : null)}
+        >
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
@@ -350,8 +361,7 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
                 {t("sidebar:deleteConversation")}
               </DropdownMenuItem>
             </DropdownMenuContent>
-          </DropdownMenu>
-        )}
+        </DropdownMenu>
       </div>
     );
   };
@@ -359,7 +369,7 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
   return (
     <>
       <aside
-        className={`absolute inset-y-0 left-0 z-30 flex h-full w-72 max-w-[85vw] shrink-0 flex-col border-r border-[var(--border-color)] bg-[var(--bg-surface)] shadow-2xl transition-transform duration-200 md:static md:max-w-none md:translate-x-0 md:shadow-none ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"}`}
+        className={`absolute inset-y-0 left-0 z-30 flex h-full w-72 max-w-[85vw] shrink-0 flex-col border-r border-[var(--border-color)] bg-[var(--bg-surface)] shadow-2xl transition-[transform,width] duration-200 md:static md:max-w-none md:translate-x-0 md:shadow-none ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"} ${isSidebarCollapsed ? "md:w-0 md:overflow-hidden md:border-r-0" : ""}`}
       >
         <div className="flex h-14 items-center gap-2 border-b border-[var(--border-color)] px-4">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--accent-color)] text-sm font-bold text-white">
@@ -391,6 +401,26 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
           <Button
             variant="ghost"
             size="icon"
+            onClick={() => setIsAddFriendOpen(true)}
+            aria-label={t("sidebar:addFriend")}
+            title={t("sidebar:addFriend")}
+            className="h-8 w-8"
+          >
+            <UserPlus aria-hidden="true" className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleSidebarCollapse}
+            aria-label={t("common:aria.closeSidebar")}
+            title={t("common:aria.closeSidebar")}
+            className="hidden h-8 w-8 md:flex"
+          >
+            <PanelLeftClose aria-hidden="true" className="h-5 w-5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={closeSidebar}
             aria-label={t("common:aria.closeSidebar")}
             className="h-8 w-8 md:hidden"
@@ -414,39 +444,6 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
         </div>
 
         <div className="flex-1 overflow-y-auto px-2 py-3">
-          <div className="mb-2 flex items-center justify-end gap-1 px-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2 normal-case"
-              onClick={toggleSelectMode}
-            >
-              <CheckSquare aria-hidden="true" className="h-3.5 w-3.5" />
-              {t(isSelectMode ? "sidebar:cancelSelect" : "sidebar:select")}
-            </Button>
-          </div>
-
-          {isSelectMode && (
-            <div className="mb-2 flex items-center gap-2 rounded-lg border border-[var(--border-color)] bg-[var(--bg-base)] p-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 flex-1"
-                onClick={() => setSelectedIds(new Set(allConversations.map((item) => item.id)))}
-              >
-                {t("sidebar:selectAll")}
-              </Button>
-              <Button
-                variant="danger"
-                size="sm"
-                className="h-7 flex-1"
-                disabled={selectedIds.size === 0}
-                onClick={() => setShowBatchConfirmation(true)}
-              >
-                {t("sidebar:deleteSelected", { count: selectedIds.size })}
-              </Button>
-            </div>
-          )}
 
           <div className="space-y-3">
             {agents.length === 0 && (
@@ -673,15 +670,7 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
         onConfirm={() => void handleConfirmDelete()}
         onCancel={() => setConversationToDelete(null)}
       />
-      <ConfirmDialog
-        open={showBatchConfirmation}
-        title={t("sidebar:batchDeleteTitle")}
-        message={t("sidebar:batchDeleteMessage", { count: selectedIds.size })}
-        confirmLabel={t("common:buttons.delete")}
-        isConfirming={isDeleting}
-        onConfirm={() => void handleBatchDelete()}
-        onCancel={() => setShowBatchConfirmation(false)}
-      />
+
       <Dialog
         open={isCreateGroupOpen}
         onOpenChange={(open) => {
@@ -772,6 +761,39 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
             >
               {t("common:group.createGroup")}
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={isAddFriendOpen} onOpenChange={setIsAddFriendOpen}>
+        <DialogContent>
+          <DialogTitle>{t("sidebar:addFriend")}</DialogTitle>
+          <DialogDescription>{t("sidebar:addFriendDesc")}</DialogDescription>
+          <div className="mt-4 space-y-3">
+            <Input
+              placeholder={t("sidebar:hubIdPlaceholder")}
+              value={remoteHubId}
+              onChange={(e) => setRemoteHubId(e.target.value)}
+              disabled={isPairing || !!pairingCode}
+            />
+            {pairingError && (
+              <p className="text-sm text-red-500">{pairingError}</p>
+            )}
+            {pairingCode && (
+              <div className="rounded-lg border border-[var(--border-color)] bg-[var(--bg-base)] p-3">
+                <p className="text-sm text-[var(--text-secondary)]">{t("sidebar:pairingCodeLabel")}</p>
+                <p className="mt-1 text-2xl font-bold tracking-widest text-[var(--accent-color)]">{pairingCode}</p>
+                <p className="mt-2 text-xs text-[var(--text-tertiary)]">{t("sidebar:pairingCodeHint")}</p>
+              </div>
+            )}
+            {!pairingCode && (
+              <Button
+                className="w-full"
+                onClick={() => void handlePairFriend()}
+                disabled={isPairing || !remoteHubId.trim()}
+              >
+                {isPairing ? t("sidebar:pairing") : t("sidebar:sendPairRequest")}
+              </Button>
+            )}
           </div>
         </DialogContent>
       </Dialog>

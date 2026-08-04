@@ -34,5 +34,14 @@
   "batchDeleteTitle": "删除选中的会话？",
   "batchDeleteMessage": "确定删除 {{count}} 个会话？此操作不可逆",
   "myAgents": "我的 Agent",
-  "crossHubGroup": "跨 Hub 群聊"
+  "crossHubGroup": "跨 Hub 群聊",
+  "collapse": "收起侧边栏",
+  "expand": "展开侧边栏",
+  "addFriend": "添加好友",
+  "addFriendDesc": "输入对方的 Hub ID 进行配对。",
+  "hubIdPlaceholder": "Hub ID（如 abc123...）",
+  "pairingCodeLabel": "你的配对码",
+  "pairingCodeHint": "把这个码发给对方，对方输入后即可完成配对。",
+  "sendPairRequest": "发送配对请求",
+  "pairing": "发送中..."
 }

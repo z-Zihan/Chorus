@@ -34,5 +34,14 @@
   "batchDeleteTitle": "Delete selected conversations?",
   "batchDeleteMessage": "Delete {{count}} conversations? This action cannot be undone.",
   "myAgents": "My Agents",
-  "crossHubGroup": "Cross Hub Group"
+  "crossHubGroup": "Cross Hub Group",
+  "collapse": "Collapse sidebar",
+  "expand": "Expand sidebar",
+  "addFriend": "Add Friend",
+  "addFriendDesc": "Enter the Hub ID of the person you want to pair with.",
+  "hubIdPlaceholder": "Hub ID (e.g. abc123...)",
+  "pairingCodeLabel": "Your pairing code",
+  "pairingCodeHint": "Share this code with the other person. They enter it to confirm the pairing.",
+  "sendPairRequest": "Send Pair Request",
+  "pairing": "Sending..."
 }
