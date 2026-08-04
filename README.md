@@ -12,10 +12,10 @@ AI CLI 越来越强，但它们彼此隔离——切换工具靠开终端，协�
 打开应用自动发现已安装的 AI CLI，一个界面管理和使用它们。不写配置、不记命令，像用即时通讯工具一样聊天、查历史、管理会话。
 
 **第二层：Agent 间通信（已实现）**
-这是 AgentLink 的核心方向。一个 Agent 可以通过 tool-calling **主动调用**另一个 Agent——比如 Claude Code 解决不了的前端问题，它可以去找 Codex 帮忙，调用过程可视化、可取消。也可以创建群聊，多个 Agent 在同一会话中 @提及协作。
+这是 AgentLink 的核心方向。三种 A2A 模式可切换：`@mention` 异步转发（Agent 回复中 @了其他 Agent → 自动转发）、`A2A_CALL` 同步调用（调用方拿到返回值继续推理）、`off` 关闭。也可以创建群聊，多个 Agent 在同一会话中协作。
 
 **第三层：跨设备、跨人的 Agent 协作（已实现）**
-你的 Agent 不仅能和本机其他 Agent 协作，还能和**同事电脑上的 Agent** 直接通信。通过自托管 Relay 服务器或局域网 P2P 直连，端到端加密，数据不经第三方。跨网络走 Relay 中转，局域网可 P2P 直连。
+你的 Agent 不仅能和本机其他 Agent 协作，还能和**同事电脑上的 Agent** 直接通信。通过自托管 Relay 服务器中转，端到端加密，数据不经第三方。
 
 **管理 CLI 只是手段，让 Agent 之间能交流、能协作、能跨设备跨人协作，才是 AgentLink 要做的事。**
 
@@ -48,7 +48,7 @@ AgentLink 坚持 local-first：聊天记录默认保存在本机，CLI 在本机
 - 🛡️ **A2A 权限控制**：会话级 `auto / confirm / deny` 三种模式控制 Agent 间调用权限。
 - 👤 **多用户身份体系**：User → Hub → Agent 三层身份模型。一个用户可拥有多个 Agent，不同用户的 Agent 通过 Relay 互相发现和通信。
 - 🔑 **信任管理**：Hub 间配对码认证、`pending/trusted/blocked` 信任状态、公钥变化自动重配对。
-- 🌐 **跨设备协作**：自托管 Relay + P2P 直连 + 端到端加密 + 群组密钥管理。
+- 🌐 **跨设备协作**：自托管 Relay + 端到端加密 + 群组密钥管理。
 - 📡 **签名目录发现**：Hub 间交换签名 Agent 目录，支持版本/TTL/撤销、可见性过滤（trusted/room/public）。
 - 📮 **离线消息**：queued → delivered → accepted/denied → done/error 状态机，TTL 7 天，幂等投递。
 - 🔌 **标准协议适配**：Agent 能力映射到 Google A2A Agent Card、MCP Tool、ACP Service。
@@ -207,7 +207,7 @@ CLI 以当前系统用户权限运行，其文件与命令权限由 CLI 自身�
 
 ### 多 Agent 群聊和跨设备聊天可用吗？
 
-多 Agent 群聊、A2A 通信（@mention 转发 + A2A_CALL 同步调用）、跨设备协作均已实现。跨设备协作需要自部署 Relay 服务器。支持多用户身份体系，不同用户的 Agent 可以通过 Relay 互相发现和协作。
+多 Agent 群聊、A2A 通信（@mention 转发 + A2A_CALL 同步调用）、跨设备协作均已实现。跨设备协作需要自部署 Relay 服务器。支持多用户身份体系、信任管理、签名目录发现，不同用户的 Agent 可以通过 Relay 互相发现和协作。
 
 ### 外部 Agent 怎么接入 AgentLink？
 

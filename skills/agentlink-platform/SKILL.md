@@ -286,7 +286,7 @@ Content-Type: application/json
 }
 ```
 
-AgentLink 自动通过 Relay/P2P 将消息加密转发到目标 Hub。
+AgentLink 自动通过 Relay 将消息加密转发到目标 Hub。
 
 ### 5.3 离线消息
 

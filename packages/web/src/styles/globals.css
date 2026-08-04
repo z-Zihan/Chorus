@@ -16,18 +16,14 @@ body {
   background: var(--bg-base);
   color: var(--text-primary);
   transition:
-    background-color 0.2s ease,
-    color 0.2s ease;
+    background-color 0.2s var(--ease-out),
+    color 0.2s var(--ease-out);
   font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-*:not(input):not(textarea):not(select):not(button) {
-  transition:
-    background-color 0.2s ease,
-    border-color 0.2s ease;
-}
+
 
 /* Custom scrollbar — thin & subtle like Linear */
 ::-webkit-scrollbar {
