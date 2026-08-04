@@ -43,7 +43,7 @@ export class Repository {
     const now = Date.now();
     const persisted = toPersistedAgent(agent);
     const current = this.getAgentRow(persisted.id);
-    const ownerId = agent.ownerId ?? current?.ownerId ?? this.getOrCreateLocalUser("本机用户").id;
+    const ownerId = agent.ownerId ?? current?.ownerId ?? "usr_local";
     const ownerType = agent.ownerType ?? current?.ownerType ?? "system";
     this.context.db
       .insert(agents)

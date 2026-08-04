@@ -29,6 +29,7 @@ describe("AgentRuntime A2A permissions", () => {
   beforeEach(async () => {
     database = createDatabase(":memory:");
     repository = new Repository(database);
+    repository.getOrCreateLocalUser("Test User");
     registry = new AgentRegistry(repository);
     await registry.initialize(config.agents);
     events = new EventHub();
