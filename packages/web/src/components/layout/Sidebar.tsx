@@ -382,7 +382,7 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
         </button>
       )}
       <aside
-        className={`absolute inset-y-0 left-0 z-30 flex h-full w-72 max-w-[85vw] shrink-0 flex-col border-r border-[var(--border-color)] bg-[var(--bg-surface)] shadow-2xl transition-[transform,width] duration-200 md:static md:max-w-none md:translate-x-0 md:shadow-none ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"} ${isSidebarCollapsed ? "md:w-0 md:overflow-hidden md:border-r-0" : ""}`}
+        className={`absolute inset-y-0 left-0 z-30 flex h-full w-72 max-w-[85vw] shrink-0 flex-col border-r border-[var(--border-color)] bg-[var(--bg-surface)] shadow-2xl transition-all duration-300 ease-out md:static md:max-w-none md:translate-x-0 md:shadow-none ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"} ${isSidebarCollapsed ? "md:-ml-72 md:overflow-hidden md:border-r-0 md:opacity-0" : "md:ml-0 md:opacity-100"}`}
       >
         <div className="flex h-14 items-center gap-2 border-b border-[var(--border-color)] px-4">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--accent-color)] text-sm font-bold text-white">
