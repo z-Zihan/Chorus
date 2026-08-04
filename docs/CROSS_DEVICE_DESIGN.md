@@ -62,12 +62,12 @@ A local User is created on first launch without requiring a cloud account. The U
 
 ### 2.2 Hub 身份 / Hub identity
 
-- 每个 Hub 首次启动生成 Ed25519 密钥，存于 `data/hub-keypair.json`。
-- `hubId` 是完整 Ed25519 公钥 hex；UI 只显示前 8 位短指纹。
+- 每个 Hub 首次启动生成 Ed25519 密钥；私钥通过复用 `credential-store` 存入系统钥匙串，`data/hub-keypair.json` 只保存公钥和非敏感元数据。
+- `hubId` 是完整 Ed25519 公钥 hex；Hub 指纹为 `hex(SHA-256(raw Ed25519 public key)[0:16])`，即 SHA-256 的前 128 bit、共 32 个 hex 字符。UI 必须显示完整 32 字符指纹，不得再以更短截断值作为安全核验依据。
 - Hub 显示名不唯一，不能参与授权或路由。
 - Hub 通过 Relay 注册、JWT 和 Ed25519 challenge-response 证明设备身份。
 
-Each Hub has an Ed25519 key pair. The full public-key hex is the Hub ID; only the first eight characters are a UI fingerprint. Display names are non-unique and never authorize or route traffic.
+Each Hub has an Ed25519 key pair. Its private key is stored in the OS keychain through the shared `credential-store`; `data/hub-keypair.json` contains only the public key and non-sensitive metadata. The full public-key hex is the Hub ID, while the security fingerprint is the first 128 bits of SHA-256 over the raw public key, rendered as all 32 hex characters. Display names are non-unique and never authorize or route traffic.
 
 ### 2.3 User–Hub 绑定 / User–Hub binding
 
@@ -118,9 +118,9 @@ interface HubEnvelope {
 }
 ```
 
-发送方签名覆盖除 `signature` 和 `relayTimestamp` 外的所有发送方字段的规范序列化。`relayTimestamp` 由 Relay 转发时添加，只能用于排序兜底，不能参与身份、权限或重放判断。
+发送方签名覆盖除 `signature` 和 `relayTimestamp` 外的所有发送方字段的 RFC 8785 JCS 规范序列化。`relayTimestamp` 由 Relay 转发时添加，只能用于排序兜底，不能参与身份、权限或重放判断。
 
-The sender signs the canonical serialization of every sender-owned field except `signature` and `relayTimestamp`. The Relay-added timestamp is an untrusted ordering hint only and MUST NOT affect identity, authorization, or replay decisions.
+The sender signs the RFC 8785 JCS serialization of every sender-owned field except `signature` and `relayTimestamp`. The Relay-added timestamp is an untrusted ordering hint only and MUST NOT affect identity, authorization, or replay decisions.
 
 ### 3.2 HubPayload v2
 
@@ -201,6 +201,10 @@ Contact, room-human, and room-agent events are separate authorization domains. A
 
 ### 3.4 接收验证顺序 / Receive validation order
 
+全协议唯一的规范序列化是 RFC 8785 JSON Canonicalization Scheme（JCS）。所有签名对象，包括 envelope、manifest、owner proof 和授权/rekey event，都必须对移除签名字段后的完整对象执行 JCS，并以其 UTF-8 bytes 作为签名或验签输入；不得使用实现自定义的字段顺序、空白或“canonical JSON”变体。
+
+RFC 8785 JSON Canonicalization Scheme (JCS) is the protocol's sole canonical serialization. Every signed envelope, manifest, owner proof, and authorization/rekey event MUST be signed and verified over the UTF-8 bytes of the complete object after removing its signature field and applying JCS. Implementation-specific field ordering, whitespace, or other “canonical JSON” variants are forbidden.
+
 1. 验证协议版本、必填字段、大小限制、UUID 和时间窗口。
 2. 用 `from` Hub 公钥验证 envelope 签名、nonce 和重放缓存；Room 消息还必须选择对应 `keyEpoch` 的 key。
 3. 解密 payload，并确认内部目标、`keyEpoch` 与 envelope 路由一致。
@@ -241,11 +245,14 @@ Identity uses Ed25519; pairwise encryption uses libsodium `crypto_box` after the
 - counter 仅在成功安装新 epoch key 后重置为 `0`；到达 `2^32 - 1` 前必须 rekey。接收方按 `(roomId, keyEpoch, senderHubNonceId, counter)` 检测重复 nonce，发现碰撞即拒绝并记录安全事件。
 - Room 创建/加入后，通过各成员 Hub 的成对加密通道分发当前 epoch key。Relay 只见密文。
 - Agent 加入、Agent 移除、人类成员离开或被移除时必须 rekey；旧 key 立即禁止用于加密新消息，但必须仅为解密在途消息保留 5 分钟 grace period，之后安全销毁。
-- rekey 事件必须引用 `baseRevision` 和 `baseKeyEpoch` 并通过 Room 状态的 compare-and-swap 提交；并发提案只允许一个成为下一 `revision/keyEpoch`，失败提案方先 resync 再重试，禁止形成两个相同 epoch 的不同 key。
+- rekey 事件必须引用 `baseRevision` 和 `baseKeyEpoch`，携带 `newRevision = baseRevision + 1`、`newKeyEpoch = baseKeyEpoch + 1` 和 `keyCommitment`，并以 RFC 8785 JCS 序列化后签名。`keyCommitment = hex(HMAC-SHA-256(newRoomKey, UTF8(roomId) || uint64be(newKeyEpoch)))`；这里 `||` 是无歧义的字节拼接。
+- 每个成员 Hub 通过成对加密通道收到新 key 后，必须自行计算 HMAC 并以常量时间比较 `keyCommitment`。不一致表示同一 epoch 的 key 分发发生分歧；接收方必须拒绝安装该 rekey、记录安全事件并触发 §8.6 resync。
+- rekey 必须通过 Room 状态的 compare-and-swap 提交。使用 Relay 时，Relay 为每个 Room 原子维护权威 `(revision, keyEpoch)` 计数器并处理 §5.3 的 `room_cas`；它只决定并发提案的先后，不接收 key、commitment 明文含义或事件内容。只有一个提案可成为下一 `revision/keyEpoch`，失败方必须先 resync 再重试。
+- P2P-only 时，由 owner Hub 作为 CAS 仲裁者并持久化该计数器；Agent 变更触发的 rekey 由该 Agent 所有者的 Hub 决定顺序。参与方必须验证 owner 身份和签名，失败提案同样先 resync 再重试。
 - Room 人数不超过 5 时，可协商逐成员加密 fallback；授权、审计和撤销语义不变。
 - MLS 或其他大群方案只能作为新协议版本/能力协商启用，不得静默改变 v2 密文格式。
 
-The normative v1 room scheme is an epoch-indexed AES-256-GCM key managed by `GroupKeyManager`. Every ciphertext identifies its epoch and uses the per-sender nonce `senderHubNonceId(8) || counter(4)`. Counters are atomic and durable per room/epoch, reset only after a successful rekey, and never wrap. Membership or agent changes trigger a compare-and-swap rekey; losing concurrent proposals resync before retrying. The previous key is decrypt-only for a five-minute in-flight grace period. Per-member encryption is an optional negotiated fallback for rooms of at most five members. Future MLS support requires explicit version/capability negotiation.
+The normative v1 room scheme is an epoch-indexed AES-256-GCM key managed by `GroupKeyManager`. Every ciphertext identifies its epoch and uses the per-sender nonce `senderHubNonceId(8) || counter(4)`. Counters are atomic and durable per room/epoch, reset only after a successful rekey, and never wrap. Each JCS-signed rekey event commits to the distributed key with `hex(HMAC-SHA-256(newRoomKey, UTF8(roomId) || uint64be(newKeyEpoch)))`; recipients reject and resync on a mismatch. With a Relay, its atomic per-room `(revision, keyEpoch)` counter arbitrates only CAS ordering and reveals no key or event content. In P2P-only mode the owner Hub arbitrates, with an Agent owner's Hub ordering rekeys caused by that Agent. Losing proposals resync before retrying. The previous key is decrypt-only for a five-minute in-flight grace period. Per-member encryption is an optional negotiated fallback for rooms of at most five members. Future MLS support requires explicit version/capability negotiation.
 
 ### 4.3 传输加密与边界 / Transport encryption and boundary
 
@@ -283,6 +290,8 @@ Hub → Relay
   { type: "register", hubId, token }
   { type: "message", envelope: HubEnvelope }
   { type: "transport_receipt", messageId, recipientHubId, status: "persisted", timestamp, signature }
+  { type: "room_cas", roomId, expectedRevision, expectedKeyEpoch, newRevision, newKeyEpoch }
+  { type: "contact_block", blockedHubIds, affectedRoomIds, timestamp, signature }
   { type: "presence", status: "online" | "offline" }
   { type: "room:join", roomId }
   { type: "room:leave", roomId }
@@ -294,12 +303,18 @@ Relay → Hub
   { type: "offline_messages", envelopes: HubEnvelope[] }
   { type: "presence", hubId, status }
   { type: "room:event", roomId, event, hubId }
+  { type: "room_cas_result", roomId, accepted, revision, keyEpoch }
+  { type: "contact_blocked", blockedHubIds, affectedRoomIds }
   { type: "pong" }
 ```
 
 所有业务消息都通过 `message + HubEnvelope` 传输。`transport_receipt` 是唯一可携带明文消息 ID 和持久化状态的投递控制帧；它不得包含业务 ack、正文或授权结果。Relay 不解析 `HubPayload` 或 `DirectoryManifest`。Room 帧中的 Hub membership 是投递路由数据，不是 User/Agent 授权证明。
 
-All application traffic uses the encrypted envelope frame. The plaintext `transport_receipt` is a delivery-control exception limited to message ID and persistence status. Relay room membership is routing state, never proof of User or Agent authorization.
+Relay 必须为每个 Room 原子持久化 `(revision, keyEpoch)`。`room_cas` 仅在当前值同时等于 `expectedRevision/expectedKeyEpoch` 且新值分别恰好加 `1` 时返回 `accepted: true`；否则返回当前计数器。Relay 只仲裁“谁先”，不得接收或解释 rekey event、Room key 或 `keyCommitment`，因此不越过 §5.1 的职责边界。
+
+`contact_block` 是经认证 Hub 发给 Relay 的明文路由控制通知，签名输入使用 RFC 8785 JCS。Relay 验证连接身份、签名和发送方对 `affectedRoomIds` 的现有路由 membership 后，必须立即停止这些 Room 中向 `blockedHubIds` 投递以及接受其发来的新流量；该帧不得包含联系人资料、正文或 Room key。`contact_blocked` 仅确认路由规则已安装。
+
+All application traffic uses the encrypted envelope frame. The plaintext `transport_receipt` is a delivery-control exception limited to message ID and persistence status. The Relay atomically persists one `(revision, keyEpoch)` counter per room and accepts `room_cas` only when both expected values match and both new values increment by exactly one. It arbitrates ordering only and never receives or interprets rekey contents, keys, or commitments. A JCS-signed `contact_block` is a routing-only notice: after authenticating the sender and its room routing membership, the Relay immediately stops new traffic to and from the listed blocked Hubs in the affected rooms. Relay room membership remains routing state, never proof of User or Agent authorization.
 
 ### 5.4 Hub 注册与互认证 / Hub registration and mutual authentication
 
@@ -368,7 +383,7 @@ interface DirectoryManifest {
     visibility: "room" | "public";
   }>;
   revokedAgentIds: string[];
-  signature: string; // User signature over canonical JSON
+  signature: string; // User signature over RFC 8785 JCS of this object without signature
 }
 ```
 
@@ -410,13 +425,13 @@ Publishing is explicit and scope-bound. Receivers verify and register atomically
 
 ### 7.2 配对流程 / Pairing flow
 
-1. 发起方输入对方完整 Hub ID，并创建一次性配对码。
-2. 双方通过可信的带外渠道交换配对码。
-3. 接收方核验 User 与 Hub 公钥指纹，确认 challenge 和有效期。
-4. 双方保存 Contact 和信任记录；公钥变化必须重新配对。
-5. 配对结果只显示头像、名称、Hub 指纹和 presence；远端 Agent 数必须仍为 0。
+1. 发起方输入对方完整 Hub ID，生成至少 128 bit 的随机 `nonce` 和一次性配对码；双方交换完整 Hub ID，排序时按其 UTF-8 byte lexicographic order。
+2. 配对码必须作为 SPAKE2 的 password 输入，不得直接当作认证 token。SPAKE2 transcript 必须绑定排序后的两个完整 Hub ID、`nonce` 和双方密钥交换消息；双方以 PAKE 导出的确认密钥验证完整 transcript，任一 key confirmation 失败即终止配对。
+3. 双方计算 6 位数字 SAS：`digest = SHA-256(JCS({ hubIds: sort([hubIdA, hubIdB]), nonce }))`，`SAS = zeroPad6(OS2IP(digest) mod 1_000_000)`。这就是 `SHA-256(bothHubIds sorted + nonce)` 的 6 位十进制表示；必须保留前导零。
+4. 双方通过可信带外渠道逐位核对 SAS，并核验 User key 以及 32 hex 字符（128 bit）的 Hub 指纹、challenge 和有效期。SAS 不一致、SPAKE2 key confirmation 失败或指纹不匹配均必须拒绝，且不得保存部分信任状态。
+5. 全部验证通过后双方保存 Contact 和信任记录；公钥变化必须重新配对。结果只显示头像、名称、32 字符 Hub 指纹和 presence；远端 Agent 数必须仍为 0。
 
-The initiator enters the full Hub ID, exchanges a one-time code out of band, and both sides verify User and Hub fingerprints. Successful pairing creates only a contact. It does not discover, register, or authorize any Agent.
+The initiator supplies the peer's full Hub ID and creates a random nonce of at least 128 bits plus a one-time pairing code. The code is the SPAKE2 password, and the PAKE transcript binds both sorted full Hub IDs, the nonce, and both key-exchange messages; both sides MUST complete key confirmation. They then compute `zeroPad6(OS2IP(SHA-256(JCS({ hubIds: sort([hubIdA, hubIdB]), nonce }))) mod 1_000_000)` and compare the six-digit SAS through a trusted out-of-band channel, including leading zeroes, while checking the User key and full 32-hex-character Hub fingerprint. Any mismatch fails closed. Successful pairing creates only a contact; it does not discover, register, or authorize any Agent.
 
 ### 7.3 联系人授予与不授予的能力 / What a contact grants—and does not grant
 
@@ -434,9 +449,9 @@ Removing or blocking a contact revokes future delivery and related capabilities 
 2. 每个受影响的共享 Room 将该 User 的成员状态标记为 `blocked`，并使其 Agent 显示 `unavailable`。
 3. Relay 路由 membership 必须停止向被 block 的 Hub 投递这些 Room 的新消息；该 Hub 发来的新 Room 消息、目录事件和调用也必须被拒绝。
 4. 历史 Room 消息及身份快照保持可读，但被 block 的成员不得新增消息、Agent 或调用。
-5. Room 管理员可随后正式移除该成员及其所有 Agent；移除产生明确授权事件、递增 `revision` 并触发 rekey。block 本身不得把旧 key 用于新消息。
+5. block 本身必须立即触发每个受影响 Room 的 rekey，并从新 key 的成对分发列表中排除被 block User 的所有 Hub；旧 key 立即不得用于加密新消息。Room 管理员随后正式移除该成员及其所有 Agent只是额外的状态清理，会产生明确授权事件并递增 `revision`，不得作为停止密钥访问的前置条件。
 
-Blocking adds every verified Hub of the contact to `TrustStore.blockedHubIds`. In shared rooms the member becomes `blocked`, their agents become `unavailable`, and no new room traffic is delivered to or accepted from those Hubs. History remains readable. An administrator may formally remove the member and agents, which emits authorization events, increments the room revision, and rekeys.
+Blocking adds every verified Hub of the contact to `TrustStore.blockedHubIds`. In shared rooms the member becomes `blocked`, their agents become `unavailable`, and no new room traffic is delivered to or accepted from those Hubs. The block itself immediately rekeys every affected room and excludes every blocked Hub from new-key distribution. History remains readable. A later administrator removal is additional state cleanup that emits authorization events and increments the room revision; it is not a prerequisite for revoking key access.
 
 ---
 
@@ -501,14 +516,16 @@ The Local Hub creates the conversation and the Relay routing room. Only paired c
 
 Agent admission requires owner equality, human room membership, eligible visibility, and matching room scope. A remote member cannot browse or add another user's hidden agents.
 
-Agent 入房请求必须携带所有者签名证明；签名输入是 `agentId + roomId + keyEpoch` 的无歧义规范编码（长度前缀 UTF-8 tuple），不得使用显示名：
+Agent 入房请求必须携带所有者签名证明。签名输入是移除 `roomJoinSignature` 后整个 `OwnerProof` 的 RFC 8785 JCS UTF-8 bytes；不得使用显示名：
 
-Every agent-admission request carries an owner proof. The signature covers an unambiguous canonical, length-prefixed UTF-8 encoding of `agentId + roomId + keyEpoch`; display names are never signed as identifiers:
+Every agent-admission request carries an owner proof. The signature covers the RFC 8785 JCS UTF-8 bytes of the complete `OwnerProof` after removing `roomJoinSignature`; display names are never signed as identifiers:
 
 ```typescript
 interface OwnerProof {
   agentId: string;
   ownerId: string;
+  roomId: string;
+  keyEpoch: number;
   roomJoinSignature: string;
 }
 ```
@@ -562,9 +579,9 @@ After returning beyond the TTL, a Hub sends `resync_request` with its last known
 
 ### 8.7 授权事件 schema / Authorization event schemas
 
-授权事件不得塞入任意 `metadata` 后由实现自行解释。以下业务对象字段是规范性的，并放入带 `eventId`、`revision`、`actorSignature` 的签名事件 envelope；接收方必须验证 actor 权限、时间戳、目标 Room 当前 revision 及签名。
+授权事件不得塞入任意 `metadata` 后由实现自行解释。以下业务对象字段是规范性的，并放入带 `eventId`、`revision`、`actorSignature` 的签名事件 envelope；`actorSignature` 对移除自身后的完整 event envelope 的 RFC 8785 JCS UTF-8 bytes 签名。接收方必须验证 actor 权限、时间戳、目标 Room 当前 revision 及签名。
 
-Authorization events MUST NOT be encoded as implementation-defined `metadata`. The following normative event bodies are carried in a signed event envelope containing `eventId`, `revision`, and `actorSignature`. Receivers verify actor authority, timestamp, expected room revision, and signature.
+Authorization events MUST NOT be encoded as implementation-defined `metadata`. The following normative event bodies are carried in a signed event envelope containing `eventId`, `revision`, and `actorSignature`; that signature covers the RFC 8785 JCS UTF-8 bytes of the complete event envelope after removing `actorSignature`. Receivers verify actor authority, timestamp, expected room revision, and signature.
 
 ```typescript
 interface RoomAgentRemovedEvent {
