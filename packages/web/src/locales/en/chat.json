@@ -29,6 +29,25 @@
   "a2aFailed": "Failed",
   "a2aCancel": "Cancel call",
   "a2aCancelled": "A2A call cancelled",
+  "a2aForwardedMessage": "forwarded message",
+  "unknownAgent": "Unknown Agent",
+  "a2aMode": {
+    "title": "A2A Mode",
+    "description": "Control how agents communicate with each other",
+    "label": "A2A: {{mode}}",
+    "mention": {
+      "label": "@Mention",
+      "description": "Agent replies with @other agent → auto-forward"
+    },
+    "call": {
+      "label": "Sync Call",
+      "description": "Agent uses A2A_CALL protocol for synchronous calls"
+    },
+    "off": {
+      "label": "Off",
+      "description": "No agent-to-agent communication"
+    }
+  },
   "a2aPermission": {
     "label": "A2A permission",
     "auto": "A2A Auto",
@@ -50,8 +69,5 @@
   "jumpToSource": "Jump to group chat",
   "remoteAgent": "Remote Agent",
   "crossHub": "Cross Hub",
-  "owner": "Owner",
-  "a2aMention": "@Mention",
-  "a2aCall": "A2A Call",
-  "a2aOff": "A2A Off"
+  "owner": "Owner"
 }

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Shield, ShieldAlert, Trash2, Ban, Eye } from "lucide-react";
-import { api } from "@/services/api";
+import { api, type A2AMode } from "@/services/api";
 import { useAgentStore } from "@/store/agentStore";
 import { useChatStore } from "@/store/chatStore";
 import { Button } from "@/components/ui/button";
@@ -16,8 +16,6 @@ interface TrustedHub {
   pairedAt?: number;
 }
 
-type A2AMode = "auto" | "confirm" | "deny";
-
 export function PrivacySettings() {
   const { t } = useTranslation(["common", "settings"]);
   const agents = useAgentStore((s) => s.agents);
@@ -29,38 +27,42 @@ export function PrivacySettings() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    void loadData();
-  }, []);
-
-  const loadData = async () => {
+    let active = true;
     setIsLoading(true);
-    try {
+    void (async () => {
+      try {
       const [trust, ...modeResults] = await Promise.all([
         api.getTrustList().catch(() => [] as TrustedHub[]),
         ...conversations.slice(0, 20).map((conv) =>
-          api.getA2APermission(conv.id).catch(() => ({ mode: "auto" as const })),
+          api.getA2AMode(conv.id).catch(() => ({ mode: "mention" as const })),
         ),
       ]);
+      if (!active) return;
       setTrustList(trust as TrustedHub[]);
       const modes: Record<string, A2AMode> = {};
       conversations.slice(0, 20).forEach((conv, i) => {
-        modes[conv.id] = modeResults[i]?.mode ?? "auto";
+        modes[conv.id] = modeResults[i]?.mode ?? "mention";
       });
       setA2aModes(modes);
-    } catch (e) {
-      logger.error("Failed to load privacy settings", e);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+      } catch (e) {
+        logger.error("Failed to load privacy settings", e);
+      } finally {
+        if (active) setIsLoading(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [conversations]);
 
   const handleA2AModeChange = async (conversationId: string, mode: A2AMode) => {
+    const previousMode = a2aModes[conversationId] ?? "mention";
     setA2aModes((prev) => ({ ...prev, [conversationId]: mode }));
     try {
-      await api.setA2APermission(conversationId, mode);
+      await api.setA2AMode(conversationId, mode);
     } catch (e) {
-      logger.error("Failed to set A2A permission", e);
-      setA2aModes((prev) => ({ ...prev, [conversationId]: "auto" }));
+      logger.error("Failed to set A2A mode", e);
+      setA2aModes((prev) => ({ ...prev, [conversationId]: previousMode }));
     }
   };
 
@@ -91,14 +93,14 @@ export function PrivacySettings() {
 
   return (
     <div className="space-y-6">
-      {/* A2A Permission per conversation */}
+      {/* A2A mode per conversation */}
       <section>
         <h3 className="mb-2 flex items-center gap-2 text-sm font-medium text-[var(--text-primary)]">
           <Shield aria-hidden="true" className="h-4 w-4" />
-          {t("settings:a2aPermission")}
+          {t("settings:a2aMode")}
         </h3>
         <p className="mb-3 text-xs text-[var(--text-tertiary)]">
-          {t("settings:a2aPermissionDesc")}
+          {t("settings:a2aModeDesc")}
         </p>
         <div className="space-y-1">
           {conversations.length === 0 && (
@@ -107,19 +109,25 @@ export function PrivacySettings() {
           {conversations.slice(0, 10).map((conv) => (
             <div
               key={conv.id}
-              className="flex items-center justify-between rounded-lg border border-[var(--border-color)] px-3 py-2"
+              className="flex items-start justify-between gap-3 rounded-lg border border-[var(--border-color)] px-3 py-2.5"
             >
-              <span className="min-w-0 flex-1 truncate text-sm text-[var(--text-primary)]">
-                {conv.title || t("common:sidebar.untitledConversation")}
-              </span>
+              <div className="min-w-0 flex-1">
+                <span className="block truncate text-sm text-[var(--text-primary)]">
+                  {conv.title || t("common:sidebar.untitledConversation")}
+                </span>
+                <span className="mt-0.5 block text-xs text-[var(--text-tertiary)]">
+                  {t(`settings:a2aModes.${a2aModes[conv.id] ?? "mention"}.description`)}
+                </span>
+              </div>
               <select
-                value={a2aModes[conv.id] ?? "auto"}
+                value={a2aModes[conv.id] ?? "mention"}
                 onChange={(e) => void handleA2AModeChange(conv.id, e.target.value as A2AMode)}
-                className="ml-2 rounded border border-[var(--border-color)] bg-[var(--bg-base)] px-2 py-1 text-xs text-[var(--text-primary)]"
+                aria-label={t("settings:a2aModeFor", { conversation: conv.title })}
+                className="shrink-0 rounded border border-[var(--border-color)] bg-[var(--bg-base)] px-2 py-1 text-xs text-[var(--text-primary)]"
               >
-                <option value="auto">{t("settings:a2aAuto")}</option>
-                <option value="confirm">{t("settings:a2aConfirm")}</option>
-                <option value="deny">{t("settings:a2aDeny")}</option>
+                <option value="mention">{t("settings:a2aModes.mention.label")}</option>
+                <option value="call">{t("settings:a2aModes.call.label")}</option>
+                <option value="off">{t("settings:a2aModes.off.label")}</option>
               </select>
             </div>
           ))}

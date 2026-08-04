@@ -67,11 +67,23 @@
   },
   "guide": "Usage Guide",
   "privacy": "Privacy & Permissions",
-  "a2aPermission": "A2A Permission",
-  "a2aPermissionDesc": "Control how agents can call each other in each conversation.",
-  "a2aAuto": "Auto",
-  "a2aConfirm": "Require confirmation",
-  "a2aDeny": "Disabled",
+  "a2aMode": "A2A Mode",
+  "a2aModeDesc": "Control how agents communicate in each conversation.",
+  "a2aModeFor": "A2A mode for {{conversation}}",
+  "a2aModes": {
+    "mention": {
+      "label": "@Mention",
+      "description": "Auto-forward when agent @mentions another"
+    },
+    "call": {
+      "label": "Sync Call",
+      "description": "Synchronous A2A_CALL protocol"
+    },
+    "off": {
+      "label": "Off",
+      "description": "No agent-to-agent communication"
+    }
+  },
   "trustedHubs": "Trusted Hubs",
   "trustedHubsDesc": "Manage paired remote devices. Blocked hubs cannot send messages.",
   "blockHub": "Block",

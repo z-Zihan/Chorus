@@ -33,7 +33,7 @@ export interface ServerLogEntry {
   source: "backend";
 }
 
-export type A2APermissionMode = "auto" | "confirm" | "deny";
+export type A2AMode = "mention" | "call" | "off";
 
 export interface CredentialStatus {
   backend: "system-keychain" | "file";
@@ -187,9 +187,9 @@ export const api = {
 
   // A2A mode per conversation
   getA2AMode: (conversationId: string) =>
-    request<{ mode: "mention" | "call" | "off" }>(`/conversations/${conversationId}/a2a-mode`),
-  setA2AMode: (conversationId: string, mode: "mention" | "call" | "off") =>
-    request<{ mode: string }>(`/conversations/${conversationId}/a2a-mode`, {
+    request<{ mode: A2AMode }>(`/conversations/${conversationId}/a2a-mode`),
+  setA2AMode: (conversationId: string, mode: A2AMode) =>
+    request<{ mode: A2AMode }>(`/conversations/${conversationId}/a2a-mode`, {
       method: "PATCH",
       body: JSON.stringify({ mode }),
     }),
@@ -241,13 +241,6 @@ export const api = {
     method: "PATCH",
     body: JSON.stringify(data),
   }),
-  getA2APermission: (conversationId: string) =>
-    request<{ mode: A2APermissionMode }>(`/conversations/${conversationId}/a2a-permission`),
-  setA2APermission: (conversationId: string, mode: A2APermissionMode) =>
-    request<{ mode: A2APermissionMode }>(`/conversations/${conversationId}/a2a-permission`, {
-      method: "PATCH",
-      body: JSON.stringify({ mode }),
-    }),
   confirmA2A: (threadId: string, approved: boolean) =>
     request<{ ok: boolean }>("/a2a/confirm", {
       method: "POST",

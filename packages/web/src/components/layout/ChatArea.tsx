@@ -1,5 +1,17 @@
 import { MessageList } from "@/components/message/MessageList";
-import { Download, FileJson, FileText, Menu, MessageSquare, Users } from "lucide-react";
+import {
+  ArrowLeftRight,
+  AtSign,
+  Ban,
+  Check,
+  Download,
+  FileJson,
+  FileText,
+  Menu,
+  MessageSquare,
+  Network,
+  Users,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { InputBar } from "@/components/layout/InputBar";
@@ -10,7 +22,7 @@ import { STATUS_COLORS } from "@/constants/agent";
 import { AgentAvatar } from "@/components/agent/AgentAvatar";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { api } from "@/services/api";
+import { api, type A2AMode } from "@/services/api";
 import { logger } from "@/utils/logger";
 import { GroupMemberList } from "@/components/chat/GroupMemberList";
 import {
@@ -20,13 +32,18 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { ConnectionStatus } from "@/components/hub/ConnectionStatus";
+
+const A2A_MODE_OPTIONS = [
+  { value: "mention", icon: AtSign },
+  { value: "call", icon: ArrowLeftRight },
+  { value: "off", icon: Ban },
+] as const;
 
 export function ChatArea() {
   const { t } = useTranslation(["common", "chat"]);
@@ -81,19 +98,28 @@ export function ChatArea() {
   const confirmationTo = agents.find((agent) => agent.id === pendingConfirmation?.to)?.name
     ?? pendingConfirmation?.to;
 
-  const [a2aMode, setA2aMode] = useState<"mention" | "call" | "off">("mention");
+  const [a2aMode, setA2aMode] = useState<A2AMode>("mention");
 
   useEffect(() => {
     if (!currentConv || currentConv.type !== "group") return;
-    void api.getA2AMode(currentConv.id).then((res) => setA2aMode(res.mode)).catch(() => {});
+    let active = true;
+    setA2aMode("mention");
+    void api.getA2AMode(currentConv.id).then((res) => {
+      if (active) setA2aMode(res.mode);
+    }).catch(() => {});
+    return () => {
+      active = false;
+    };
   }, [currentConv]);
 
-  const handleA2AModeChange = async (mode: "mention" | "call" | "off") => {
+  const handleA2AModeChange = async (mode: A2AMode) => {
+    const previousMode = a2aMode;
     setA2aMode(mode);
     if (currentConv) {
       try {
         await api.setA2AMode(currentConv.id, mode);
       } catch (error) {
+        setA2aMode(previousMode);
         logger.error("Failed to set A2A mode", error);
       }
     }
@@ -158,16 +184,59 @@ export function ChatArea() {
         <ConnectionStatus />
 
         {currentConv?.type === "group" && (
-          <Select value={a2aMode} onValueChange={(v) => void handleA2AModeChange(v as "mention" | "call" | "off")}>
-            <SelectTrigger className="h-8 w-auto gap-1.5 rounded-md border-[var(--border-color)] bg-[var(--bg-base)] px-2.5 text-xs text-[var(--text-secondary)]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="mention">{t("chat:a2aMention")}</SelectItem>
-              <SelectItem value="call">{t("chat:a2aCall")}</SelectItem>
-              <SelectItem value="off">{t("chat:a2aOff")}</SelectItem>
-            </SelectContent>
-          </Select>
+          <DropdownMenu>
+            <TooltipProvider delayDuration={250}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className={`relative h-8 w-8 px-0 ${a2aMode !== "off" ? "text-[var(--accent-hover)]" : ""}`}
+                      aria-label={t("chat:a2aMode.label", { mode: t(`chat:a2aMode.${a2aMode}.label`) })}
+                    >
+                      <Network aria-hidden="true" className="h-4 w-4" />
+                      {a2aMode !== "off" && (
+                        <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-[var(--accent-color)]" />
+                      )}
+                    </Button>
+                  </DropdownMenuTrigger>
+                </TooltipTrigger>
+                <TooltipContent>{t("chat:a2aMode.label", { mode: t(`chat:a2aMode.${a2aMode}.label`) })}</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <DropdownMenuContent align="end" className="w-80 p-2">
+              <div className="px-2 pb-2 pt-1">
+                <p className="text-sm font-medium text-[var(--text-primary)]">{t("chat:a2aMode.title")}</p>
+                <p className="mt-0.5 text-xs text-[var(--text-tertiary)]">{t("chat:a2aMode.description")}</p>
+              </div>
+              {A2A_MODE_OPTIONS.map(({ value, icon: Icon }) => {
+                const selected = value === a2aMode;
+                return (
+                  <DropdownMenuItem
+                    key={value}
+                    onSelect={() => void handleA2AModeChange(value)}
+                    className={`items-start gap-3 px-2.5 py-2.5 ${selected ? "bg-[var(--accent-subtle)]" : ""}`}
+                  >
+                    <span className={`mt-0.5 rounded-md p-1.5 ${selected ? "bg-[var(--accent-color)] text-white" : "bg-[var(--bg-elevated)] text-[var(--text-secondary)]"}`}>
+                      <Icon aria-hidden="true" className="h-4 w-4" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className={`block text-sm font-medium ${selected ? "text-[var(--accent-hover)]" : "text-[var(--text-primary)]"}`}>
+                        {t(`chat:a2aMode.${value}.label`)}
+                      </span>
+                      <span className="mt-0.5 block text-xs leading-5 text-[var(--text-tertiary)]">
+                        {t(`chat:a2aMode.${value}.description`)}
+                      </span>
+                    </span>
+                    <span className={`mt-1 flex h-4 w-4 items-center justify-center rounded-full border ${selected ? "border-[var(--accent-color)] bg-[var(--accent-color)] text-white" : "border-[var(--border-color)]"}`}>
+                      {selected && <Check aria-hidden="true" className="h-3 w-3" />}
+                    </span>
+                  </DropdownMenuItem>
+                );
+              })}
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
         {currentConv && (
           <DropdownMenu>
@@ -238,4 +307,3 @@ export function ChatArea() {
     </div>
   );
 }
-

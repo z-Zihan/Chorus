@@ -29,6 +29,25 @@
   "a2aFailed": "失败",
   "a2aCancel": "取消调用",
   "a2aCancelled": "A2A 调用已取消",
+  "a2aForwardedMessage": "转发了消息",
+  "unknownAgent": "未知 Agent",
+  "a2aMode": {
+    "title": "A2A 模式",
+    "description": "控制 Agent 之间如何通信",
+    "label": "A2A：{{mode}}",
+    "mention": {
+      "label": "@转发",
+      "description": "Agent 回复中 @其他 Agent 时自动转发"
+    },
+    "call": {
+      "label": "同步调用",
+      "description": "Agent 通过 A2A_CALL 协议同步调用其他 Agent"
+    },
+    "off": {
+      "label": "关闭",
+      "description": "不触发 Agent 间通信"
+    }
+  },
   "a2aPermission": {
     "label": "A2A 权限",
     "auto": "A2A 自动",
@@ -50,8 +69,5 @@
   "jumpToSource": "跳转到群聊",
   "remoteAgent": "远程 Agent",
   "crossHub": "跨 Hub",
-  "owner": "拥有者",
-  "a2aMention": "@转发",
-  "a2aCall": "同步调用",
-  "a2aOff": "关闭"
+  "owner": "拥有者"
 }

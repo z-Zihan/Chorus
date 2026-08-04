@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
+  ArrowRight,
   ChevronDown,
   CircleAlert,
   CircleCheck,
@@ -20,7 +21,7 @@ interface Props {
 
 export function A2AThread({ messages, thread }: Props) {
   const { t } = useTranslation("chat");
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(thread?.status === "running");
   const agents = useAgentStore((s) => s.agents);
   const cancelA2AThread = useChatStore((s) => s.cancelA2AThread);
 
@@ -42,11 +43,20 @@ export function A2AThread({ messages, thread }: Props) {
           status: "done" as const,
         }]
       : [];
+  const firstMessage = detailMessages[0];
+  const fromId = thread?.from ?? firstMessage?.fromId;
+  const toId = thread?.to ?? firstMessage?.toId;
+  const fromAgent = agents.find((agent) => agent.id === fromId);
+  const toAgent = agents.find((agent) => agent.id === toId);
+
+  useEffect(() => {
+    if (thread) setExpanded(thread.status === "running");
+  }, [thread?.status]);
 
   return (
     <div
       data-message-ids={messages.map((message) => message.id).join(" ")}
-      className="message-enter rounded-xl border border-[var(--border-color)] bg-[var(--bg-surface)]"
+      className="message-enter rounded-r-lg border-l-2 border-l-[var(--accent-color)] bg-[var(--bg-elevated)]/50"
     >
       <div className="flex items-center gap-2 pr-3">
         <button
@@ -55,8 +65,15 @@ export function A2AThread({ messages, thread }: Props) {
           className="flex min-w-0 flex-1 items-center gap-2 px-4 py-2.5 text-left"
           aria-expanded={expanded}
         >
-          <ClipboardList aria-hidden="true" className="h-4 w-4 text-[var(--text-tertiary)]" />
-          <span className="flex-1 text-sm font-medium text-[var(--text-primary)]">
+          <ClipboardList aria-hidden="true" className="h-4 w-4 shrink-0 text-[var(--accent-hover)]" />
+          {fromId && toId && (
+            <span className="flex shrink-0 items-center gap-1.5">
+              <AgentAvatar name={fromAgent?.name ?? fromId} src={fromAgent?.avatar} size="xs" />
+              <ArrowRight aria-hidden="true" className="h-3 w-3 text-[var(--text-muted)]" />
+              <AgentAvatar name={toAgent?.name ?? toId} src={toAgent?.avatar} size="xs" />
+            </span>
+          )}
+          <span className="min-w-0 flex-1 truncate text-xs font-medium text-[var(--text-primary)]">
             {t("a2aChain")}
           </span>
           {thread?.status === "running" && (
@@ -103,7 +120,7 @@ export function A2AThread({ messages, thread }: Props) {
       </div>
 
       {expanded && (
-        <div className="space-y-2 border-t border-[var(--border-color)] px-4 py-3">
+        <div className="space-y-2 border-t border-[var(--border-color)]/70 px-4 py-3">
           {detailMessages.map((msg) => {
             const fromName = getAgentName(msg.fromId);
             const toName = msg.toId ? getAgentName(msg.toId) : null;

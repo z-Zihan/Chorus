@@ -7,6 +7,7 @@ import { MessageBubble } from "./MessageBubble";
 import { TypingIndicator } from "./TypingIndicator";
 import { A2AThread } from "./A2AThread";
 import { TaskTrackingCard } from "./TaskTrackingCard";
+import { A2AForwardingCard } from "./A2AForwardingCard";
 
 const BOTTOM_THRESHOLD_PX = 80;
 const SCROLL_DEBOUNCE_MS = 100;
@@ -113,6 +114,24 @@ export function MessageList() {
 
   for (let i = 0; i < messages.length; i++) {
     const msg = messages[i];
+
+    const isA2AForwarding =
+      msg.metadata?.a2aType === "response"
+      || (msg.fromType === "agent" && msg.toType === "agent");
+
+    if (isA2AForwarding) {
+      const fromAgent = agents.find((agent) => agent.id === msg.fromId);
+      const toAgent = agents.find((agent) => agent.id === msg.toId);
+      rendered.push(
+        <A2AForwardingCard
+          key={msg.id}
+          message={msg}
+          fromAgent={{ name: fromAgent?.name ?? msg.fromId, avatar: fromAgent?.avatar }}
+          toAgent={{ name: toAgent?.name ?? msg.toId ?? t("unknownAgent"), avatar: toAgent?.avatar }}
+        />,
+      );
+      continue;
+    }
 
     // Live A2A messages are represented by their task card.
     if (msg.threadId && a2aThreads[msg.threadId]) {
