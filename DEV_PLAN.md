@@ -72,18 +72,18 @@
 
 ### P0 — 身份、数据一致性与安全基线
 
-| ID | 任务 | 交付物与验收 | 依赖 |
-|----|------|--------------|------|
-| ID-01 | User schema + migration | Drizzle `users`；本机 User 初始化；现有 Agent 回填 `ownerId/ownerType`；升级/回滚测试 | — |
-| ID-02 | User/Hub cryptographic binding | User key 存钥匙串；稳定 userId；UserHubBinding 双签名与指纹 UI | ID-01 |
-| ID-03 | Agent owner model | Agent API 返回 owner；`system` CLI 仍关联本机 User；远程 config/credential 永不落库 | ID-01 |
-| ID-04 | Conversation migration | `dm/group/cross_hub`；`channel→group`；成员保存 Owner/Agent/Hub 快照 | ID-01, ID-03 |
-| PROTO-01 | HubPayload v2 | 新增 `fromUserId/fromUserName/toUserId`、from/to Agent；v1 兼容读；协议版本拒绝策略 | ID-02 |
-| DISC-01 | Signed directory | request/announce/revoke；visibility 过滤；版本、TTL、签名和最小披露 | PROTO-01 |
-| DISC-02 | Remote registration | 单事务 upsert remote User 后 Agent；确定性远程 ID；revoke/stale；重名测试 | DISC-01, ID-03 |
-| SEC-01 | Trust store | 邀请/配对码、User/Hub 指纹、pending/trusted/blocked、公钥变化重配对 | ID-02 |
-| SEC-02 | Inbound authorization | API scope → trust → visibility → Agent policy → conversation mode → action approval；own auto / trusted confirm / unknown deny | SEC-01, DISC-02 |
-| SEC-03 | Offline delivery semantics | queued/delivered/accepted/denied/done；ack 后删除；TTL expired；幂等和顺序测试 | PROTO-01 |
+| ID | 任务 | 交付物与验收 | 依赖 | 状态 | Review |
+|----|------|--------------|------|------|--------|
+| ID-01 | User schema + migration | Drizzle `users`；本机 User 初始化；现有 Agent 回填 `ownerId/ownerType`；升级/回滚测试 | — | ✅ done | ✅ code-review skill |
+| ID-02 | User/Hub cryptographic binding | User key 存钥匙串；稳定 userId；UserHubBinding 双签名与指纹 UI | ID-01 | ✅ done | ✅ code-review skill |
+| ID-03 | Agent owner model | Agent API 返回 owner；`system` CLI 仍关联本机 User；远程 config/credential 永不落库 | ID-01 | ✅ done | ✅ code-review skill |
+| ID-04 | Conversation migration | `dm/group/cross_hub`；`channel→group`；成员保存 Owner/Agent/Hub 快照 | ID-01, ID-03 | ✅ done | ✅ code-review skill |
+| PROTO-01 | HubPayload v2 | 新增 `fromUserId/fromUserName/toUserId`、from/to Agent；v1 兼容读；协议版本拒绝策略 | ID-02 | ⏳ todo | — |
+| DISC-01 | Signed directory | request/announce/revoke；visibility 过滤；版本、TTL、签名和最小披露 | PROTO-01 | ⏳ todo | — |
+| DISC-02 | Remote registration | 单事务 upsert remote User 后 Agent；确定性远程 ID；revoke/stale；重名测试 | DISC-01, ID-03 | ⏳ todo | — |
+| SEC-01 | Trust store | 邀请/配对码、User/Hub 指纹、pending/trusted/blocked、公钥变化重配对 | ID-02 | ⏳ todo | — |
+| SEC-02 | Inbound authorization | API scope → trust → visibility → Agent policy → conversation mode → action approval；own auto / trusted confirm / unknown deny | SEC-01, DISC-02 | ⏳ todo | — |
+| SEC-03 | Offline delivery semantics | queued/delivered/accepted/denied/done；ack 后删除；TTL expired；幂等和顺序测试 | PROTO-01 | ⏳ todo | — |
 
 ### P1 — 产品闭环与外部接入
 
