@@ -21,7 +21,7 @@ function formatDuration(durationMs: number): string {
 
 export function TaskTrackingCard({ thread }: Props) {
   const { t } = useTranslation("chat");
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(thread.status === "running");
   const [now, setNow] = useState(() => Date.now());
   const agents = useAgentStore((state) => state.agents);
   const navigateToConversation = useChatStore((state) => state.navigateToConversation);
@@ -33,6 +33,10 @@ export function TaskTrackingCard({ thread }: Props) {
           conversation.id === thread.conversationId && conversation.type === "group",
       ),
   );
+
+  useEffect(() => {
+    setExpanded(thread.status === "running");
+  }, [thread.status]);
 
   useEffect(() => {
     if (thread.status !== "running") return;
@@ -56,33 +60,42 @@ export function TaskTrackingCard({ thread }: Props) {
   return (
     <div
       data-thread-id={thread.threadId}
-      className="message-enter overflow-hidden rounded-xl border border-[var(--border-color)] bg-[var(--bg-surface)]"
+      className="message-enter ml-4 overflow-hidden rounded-r-xl border-l-2 border-l-[var(--accent-color)] bg-[var(--bg-elevated)]/50"
     >
       <button
         type="button"
         onClick={() => setExpanded((value) => !value)}
-        className="flex w-full min-w-0 items-center gap-2 px-4 py-2.5 text-left transition-colors hover:bg-[var(--bg-hover)]"
+        className="flex w-full min-w-0 items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--bg-hover)]"
         aria-expanded={expanded}
         aria-label={`${statusLabel}: ${toName}`}
       >
+        <div className="flex shrink-0 items-center gap-1.5">
+          <div className="h-5 w-5 [&>*]:h-5 [&>*]:w-5">
+            <AgentAvatar name={fromName} src={fromAgent?.avatar} size="xs" />
+          </div>
+          <span aria-hidden="true" className="text-[10px] text-[var(--text-muted)]">→</span>
+          <div className="h-5 w-5 [&>*]:h-5 [&>*]:w-5">
+            <AgentAvatar name={toName} src={toAgent?.avatar} size="xs" />
+          </div>
+        </div>
+        <span className="min-w-0 flex-1 truncate text-xs font-medium text-[var(--accent-hover)]">
+          {fromName} → {toName}
+        </span>
         {thread.status === "running" && (
           <LoaderCircle
             aria-hidden="true"
-            className="h-4 w-4 shrink-0 animate-spin text-[var(--status-busy)]"
+            className="h-3.5 w-3.5 shrink-0 animate-spin text-[var(--status-busy)]"
           />
         )}
         {thread.status === "completed" && (
           <CircleCheck
             aria-hidden="true"
-            className="h-4 w-4 shrink-0 text-[var(--status-online)]"
+            className="h-3.5 w-3.5 shrink-0 text-[var(--status-online)]"
           />
         )}
         {thread.status === "error" && (
-          <CircleAlert aria-hidden="true" className="h-4 w-4 shrink-0 text-[var(--status-error)]" />
+          <CircleAlert aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-[var(--status-error)]" />
         )}
-        <span className="min-w-0 flex-1 truncate text-sm font-medium text-[var(--text-primary)]">
-          {toName}
-        </span>
         <span className="shrink-0 font-mono text-xs tabular-nums text-[var(--text-tertiary)]">
           {duration}
         </span>
@@ -95,7 +108,7 @@ export function TaskTrackingCard({ thread }: Props) {
       </button>
 
       {expanded && (
-        <div className="space-y-3 border-t border-[var(--border-color)] px-4 py-3">
+        <div className="space-y-2 border-t border-[var(--border-color)]/70 px-3 py-2.5">
           <div className="flex items-center justify-between gap-3 text-xs">
             <span
               className={
@@ -111,13 +124,7 @@ export function TaskTrackingCard({ thread }: Props) {
             <span className="text-[var(--text-tertiary)]">{t("taskDuration", { duration })}</span>
           </div>
 
-          <div className="flex items-center gap-2 text-xs text-[var(--text-tertiary)]">
-            <AgentAvatar name={fromName} src={fromAgent?.avatar} size="xs" />
-            <span className="font-medium text-[var(--text-primary)]">{fromName}</span>
-            <span aria-hidden="true">→</span>
-            <AgentAvatar name={toName} src={toAgent?.avatar} size="xs" />
-            <span className="font-medium text-[var(--text-primary)]">{toName}</span>
-          </div>
+
 
           <div className="whitespace-pre-wrap rounded-lg bg-[var(--bg-elevated)] px-3 py-2 text-sm text-[var(--text-primary)]">
             {thread.message}
