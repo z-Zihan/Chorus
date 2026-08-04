@@ -82,8 +82,8 @@
 | DISC-01 | Signed directory | request/announce/revoke；visibility 过滤；版本、TTL、签名和最小披露 | PROTO-01 | ✅ done | ✅ code-review skill |
 | DISC-02 | Remote registration | 单事务 upsert remote User 后 Agent；确定性远程 ID；revoke/stale；重名测试 | DISC-01, ID-03 | ✅ done | ✅ code-review skill |
 | SEC-01 | Trust store | 邀请/配对码、User/Hub 指纹、pending/trusted/blocked、公钥变化重配对 | ID-02 | ✅ done | ✅ code-review skill |
-| SEC-02 | Inbound authorization | API scope → trust → visibility → Agent policy → conversation mode → action approval；own auto / trusted confirm / unknown deny | SEC-01, DISC-02 | ⏳ todo | — |
-| SEC-03 | Offline delivery semantics | queued/delivered/accepted/denied/done；ack 后删除；TTL expired；幂等和顺序测试 | PROTO-01 | ⏳ todo | — |
+| SEC-02 | Inbound authorization | API scope → trust → visibility → Agent policy → conversation mode → action approval；own auto / trusted confirm / unknown deny | SEC-01, DISC-02 | ✅ done | ✅ code-review skill |
+| SEC-03 | Offline delivery semantics | queued/delivered/accepted/denied/done；ack 后删除；TTL expired；幂等和顺序测试 | PROTO-01 | ✅ done | ✅ code-review skill |
 
 ### P1 — 产品闭环与外部接入
 
