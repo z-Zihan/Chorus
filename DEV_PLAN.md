@@ -102,7 +102,7 @@
 | ID | 任务 | 交付物与验收 | 依赖 |
 |----|------|--------------|------|
 | SCALE-01 | Multi-device User | `user_hubs`、设备撤销、同一 User 多 Hub Agent 聚合 | P1 完成 | ✅ done | ✅ code-review skill |
-| SCALE-02 | MLS group crypto | 替代逐成员加密，支持大群 rekey 和成员撤销 | TEST-01 |
+| SCALE-02 | MLS group crypto | 替代逐成员加密，支持大群 rekey 和成员撤销 | TEST-01 | ✅ done | ✅ code-review skill |
 | STD-01 | Standard adapters | 将 AgentLink identity/capability 映射到 Google A2A/MCP/ACP | EXT-01 |
 | OPS-01 | Relay metadata hardening | retention、size padding 评估、滥用检测、自托管运维基线 | TEST-01 |
 
