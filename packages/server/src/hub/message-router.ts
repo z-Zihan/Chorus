@@ -9,6 +9,7 @@ import type { HubIdentity } from "./identity.js";
 import type { P2PListener } from "./p2p-listener.js";
 import { normalizeHubPayload, rejectIncompatibleVersion } from "./payload-compat.js";
 import type { RelayClient } from "./relay-client.js";
+import type { DirectoryService } from "./directory.js";
 
 const REMOTE_CALL_TIMEOUT_MS = 120_000;
 const MAX_SEEN_MESSAGES = 1_000;
@@ -45,6 +46,7 @@ export class HubMessageRouter {
     private readonly relayClient: RelayClient,
     private readonly connectionManager: ConnectionManager,
     private readonly localUser: LocalUserIdentity,
+    private readonly directoryService: DirectoryService,
   ) {
     relayClient.onMessage((envelope) => {
       void this.onEnvelope(envelope, relayClient).catch((error: unknown) => {
@@ -114,6 +116,13 @@ export class HubMessageRouter {
       await this.handleInboundA2A(envelope.from, payload, relayClient);
     } else if (payload.messageType === "chat") {
       await this.handleInboundChat(envelope.from, payload, relayClient);
+    } else if (payload.messageType === "directory_request") {
+      await this.handleDirectoryRequest(envelope.from, payload);
+    } else if (
+      payload.messageType === "directory_announce"
+      || payload.messageType === "directory_revoke"
+    ) {
+      this.handleDirectoryUpdate(envelope.from, payload);
     }
   }
 
@@ -247,6 +256,52 @@ export class HubMessageRouter {
       const content = error instanceof Error ? error.message : String(error);
       await this.sendResponse(fromHubId, payload, content, true, relayClient, "chat");
     }
+  }
+
+  private async handleDirectoryRequest(fromHubId: string, request: HubPayload): Promise<void> {
+    const directory = await this.directoryService.buildSignedLocalDirectory();
+    if (!directory) {
+      logger.warn({ fromHubId }, "Unable to answer directory request without a signed directory");
+      return;
+    }
+    await this.handleOutbound(
+      fromHubId,
+      {
+        messageType: "directory_announce",
+        messageId: randomUUID(),
+        toUserId: request.fromUserId,
+        directory,
+        metadata: { correlationId: request.messageId },
+      },
+      request.conversationId ?? request.messageId,
+    );
+  }
+
+  private handleDirectoryUpdate(fromHubId: string, payload: HubPayload): void {
+    const manifest = payload.directory;
+    if (!manifest) throw new Error(`Inbound ${payload.messageType} has no directory manifest`);
+    if (manifest.user.hubId !== fromHubId) {
+      throw new Error(`Directory Hub ID does not match envelope sender ${fromHubId}`);
+    }
+    if (!this.directoryService.verifyManifest(manifest)) {
+      throw new Error(`Invalid directory signature from ${fromHubId}`);
+    }
+    if (this.directoryService.isExpired(manifest)) {
+      throw new Error(`Expired directory manifest from ${fromHubId}`);
+    }
+    const current = this.directoryService.getRemoteDirectory(fromHubId);
+    if (!this.directoryService.isNewer(manifest, current)) {
+      logger.debug(
+        {
+          fromHubId,
+          directoryVersion: manifest.directoryVersion,
+          currentVersion: current?.directoryVersion,
+        },
+        "Ignoring stale directory manifest",
+      );
+      return;
+    }
+    this.directoryService.applyRemoteDirectory(manifest);
   }
 
   private async sendResponse(

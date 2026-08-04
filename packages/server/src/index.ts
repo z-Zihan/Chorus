@@ -28,6 +28,7 @@ import { P2PDiscovery } from "./hub/p2p-discovery.js";
 import { P2PListener } from "./hub/p2p-listener.js";
 import { ConnectionManager } from "./hub/connection-manager.js";
 import { deriveUserId } from "./identity/user-keys.js";
+import { DirectoryService } from "./hub/directory.js";
 
 process.on("uncaughtException", (error) => {
   logger.fatal({ err: error }, "Uncaught exception");
@@ -83,6 +84,7 @@ async function main(): Promise<void> {
     const listener = new P2PListener(client);
     const manager = new ConnectionManager(listener, client);
     connectionManager = manager;
+    const directoryService = new DirectoryService(repository, registry, identity.hubId);
     const messageRouter = new HubMessageRouter(
       identity,
       registry,
@@ -90,6 +92,7 @@ async function main(): Promise<void> {
       client,
       manager,
       localProtocolUser,
+      directoryService,
     );
     runtime.setHubMessageRouter(messageRouter);
     if (hubConfig.p2p?.enabled) {

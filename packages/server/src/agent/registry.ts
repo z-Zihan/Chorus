@@ -118,6 +118,12 @@ export class AgentRegistry {
     this.remoteAgents.set(id, { id, name: agentName, hubId });
   }
 
+  removeRemoteAgent(hubId: string, agentId: string): boolean {
+    const id = this.remoteAgentId(hubId, agentId);
+    this.remoteAgentRooms.delete(id);
+    return this.remoteAgents.delete(id);
+  }
+
   getRemoteAgents(): RemoteAgent[] {
     return [...this.remoteAgents.values()];
   }
