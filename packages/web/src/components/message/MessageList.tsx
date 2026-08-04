@@ -1,16 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronDown, MessageSquare } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { useChatStore } from "@/store/chatStore";
+import { useChatStore, type Message } from "@/store/chatStore";
 import { useAgentStore } from "@/store/agentStore";
 import { MessageBubble } from "./MessageBubble";
 import { TypingIndicator } from "./TypingIndicator";
-import { A2AThread } from "./A2AThread";
 import { TaskTrackingCard } from "./TaskTrackingCard";
 import { A2AForwardingCard } from "./A2AForwardingCard";
 
 const BOTTOM_THRESHOLD_PX = 80;
 const SCROLL_DEBOUNCE_MS = 100;
+
+function isA2AMessage(message: Message) {
+  return message.fromType === "agent" && message.toType === "agent";
+}
 
 function MessageSkeletons({ label }: { label: string }) {
   return (
@@ -107,79 +110,111 @@ export function MessageList() {
     return () => window.cancelAnimationFrame(frame);
   }, [targetMessageId, isLoadingMessages, messages, clearTargetMessage]);
 
-  // Group messages by threadId for A2A display
+  // Resolve every A2A message to the normal message that started its thread.
+  const messagesById = new Map(messages.map((message) => [message.id, message]));
+  const parentIdByThread = new Map<string, string>();
+
+  for (const thread of Object.values(a2aThreads)) {
+    if (thread.parentMessageId) parentIdByThread.set(thread.threadId, thread.parentMessageId);
+  }
+
+  for (const message of messages) {
+    if (message.threadId && !isA2AMessage(message)) {
+      parentIdByThread.set(message.threadId, message.id);
+    }
+    if (!isA2AMessage(message) || !message.threadId || !message.parentId) continue;
+    const parent = messagesById.get(message.parentId);
+    if (parent && !isA2AMessage(parent)) {
+      parentIdByThread.set(message.threadId, parent.id);
+    }
+  }
+
+  const findParentId = (message: Message) => {
+    let candidateId = message.parentId;
+    const visited = new Set<string>();
+
+    while (candidateId && !visited.has(candidateId)) {
+      visited.add(candidateId);
+      const candidate = messagesById.get(candidateId);
+      if (!candidate) break;
+      if (!isA2AMessage(candidate)) return candidate.id;
+      candidateId = candidate.parentId;
+    }
+
+    return message.threadId ? parentIdByThread.get(message.threadId) : undefined;
+  };
+
+  const repliesByParentId = new Map<string, Message[]>();
+  for (const message of messages) {
+    if (!isA2AMessage(message)) continue;
+    const parentId = findParentId(message);
+    if (!parentId) continue;
+    const parent = messagesById.get(parentId);
+    if (!parent || isA2AMessage(parent)) continue;
+    const replies = repliesByParentId.get(parentId) ?? [];
+    replies.push(message);
+    repliesByParentId.set(parentId, replies);
+  }
+
   const rendered: React.ReactNode[] = [];
   const seenThreads = new Set<string>();
   const threadStates = Object.values(a2aThreads);
+  let previousTopLevelMessage: Message | undefined;
 
   for (let i = 0; i < messages.length; i++) {
     const msg = messages[i];
 
-    const isA2AForwarding =
-      msg.metadata?.a2aType === "response"
-      || (msg.fromType === "agent" && msg.toType === "agent");
-
-    if (isA2AForwarding) {
-      const fromAgent = agents.find((agent) => agent.id === msg.fromId);
-      const toAgent = agents.find((agent) => agent.id === msg.toId);
-      rendered.push(
-        <A2AForwardingCard
-          key={msg.id}
-          message={msg}
-          fromAgent={{ name: fromAgent?.name ?? msg.fromId, avatar: fromAgent?.avatar }}
-          toAgent={{ name: toAgent?.name ?? msg.toId ?? t("unknownAgent"), avatar: toAgent?.avatar }}
-        />,
-      );
-      continue;
-    }
-
-    // Live A2A messages are represented by their task card.
-    if (msg.threadId && a2aThreads[msg.threadId]) {
-      continue;
-    }
-
-    // Skip agent-to-agent forwarded messages — they're already shown as part of the parent message.
-    if (msg.parentId) continue;
-
-    // Keep the legacy grouped display for persisted A2A messages without live state.
-    if (msg.threadId && !seenThreads.has(msg.threadId)) {
-      seenThreads.add(msg.threadId);
-      const threadMessages = messages.filter((m) => m.threadId === msg.threadId);
-      rendered.push(
-        <A2AThread
-          key={`thread-${msg.threadId}`}
-          messages={threadMessages}
-          thread={a2aThreads[msg.threadId]}
-        />,
-      );
-      continue;
-    }
-
-    // Skip messages already rendered inside an A2A thread
-    if (msg.threadId && seenThreads.has(msg.threadId)) continue;
+    // A2A messages are rendered only as replies nested below their parent.
+    if (isA2AMessage(msg)) continue;
 
     const agent = agents.find((a) => a.id === msg.fromId);
-    const prevMsg = i > 0 ? messages[i - 1] : null;
     const isFirstFromAgent =
-      !prevMsg || prevMsg.fromId !== msg.fromId || prevMsg.fromType !== msg.fromType;
-    rendered.push(
-      <MessageBubble
-        key={msg.id}
-        message={msg}
-        agentName={isGroupConversation ? (agent?.name ?? msg.fromId) : agent?.name}
-        agentAvatar={agent?.avatar}
-        isGroup={isGroupConversation}
-        showHeader={isFirstFromAgent}
-      />,
-    );
+      !previousTopLevelMessage
+      || previousTopLevelMessage.fromId !== msg.fromId
+      || previousTopLevelMessage.fromType !== msg.fromType;
+    const replies = repliesByParentId.get(msg.id) ?? [];
+    const attachedThreads = msg.fromType === "agent"
+      ? threadStates.filter(
+          (thread) => thread.parentMessageId === msg.id && !seenThreads.has(thread.threadId),
+        )
+      : [];
 
-    if (msg.fromType === "agent") {
-      for (const thread of threadStates) {
-        if (thread.parentMessageId !== msg.id || seenThreads.has(thread.threadId)) continue;
-        seenThreads.add(thread.threadId);
-        rendered.push(<TaskTrackingCard key={`task-${thread.threadId}`} thread={thread} />);
-      }
-    }
+    for (const thread of attachedThreads) seenThreads.add(thread.threadId);
+
+    rendered.push(
+      <div key={msg.id} className="space-y-2">
+        <MessageBubble
+          message={msg}
+          agentName={isGroupConversation ? (agent?.name ?? msg.fromId) : agent?.name}
+          agentAvatar={agent?.avatar}
+          isGroup={isGroupConversation}
+          showHeader={isFirstFromAgent}
+        />
+        {replies.length > 0 && (
+          <div className="ml-7 max-w-2xl space-y-1.5 md:ml-11">
+            {replies.map((reply) => {
+              const fromAgent = agents.find((item) => item.id === reply.fromId);
+              return (
+                <A2AForwardingCard
+                  key={reply.id}
+                  message={reply}
+                  fromAgent={{
+                    name: fromAgent?.name ?? reply.fromId,
+                    avatar: fromAgent?.avatar,
+                  }}
+                />
+              );
+            })}
+          </div>
+        )}
+        {attachedThreads.map((thread) => (
+          <div key={`task-${thread.threadId}`} className="ml-11 max-w-2xl">
+            <TaskTrackingCard thread={thread} />
+          </div>
+        ))}
+      </div>,
+    );
+    previousTopLevelMessage = msg;
   }
 
   // Calls without an available parent message remain visible as standalone cards.
