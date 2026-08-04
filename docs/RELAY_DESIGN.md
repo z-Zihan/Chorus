@@ -1,8 +1,8 @@
 # AgentLink 跨用户通信架构设计
 
-> 最后更新：2026-08-03
+> 最后更新：2026-08-04
 
-> 实现状态：`packages/relay` 已包含可构建的 Relay Server、Docker Compose、Hub 注册、WebSocket 路由、离线消息和 Room 基础。桌面端 Hub Client、P2P、端到端加密接入和最终用户群聊仍是设计/待集成状态。部署 Relay 服务本身不会自动解锁当前桌面客户端的跨设备功能。
+> 实现状态：`packages/relay` 已包含 Relay Server、Hub 注册、WebSocket 路由、离线消息和 Room 基础；`packages/server` 已有 Hub Client/P2P/E2E 代码。User 实体、签名目录、owner-aware 远程 Agent 注册和完整跨设备验收仍未实现。部署 Relay 不会自动解锁多用户身份能力。
 
 ## 1. 架构总览
 
@@ -72,14 +72,30 @@
 └─────────────────────────────────────────────────────┘
 ```
 
-## 2. Hub 身份与认证
+## 2. User 与 Hub 身份 / User and Hub Identity
+
+User、Hub、Agent 必须分层：User 是拥有者，Hub 是设备/路由端点，Agent 是可调用执行者。Relay 认证 Hub 是否可连接，不证明某个 User 可以调用另一个 User 的 Agent。
 
 ### 密钥对
 
 - 算法：Ed25519 (libsodium)
 - 首次启动时生成密钥对，存储在 `data/hub-keypair.json`
-- Hub ID = 公钥的 hex 编码前 32 字符（如 `a1b2c3...`）
+- Hub ID = Ed25519 公钥完整 hex；UI 仅将前 8 位作为短指纹
 - 显示名：用户自定义，不唯一
+
+本机另生成 User Ed25519 密钥并存入系统钥匙串；`userId = usr_<base64url(SHA-256(userPublicKey))>`。v1 一个 Hub 绑定一个本机 User，未来一个 User 可签名绑定多个 Hub。绑定对象同时由 User key 和 Hub key 签名：
+
+```typescript
+interface UserHubBinding {
+  userId: string;
+  userPublicKey: string;
+  hubId: string;
+  issuedAt: number;
+  expiresAt: number;
+  userSignature: string;
+  hubSignature: string;
+}
+```
 
 ### Relay 注册
 
@@ -101,10 +117,12 @@ Response:
 
 ### Hub 间互认证
 
-1. Hub A 通过 Relay 获取 Hub B 的公钥
-2. Hub A 生成临时 nonce，用 Hub B 公钥加密
-3. Hub B 解密 nonce，签名返回
-4. Hub A 验证签名 → 建立加密通道
+1. Hub A 通过 Relay/邀请获取 Hub B 的 Ed25519 公钥并核验指纹。
+2. 双方交换随机 challenge，各自用 Hub 私钥签名 `challenge + 两端 Hub ID + timestamp`。
+3. 双方验证签名和 5 分钟时间窗口，再把 Ed25519 key 转换为 X25519 建立加密通道。
+4. UserHubBinding 通过双签名验证后，才把 Hub 上的目录归属于 User。
+
+**English summary:** A User owns agents; a Hub authenticates a device transport. Both keys sign the User-to-Hub binding.
 
 ## 3. 消息协议
 
@@ -124,14 +142,25 @@ interface HubEnvelope {
 
 // 解密后的 payload
 interface HubPayload {
-  messageType: "chat" | "a2a_call" | "a2a_response" | "agent_status" | "typing";
-  conversationId: string;
+  protocolVersion: 2;
+  messageType:
+    | "chat" | "a2a_call" | "a2a_response" | "agent_status" | "typing"
+    | "directory_request" | "directory_announce" | "directory_revoke"
+    | "delivery_ack";
+  conversationId?: string;
   messageId: string;
-  content: string;
-  agentId?: string;      // 来源 Agent ID
+  content?: string;
+  fromUserId: string;
+  fromUserName: string;  // 仅展示，禁止用于授权
+  toUserId?: string;     // 房间/目录消息可省略
+  fromAgentId?: string;
+  toAgentId?: string;
+  directory?: DirectoryManifest;
   metadata?: Record<string, unknown>;
 }
 ```
+
+接收方先验证 envelope 的 Hub 签名，再解密 payload，再验证 UserHubBinding/DirectoryManifest 的 User 签名，最后执行权限策略。任一 ID、签名、绑定或目录版本不一致即拒绝；不得用 `fromUserName` 或 Agent 显示名回退寻址。
 
 ### 加密方案
 
@@ -195,8 +224,12 @@ Relay → Hub:
 
 - Relay 维护 SQLite `offline_messages` 表
 - 消息到达时接收方不在线 → 存入 offline store
-- 接收方上线 → 批量推送，TTL 7 天自动清理
+- 接收方上线 → 批量推送；Hub 持久化成功后发送 `delivery_ack`，Relay 再删除对应记录
+- TTL 默认 7 天；过期后向发送方返回 `expired`（若发送方仍可达），客户端不得长期显示 `queued`
+- 同一会话按发送方 sequence 排序，目录 revoke 优先于较旧 announce；接收端按 message ID 幂等
 - 加密存储：Relay 只存 ciphertext，无法解密
+
+离线排队只表示 Relay 已接收，不表示目标 Agent 已执行。消息状态依次为 `queued → delivered → accepted/denied → done/error`。
 
 ### 部署
 
@@ -232,6 +265,50 @@ docker run -d -p 3211:3211 -v relay-data:/data \
 - v2：Redis pub/sub 多实例，水平扩展
 - v3：Kubernetes 部署 + 负载均衡
 
+### User/Agent 目录发现 / Directory Discovery
+
+Relay 不建立可搜索的明文用户目录。Hub 上线后只向已配对 Hub 和共同 Room 成员发送加密的 `directory_announce`；这里的“广播 Agent 列表”是面向授权 audience 的 fan-out，不是全网广播。
+
+```typescript
+interface DirectoryManifest {
+  schemaVersion: 1;
+  directoryVersion: number;
+  issuedAt: number;
+  expiresAt: number;
+  binding: UserHubBinding;
+  user: {
+    id: string;
+    name: string;
+    avatar?: string;
+    publicKey: string;
+  };
+  agents: Array<{
+    id: string;                  // Hub 内稳定 sourceAgentId
+    name: string;
+    description?: string;
+    type: string;
+    capabilities: string[];
+    status: "online" | "busy" | "offline" | "error";
+    visibility: "trusted" | "room" | "public";
+  }>;
+  revokedAgentIds: string[];
+  signature: string;             // User key 对 canonical JSON 签名
+}
+```
+
+上线与同步流程：
+
+1. Hub 连接 Relay/P2P，完成 Hub challenge 和 UserHubBinding 验证。
+2. Hub 根据接收者过滤 Agent：`trusted` 仅配对用户，`room` 仅共同房间，`private` 永不发送；凭据、config、system prompt、本地路径和历史永不进入目录。
+3. Hub 用 User key 签名 manifest，再通过每个接收 Hub 的加密通道发送。
+4. 接收 Hub 验证签名、binding、版本和过期时间，在一个 SQLite 事务中 upsert remote User，再 upsert remote Agent。
+5. UI/外部 API 按 Owner 分组显示，寻址使用 `(homeHubId, sourceAgentId)`；两个都叫 “Claude Code” 的 Agent 分别显示为 `Alice / Claude Code`、`Bob / Claude Code`。
+6. 名称、能力或状态变化发送更高版本增量；删除、隐身或解除信任立即发送 `directory_revoke`。过期未续期的记录标记 `stale/offline`，历史快照保留。
+
+目录消息可以使用现有 `{ type: "message", envelope }` Relay frame，因此 Relay 无需解析 `DirectoryManifest`。Relay 只管理 Hub 在线状态和 Room membership，不得依据 User/Agent 内容做授权决策。
+
+**English summary:** Publish the minimal signed directory only to paired peers or shared rooms. Receivers register the remote user before its agents and address agents by Hub-scoped stable IDs.
+
 ## 5. P2P 发现
 
 ### mDNS 广播
@@ -246,8 +323,8 @@ const service = bonjour.publish({
   port: 3212,           // P2P 监听端口 (独立于 3210)
   txt: {
     hubId,
-    displayName,
-    version: "1.0",
+    protocol: "2",
+    // displayName 仅在用户明确允许 LAN 可见时发送；默认不带 User/Agent 信息。
   },
 });
 
@@ -330,8 +407,8 @@ Relay Server
 2. 获取 `roomId`
 3. 通过 `POST /api/rooms/:id/invite` 邀请 Hub B、Hub C
 4. Relay 通知被邀请的 Hub
-5. 各 Hub 本地创建 `type: "group"` 会话
-6. 本地 `conversation_agents` 映射记录参与的 Agent
+5. 各 Hub 本地创建 `type: "cross_hub"` 会话并保存 `relayRoomId`
+6. 本地 `conversation_agents` 记录 Agent、ownerId 以及 Owner/Agent/Hub 身份快照
 
 ### 消息路由
 
@@ -339,6 +416,7 @@ Relay Server
 - **Relay** → 查询房间成员 → fan-out 给所有在线成员
 - **离线成员** → 存入 offline store，上线后推送
 - **P2P 群聊** → 发送方逐个 unicast 给局域网内的成员
+- **应用层目标** → 有 `@` 时只投递目标 Agent；无 `@` 时只投递会话主 Agent，只有显式广播才让各 Hub 扇出给多个 Agent
 
 ## 8. 安全
 
@@ -347,13 +425,28 @@ Relay Server
 | 传输层 | WSS (TLS) 用于 Relay 连接 |
 | 消息层 | End-to-End 加密 (libsodium crypto_box) |
 | 身份层 | Ed25519 签名验证 |
+| 用户绑定 | UserHubBinding 双签名；User/Hub 公钥变化必须重新配对 |
+| 调用授权 | own=`auto`，trusted remote=`confirm`，unknown/stale=`deny`；Relay JWT 不授予 Agent 权限 |
 | 防重放 | nonce + 5 分钟时间窗口 |
 | 防篡改 | envelope signature 覆盖所有字段 |
 | Relay 隔离 | Relay 只看到 ciphertext + 元数据 |
 | 速率限制 | Relay 限制每 Hub 100 msg/s |
 | 注册控制 | 可选 invite code 防止滥用 |
 
+隐私边界：E2E 加密保护 User/Agent 目录与正文，但 Relay 仍可看到 Hub ID、源/目标或 Room、时间、密文大小、在线状态和 IP。若 threat model 不接受这些元数据，必须使用自托管 Relay、P2P 或额外的流量填充/匿名网络；产品不得宣称“Relay 看不到任何信息”。
+
 ## 9. 任务拆解
+
+### Phase 0: Multi-user Identity（新增，先于远程 Agent 可用性）
+
+| ID | 标题 | 描述 | 依赖 | 优先级 |
+|:---|------|------|------|:---:|
+| MU-01 | User identity | User key、UserHubBinding、users 表与现有 Agent owner 回填 | — | 🔴 P0 |
+| MU-02 | Payload v2 | `fromUserId/fromUserName/toUserId`、兼容解析、签名验证 | MU-01 | 🔴 P0 |
+| MU-03 | Signed directory | visibility 过滤、announce/request/revoke、版本与过期 | MU-01, MU-02 | 🔴 P0 |
+| MU-04 | Remote registration | 事务性注册 remote User + Agent、冲突寻址、撤销与 stale | MU-03 | 🔴 P0 |
+| MU-05 | Trust & permission | 配对指纹、Agent/会话策略、审批和审计 | MU-01, MU-04 | 🔴 P0 |
+| MU-06 | Owner-aware UI/API | Owner 分组、`Owner / Agent` 显示、能力与状态查询 | MU-04 | 🟡 P1 |
 
 ### Phase 1: Relay Server MVP
 
@@ -479,6 +572,21 @@ export default {
 
 ## 12. 数据流示例
 
+### Hub 上线与远程 Agent 注册
+
+```text
+Hub A 上线并完成 Relay/P2P Hub 认证
+  → 向已配对 Hub B 发送 directory_request
+  → Hub B 按 A 的 trust/room 范围过滤本机 Agent
+  → User B 签名 DirectoryManifest，Hub B 加密并签名 envelope
+  → Hub A 验证 Hub B → UserHubBinding → Directory signature
+  → BEGIN: upsert remote User B → upsert B 的可见 Agent → COMMIT
+  → UI/API 出现 “User B / Gemini CLI”，状态来自 manifest
+  → 后续 revoke 或 manifest 过期：停止新调用，历史身份快照仍保留
+```
+
+任何一步验证失败都不得创建半条 remote Agent 记录；只记录不含正文和目录详情的安全审计事件。
+
 ### 跨 Hub 直接消息
 
 ```
@@ -598,7 +706,7 @@ interface HubEnvelope {
 | 位置 | 修订内容 |
 |------|---------|
 | §2 Hub ID | 用完整公钥 hex 做 ID，显示时截断前 8 位 |
-| §5 mDNS TXT | 只带 Hub ID + displayName，不带公钥（公钥通过 Relay 获取） |
+| §5 mDNS TXT | 默认只带 Hub ID + protocol，不带 User/Agent 信息；Hub 公钥通过 Relay/配对获取，displayName 仅显式允许时广播 |
 | §4 REST API | 新增 `DELETE /api/hubs/:id` — Hub 注销，清除公钥和离线消息 |
 | §8 速率限制 | 分级：direct 50/s, group 20/s, broadcast 5/s |
 | §4 离线 TTL | 做成环境变量 `RELAY_OFFLINE_TTL_DAYS`，默认 7 天 |

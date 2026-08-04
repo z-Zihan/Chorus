@@ -295,19 +295,22 @@ export class AgentRuntime {
         this.config.history,
       );
       const conversation = this.repository.getConversation(reply.conversationId);
+      const a2aMode = conversation?.a2aMode ?? "mention";
       const availableAgentIds = conversation?.agentIds ?? [adapter.id];
       const otherAgentIds = availableAgentIds.filter((id) => id !== adapter.id);
+      const adapterAvailableAgentIds = a2aMode === "off" ? [adapter.id] : availableAgentIds;
       let augmentedContent = content;
-      if (conversation?.type === "group" && otherAgentIds.length > 0) {
+      if (a2aMode === "mention" && conversation?.type === "group" && otherAgentIds.length > 0) {
         const agentNames = otherAgentIds.map((id) => this.registry.get(id)?.name ?? id);
         augmentedContent = `${content}\n\n--- System: You are in a group chat with: [${agentNames.join(", ")}]. If you want to ask another agent something, mention them with @AgentName in your response.`;
       }
       for await (const chunk of adapter.handleMessage(augmentedContent, {
         conversationId: reply.conversationId,
         history,
-        mentionedAgents,
-        availableAgentIds,
-        a2aBus: this.a2aBus,
+        a2aMode,
+        mentionedAgents: a2aMode === "off" ? [] : mentionedAgents,
+        availableAgentIds: adapterAvailableAgentIds,
+        a2aBus: a2aMode === "off" ? undefined : this.a2aBus,
         callStack: [adapter.id],
         parentMessageId: reply.id,
         signal: controller.signal,
@@ -319,7 +322,7 @@ export class AgentRuntime {
       }
       this.finish(reply, output, "done", chunks, startedAt, adapter.id);
       this.metrics.recordInvocation(adapter.id, Date.now() - startedAt, true);
-      if (conversation?.type === "group") {
+      if (a2aMode === "mention" && conversation?.type === "group") {
         agentMessagesToRoute = findAgentMessages(
           output,
           otherAgentIds.map((id) => ({ id, name: this.registry.get(id)?.name ?? id })),

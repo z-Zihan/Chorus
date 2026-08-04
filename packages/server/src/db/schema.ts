@@ -28,6 +28,7 @@ export const conversations = sqliteTable("conversations", {
   id: text("id").primaryKey(),
   title: text("title"),
   type: text("type").notNull().default("dm"),
+  a2aMode: text("a2a_mode").notNull().default("mention"),
   pinned: integer("pinned", { mode: "boolean" }).notNull().default(false),
   archived: integer("archived", { mode: "boolean" }).notNull().default(false),
   metadata: text("metadata"),
@@ -38,8 +39,12 @@ export const conversations = sqliteTable("conversations", {
 export const conversationAgents = sqliteTable(
   "conversation_agents",
   {
-    conversationId: text("conversation_id").notNull().references(() => conversations.id),
-    agentId: text("agent_id").notNull().references(() => agents.id),
+    conversationId: text("conversation_id")
+      .notNull()
+      .references(() => conversations.id),
+    agentId: text("agent_id")
+      .notNull()
+      .references(() => agents.id),
     position: integer("position").notNull().default(0),
   },
   (table) => ({ pk: primaryKey({ columns: [table.conversationId, table.agentId] }) }),
@@ -48,8 +53,12 @@ export const conversationAgents = sqliteTable(
 export const agentFriends = sqliteTable(
   "agent_friends",
   {
-    agentId: text("agent_id").notNull().references(() => agents.id),
-    friendId: text("friend_id").notNull().references(() => agents.id),
+    agentId: text("agent_id")
+      .notNull()
+      .references(() => agents.id),
+    friendId: text("friend_id")
+      .notNull()
+      .references(() => agents.id),
     createdAt: integer("created_at").notNull(),
   },
   (table) => ({ pk: primaryKey({ columns: [table.agentId, table.friendId] }) }),
@@ -57,8 +66,12 @@ export const agentFriends = sqliteTable(
 
 export const scheduledTasks = sqliteTable("scheduled_tasks", {
   id: text("id").primaryKey(),
-  agentId: text("agent_id").notNull().references(() => agents.id),
-  conversationId: text("conversation_id").notNull().references(() => conversations.id),
+  agentId: text("agent_id")
+    .notNull()
+    .references(() => agents.id),
+  conversationId: text("conversation_id")
+    .notNull()
+    .references(() => conversations.id),
   cronExpression: text("cron_expression").notNull(),
   prompt: text("prompt").notNull(),
   enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
@@ -69,7 +82,9 @@ export const messages = sqliteTable(
   "messages",
   {
     id: text("id").primaryKey(),
-    conversationId: text("conversation_id").notNull().references(() => conversations.id),
+    conversationId: text("conversation_id")
+      .notNull()
+      .references(() => conversations.id),
     fromType: text("from_type").notNull(),
     fromId: text("from_id").notNull(),
     toType: text("to_type"),

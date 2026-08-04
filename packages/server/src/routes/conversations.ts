@@ -5,7 +5,14 @@ import type { AgentRegistry } from "../agent/registry.js";
 import type { Repository } from "../db/repository.js";
 
 const createConversationSchema = z.object({
-  title: z.string().trim().min(1).max(120).nullish().transform((value) => value ?? undefined).optional(),
+  title: z
+    .string()
+    .trim()
+    .min(1)
+    .max(120)
+    .nullish()
+    .transform((value) => value ?? undefined)
+    .optional(),
   type: z.enum(["dm", "channel", "group"]).default("dm"),
   agentIds: z.array(z.string().trim().min(1)).max(20).optional(),
   agentId: z.string().trim().min(1).optional(),
@@ -22,17 +29,25 @@ const messageQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(500).default(200),
   before: z.coerce.number().int().positive().optional(),
 });
-const updateConversationSchema = z.object({
-  title: z.string().trim().min(1).max(120).optional(),
-  pinned: z.boolean().optional(),
-  archived: z.boolean().optional(),
-}).refine((value) => Object.keys(value).length > 0, "At least one field is required");
+const updateConversationSchema = z
+  .object({
+    title: z.string().trim().min(1).max(120).optional(),
+    pinned: z.boolean().optional(),
+    archived: z.boolean().optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, "At least one field is required");
 const conversationQuerySchema = z.object({
-  archived: z.enum(["true", "false"]).optional().transform((value) => value === "true"),
+  archived: z
+    .enum(["true", "false"])
+    .optional()
+    .transform((value) => value === "true"),
   type: z.enum(["dm", "channel", "group"]).optional(),
 });
 const a2aPermissionSchema = z.object({
   mode: z.enum(["auto", "confirm", "deny"]),
+});
+const a2aModeSchema = z.object({
+  mode: z.enum(["mention", "call", "off"]),
 });
 const a2aConfirmationSchema = z.object({
   threadId: z.string().trim().min(1),
@@ -61,29 +76,54 @@ export function registerConversationRoutes(
     return conversation;
   });
 
-  app.get<{ Params: { id: string } }>("/api/conversations/:id/a2a-permission", async (request, reply) => {
-    if (!repository.getConversation(request.params.id)) {
-      return reply.code(404).send({ error: "Conversation not found" });
-    }
-    return { mode: runtime.getA2APermission(request.params.id) };
-  });
+  app.get<{ Params: { id: string } }>(
+    "/api/conversations/:id/a2a-permission",
+    async (request, reply) => {
+      if (!repository.getConversation(request.params.id)) {
+        return reply.code(404).send({ error: "Conversation not found" });
+      }
+      return { mode: runtime.getA2APermission(request.params.id) };
+    },
+  );
 
-  app.patch<{ Params: { id: string } }>("/api/conversations/:id/a2a-permission", async (request, reply) => {
-    if (!repository.getConversation(request.params.id)) {
-      return reply.code(404).send({ error: "Conversation not found" });
-    }
-    const parsed = a2aPermissionSchema.safeParse(request.body);
-    if (!parsed.success) {
-      return reply.code(400).send({ error: "Invalid A2A permission", issues: parsed.error.flatten() });
-    }
-    runtime.setA2APermission(request.params.id, parsed.data.mode);
-    return { mode: parsed.data.mode };
-  });
+  app.patch<{ Params: { id: string } }>(
+    "/api/conversations/:id/a2a-permission",
+    async (request, reply) => {
+      if (!repository.getConversation(request.params.id)) {
+        return reply.code(404).send({ error: "Conversation not found" });
+      }
+      const parsed = a2aPermissionSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply
+          .code(400)
+          .send({ error: "Invalid A2A permission", issues: parsed.error.flatten() });
+      }
+      runtime.setA2APermission(request.params.id, parsed.data.mode);
+      return { mode: parsed.data.mode };
+    },
+  );
+
+  app.patch<{ Params: { id: string } }>(
+    "/api/conversations/:id/a2a-mode",
+    async (request, reply) => {
+      const parsed = a2aModeSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send({ error: "Invalid A2A mode", issues: parsed.error.flatten() });
+      }
+      const conversation = repository.updateConversation(request.params.id, {
+        a2aMode: parsed.data.mode,
+      });
+      if (!conversation) return reply.code(404).send({ error: "Conversation not found" });
+      return { mode: conversation.a2aMode };
+    },
+  );
 
   app.post("/api/a2a/confirm", async (request, reply) => {
     const parsed = a2aConfirmationSchema.safeParse(request.body);
     if (!parsed.success) {
-      return reply.code(400).send({ error: "Invalid A2A confirmation", issues: parsed.error.flatten() });
+      return reply
+        .code(400)
+        .send({ error: "Invalid A2A confirmation", issues: parsed.error.flatten() });
     }
     if (!runtime.confirmA2A(parsed.data.threadId, parsed.data.approved)) {
       return reply.code(404).send({ error: "A2A confirmation not found or expired" });
@@ -93,10 +133,18 @@ export function registerConversationRoutes(
 
   app.post("/api/conversations", async (req, reply) => {
     const parsed = createConversationSchema.safeParse(req.body ?? {});
-    if (!parsed.success) return reply.code(400).send({ error: "Invalid conversation", issues: parsed.error.flatten() });
-    const requestedAgentIds = parsed.data.agentIds ?? (parsed.data.agentId ? [parsed.data.agentId] : undefined);
+    if (!parsed.success)
+      return reply
+        .code(400)
+        .send({ error: "Invalid conversation", issues: parsed.error.flatten() });
+    const requestedAgentIds =
+      parsed.data.agentIds ?? (parsed.data.agentId ? [parsed.data.agentId] : undefined);
     const fallbackAgentId = registry.getOnlineAgents()[0]?.id;
-    const agentIds = [...new Set(requestedAgentIds?.length ? requestedAgentIds : fallbackAgentId ? [fallbackAgentId] : [])];
+    const agentIds = [
+      ...new Set(
+        requestedAgentIds?.length ? requestedAgentIds : fallbackAgentId ? [fallbackAgentId] : [],
+      ),
+    ];
     if (agentIds.length === 0) return reply.code(409).send({ error: "NO_AGENT_AVAILABLE" });
     if (agentIds.some((agentId) => !registry.get(agentId))) {
       return reply.code(400).send({ error: "Agent not found" });
@@ -152,7 +200,9 @@ export function registerConversationRoutes(
   app.delete<{ Params: { id: string; agentId: string } }>(
     "/api/conversations/:id/members/:agentId",
     async (req, reply) => {
-      const conversation = repository.removeAgentsFromConversation(req.params.id, [req.params.agentId]);
+      const conversation = repository.removeAgentsFromConversation(req.params.id, [
+        req.params.agentId,
+      ]);
       if (!conversation) return reply.code(404).send({ error: "Conversation not found" });
       return conversation;
     },
@@ -161,7 +211,10 @@ export function registerConversationRoutes(
   app.delete<{ Params: { id: string; agentId: string } }>(
     "/api/conversations/:id/agents/:agentId",
     async (req, reply) => {
-      const conversation = repository.removeAgentFromConversation(req.params.id, req.params.agentId);
+      const conversation = repository.removeAgentFromConversation(
+        req.params.id,
+        req.params.agentId,
+      );
       if (!conversation) return reply.code(404).send({ error: "Conversation not found" });
       return conversation;
     },
@@ -176,7 +229,8 @@ export function registerConversationRoutes(
   app.get<{ Params: { id: string }; Querystring: { limit?: string; before?: string } }>(
     "/api/conversations/:id/messages",
     async (req, reply) => {
-      if (!repository.getConversation(req.params.id)) return reply.code(404).send({ error: "Conversation not found" });
+      if (!repository.getConversation(req.params.id))
+        return reply.code(404).send({ error: "Conversation not found" });
       const parsed = messageQuerySchema.safeParse(req.query);
       if (!parsed.success) return reply.code(400).send({ error: "Invalid query" });
       return repository.listMessages(req.params.id, parsed.data.limit, parsed.data.before);
@@ -184,9 +238,11 @@ export function registerConversationRoutes(
   );
 
   app.post<{ Params: { id: string } }>("/api/conversations/:id/messages", async (req, reply) => {
-    if (!repository.getConversation(req.params.id)) return reply.code(404).send({ error: "Conversation not found" });
+    if (!repository.getConversation(req.params.id))
+      return reply.code(404).send({ error: "Conversation not found" });
     const parsed = messageSchema.safeParse(req.body);
-    if (!parsed.success) return reply.code(400).send({ error: "Invalid message", issues: parsed.error.flatten() });
+    if (!parsed.success)
+      return reply.code(400).send({ error: "Invalid message", issues: parsed.error.flatten() });
     await runtime.handleUserMessage(
       req.params.id,
       parsed.data.content,

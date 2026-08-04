@@ -36,6 +36,13 @@
       "when": 1785687799662,
       "tag": "0004_fast_swordsman",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1785823539588,
+      "tag": "0005_happy_karnak",
+      "breakpoints": true
     }
   ]
 }

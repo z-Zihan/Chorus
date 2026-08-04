@@ -1,9 +1,10 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { constants } from "node:fs";
 import { access } from "node:fs/promises";
 import { delimiter, isAbsolute, resolve } from "node:path";
 import type { ConversationContext, StreamChunk } from "@agentlink/shared";
-import { BaseAdapter } from "../adapter";
+import { BaseAdapter, messageFromError } from "../adapter";
 
 type CliInputMode = "stdin" | "argument";
 type CliOutputMode = "jsonl" | "codex-json" | "plain" | "json";
@@ -25,6 +26,19 @@ interface ProcessResult {
   stderr: string;
   error?: Error;
 }
+
+interface PromptA2ACall {
+  targetAgentId: string;
+  message: string;
+}
+
+interface PromptA2AResponse extends PromptA2ACall {
+  output: string;
+  success: boolean;
+}
+
+const A2A_CALL_PATTERN = /\[A2A_CALL:\s*([^:\]\r\n]+?)\s*:\s*([\s\S]*?)\]/gu;
+const MAX_A2A_ROUNDS = 3;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -260,8 +274,58 @@ export class CliAdapter extends BaseAdapter {
 
   async *handleMessage(message: string, context: ConversationContext): AsyncGenerator<StreamChunk> {
     const cfg = this.config as unknown as CliAdapterConfig;
+    const a2aMode = context.a2aMode ?? "mention";
+
+    if (a2aMode === "call") {
+      yield* this.handleMessageWithA2ACall(message, context, cfg);
+      return;
+    }
+
     yield* this.runCli(message, context, cfg, true);
     yield { type: "done", content: "" };
+  }
+
+  private async *handleMessageWithA2ACall(
+    message: string,
+    context: ConversationContext,
+    cfg: CliAdapterConfig,
+  ): AsyncGenerator<StreamChunk> {
+    const availableAgentIds = [...new Set(context.availableAgentIds ?? [])];
+    const callableAgentIds = availableAgentIds.filter((agentId) => agentId !== this.id);
+    const promptA2AEnabled =
+      cfg.a2aEnabled !== false && availableAgentIds.length > 1 && callableAgentIds.length > 0;
+
+    if (!promptA2AEnabled) {
+      yield* this.runCli(message, context, cfg, true);
+      yield { type: "done", content: "" };
+      return;
+    }
+
+    const systemPrompt = buildA2ASystemPrompt(callableAgentIds);
+    let prompt = `${systemPrompt}\n\n${message}`;
+    let a2aRounds = 0;
+
+    while (true) {
+      const output = yield* this.runCli(prompt, context, cfg, false);
+      const calls = parseA2ACalls(output);
+      const visibleOutput = stripA2ACalls(output);
+      if (visibleOutput.trim()) yield { type: "text", content: visibleOutput };
+
+      if (calls.length === 0) {
+        yield { type: "done", content: "" };
+        return;
+      }
+      if (a2aRounds >= MAX_A2A_ROUNDS) {
+        throw new Error(`CLI exceeded the maximum of ${MAX_A2A_ROUNDS} A2A rounds`);
+      }
+
+      const responses: PromptA2AResponse[] = [];
+      for (const call of calls) {
+        responses.push(yield* this.executeA2ACall(call, callableAgentIds, context));
+      }
+      a2aRounds += 1;
+      prompt = buildA2AFollowUpPrompt(systemPrompt, message, visibleOutput, responses);
+    }
   }
 
   /**
@@ -284,6 +348,81 @@ Request:
 ${message}`;
     yield* this.runCli(augmentedMessage, context, cfg, true);
     yield { type: "done", content: "" };
+  }
+
+  private async *executeA2ACall(
+    call: PromptA2ACall,
+    callableAgentIds: string[],
+    context: ConversationContext,
+  ): AsyncGenerator<StreamChunk, PromptA2AResponse> {
+    const threadId = randomUUID();
+    let callStarted = false;
+
+    try {
+      if (!callableAgentIds.includes(call.targetAgentId)) {
+        throw new Error(`Agent ${call.targetAgentId} is not available in this conversation`);
+      }
+      if (!context.a2aBus) throw new Error("A2A bus is unavailable");
+
+      callStarted = true;
+      yield {
+        type: "tool_call",
+        content: call.message,
+        threadId,
+        sourceAgentId: this.id,
+        metadata: { to: call.targetAgentId, request: call.message },
+      };
+
+      let output = "";
+      let failed = false;
+      for await (const chunk of context.a2aBus.call(this.id, call.targetAgentId, call.message, {
+        ...context,
+        a2aThreadId: threadId,
+      })) {
+        if (chunk.type === "text" || chunk.type === "task_step" || chunk.type === "error") {
+          output += chunk.content;
+        }
+        if (chunk.type === "error") failed = true;
+        if (failed && chunk.type === "done") continue;
+        yield {
+          type: "a2a_response",
+          content: chunk.content,
+          threadId,
+          sourceAgentId: call.targetAgentId,
+          metadata: {
+            ...chunk.metadata,
+            chunkType: chunk.type,
+            status: chunk.type === "done" ? "done" : chunk.type === "error" ? "error" : "streaming",
+          },
+        };
+      }
+
+      return {
+        ...call,
+        output:
+          output || (failed ? "Agent call failed" : "Agent completed without a text response"),
+        success: !failed,
+      };
+    } catch (error) {
+      const detail = messageFromError(error);
+      if (!callStarted) {
+        yield {
+          type: "tool_call",
+          content: call.message || detail,
+          threadId,
+          sourceAgentId: this.id,
+          metadata: { to: call.targetAgentId || "unknown", request: call.message || detail },
+        };
+      }
+      yield {
+        type: "a2a_response",
+        content: detail,
+        threadId,
+        sourceAgentId: call.targetAgentId || "unknown",
+        metadata: { chunkType: "error", status: "error" },
+      };
+      return { ...call, output: detail, success: false };
+    }
   }
 
   private async *runCli(
@@ -450,6 +589,54 @@ ${message}`;
       }, 3000);
     }
   }
+}
+
+function buildA2ASystemPrompt(callableAgentIds: string[]): string {
+  return [
+    `You are in a multi-agent workspace. Other available agents: [${callableAgentIds.join(", ")}].`,
+    "If you need help from another agent, include this exact format in your response:",
+    "[A2A_CALL: target_agent_id: your_message_to_that_agent]",
+    "You can make multiple A2A calls. After each call, wait for the response before continuing.",
+  ].join("\n");
+}
+
+function parseA2ACalls(output: string): PromptA2ACall[] {
+  A2A_CALL_PATTERN.lastIndex = 0;
+  return [...output.matchAll(A2A_CALL_PATTERN)]
+    .map((match) => ({
+      targetAgentId: (match[1] ?? "").trim(),
+      message: (match[2] ?? "").trim(),
+    }))
+    .filter((call) => call.targetAgentId && call.message);
+}
+
+function stripA2ACalls(output: string): string {
+  A2A_CALL_PATTERN.lastIndex = 0;
+  return output.replace(A2A_CALL_PATTERN, "");
+}
+
+function buildA2AFollowUpPrompt(
+  systemPrompt: string,
+  originalMessage: string,
+  previousResponse: string,
+  responses: PromptA2AResponse[],
+): string {
+  const responseText = responses
+    .map((response) =>
+      [
+        `[Response from ${response.targetAgentId}; ${response.success ? "success" : "error"}]`,
+        response.output,
+      ].join("\n"),
+    )
+    .join("\n\n");
+
+  return [
+    systemPrompt,
+    `Original user request:\n${originalMessage}`,
+    `Your previous response:\n${previousResponse || "(No user-visible text.)"}`,
+    `Responses from the agents you called:\n${responseText}`,
+    "Continue answering the original user request using these responses.",
+  ].join("\n\n");
 }
 
 function terminate(child: ChildProcess): void {

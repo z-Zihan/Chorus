@@ -1,4 +1,5 @@
 import type { Message, StreamChunk } from "./message";
+import type { A2AMode } from "./conversation";
 
 export type AgentStatus = "online" | "offline" | "busy" | "error";
 export type AgentType = "openai" | "openclaw" | "dify" | "cli" | "mock" | "custom" | "langchain";
@@ -50,6 +51,7 @@ export interface A2ABusLike {
 export interface ConversationContext {
   conversationId: string;
   history: Message[];
+  a2aMode?: A2AMode;
   mentionedAgents?: string[];
   availableAgentIds?: string[];
   a2aBus?: A2ABusLike;

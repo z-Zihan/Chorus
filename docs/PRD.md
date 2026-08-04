@@ -1,14 +1,14 @@
 # AgentLink 产品需求文档（PRD）
 
-> 版本：v2.0<br>
-> 日期：2026-08-01<br>
-> 产品阶段：已实现零配置 CLI 驾驶舱 + 多 Agent 协作 + 跨设备通信
+> 版本：v2.1<br>
+> 日期：2026-08-04<br>
+> 产品阶段：已实现零配置 CLI 驾驶舱 + 多 Agent 协作 + 跨设备传输基础；多用户身份与远程目录进入设计落地阶段
 
 ## 1. 产品定义
 
 ### 1.1 一句话定义
 
-AgentLink 是一个本地优先的 AI CLI 即时通讯工作台：自动发现并管理本机 Agent，让用户在统一界面中聊天、整理历史，并让多个 Agent 在群聊中协作。
+AgentLink 是一个本地优先的 AI CLI 即时通讯工作台：自动发现并管理属于用户的本机与远程 Agent，让用户在统一界面中聊天、整理历史，并让多个用户的 Agent 安全协作。
 
 ### 1.2 产品判断
 
@@ -23,6 +23,8 @@ AgentLink 是一个本地优先的 AI CLI 即时通讯工作台：自动发现�
 | 多个 AI CLI 入口分散 | 每个工具有不同命令、历史和输出格式 | 一个可视化入口统一发现、聊天和管理 |
 | 安装与接入门槛高 | 用户要查命令、写配置、理解 Adapter | 像安装应用一样浏览、安装、验证和卸载 Agent |
 | Agent 之间彼此隔离 | 人工复制粘贴上下文，协作过程不可见 | 多 Agent 群聊与可展开的 A2A 调用链 |
+| Agent 缺少所有者身份 | 只知道 Hub/Agent ID，无法判断“谁的 Agent” | User、Hub、Agent 三层身份和可验证的 owner 信息 |
+| 跨设备目录不可用 | Hub 在线也不知道对端有哪些 Agent | 经授权的 User/Agent 目录广播、状态同步和离线投递 |
 | 单 CLI 长期使用体验弱 | 历史难管理、状态与错误不直观 | 即使只有一个 Agent，也有完整的会话与配置工作台 |
 | 首次使用认知负担高 | PATH、登录、参数、模型、配置都要用户理解 | 打开即检测，问题可解释，下一步唯一且明确 |
 
@@ -88,6 +90,21 @@ AgentLink 提供可信的本地 Agent 目录，用户可以从 UI 添加已检�
 
 验收标准：首启只有一个主任务；所有空状态可恢复；高级配置不会干扰默认路径。
 
+### 2.6 多用户与跨 Hub 协作 / Multi-user & Cross-hub Collaboration
+
+一个 User 可以拥有多个 Agent；Hub 表示承载和路由这些 Agent 的设备端点，而不是人的身份。用户应始终能看出消息来自“谁的哪个 Agent”，并在远程调用发生前知道信息暴露范围和授权策略。
+
+用户故事：
+
+- 作为拥有多个 CLI 的用户，我能在“我的 Agent”下统一查看本机 Agent，并按用途选择，而不是把每个 CLI 当成独立的人。
+- 作为团队成员，我能发现已配对用户允许公开的 Agent、能力和在线状态，并邀请其中一个 Agent 进入私聊或跨 Hub 群聊。
+- 作为 Agent 所有者，我能分别控制个人资料可见性、Agent 可发现性和入站调用权限。
+- 作为消息接收者，我看到 `小明 / Gemini CLI`，而不是无法辨认的裸 `gemini-cli` ID。
+
+验收标准：User、Hub、Agent 关系可验证；远程目录可增量同步和撤销；同名 Agent 不会误路由；默认不向未信任 Hub 暴露 Agent 清单或消息正文。
+
+**English summary:** One user owns many agents; a Hub is a device/routing identity. Remote discovery is consent-based, owner-aware, revocable, and collision-safe.
+
 ## 3. 目标用户
 
 ### 3.1 多 CLI 独立开发者（核心 Persona）
@@ -122,6 +139,7 @@ AgentLink 提供可信的本地 Agent 目录，用户可以从 UI 添加已检�
 3. 当我需要多个 Agent 协作时，我想在群聊里分配任务并看懂过程，而不是人工搬运上下文。
 4. 当我回到过去的工作时，我想快速找到、整理和继续会话。
 5. 当 Agent 不工作时，我想知道是未安装、未登录、版本不兼容还是运行失败，并立即修复。
+6. 当我与其他用户协作时，我想按“用户 / Agent”定位目标，并确认对方身份、能力、在线状态和权限边界。
 
 ## 5. 用户旅程
 
@@ -176,6 +194,17 @@ AgentLink 提供可信的本地 Agent 目录，用户可以从 UI 添加已检�
 → 折叠查看 A2A 过程 → 取消、重试或继续任务
 ```
 
+### 5.5 跨用户协作流程 / Cross-user Journey
+
+```text
+启用 Hub → 创建/选择本机 User 身份 → 与对方核验指纹或接受邀请
+→ 双方按隐私策略交换 User/Agent 目录 → 按“Owner / Agent”选择目标
+→ 创建远程 DM 或 cross_hub 群聊 → 检查 auto/confirm/deny
+→ 在线实时投递；离线则显示 queued、过期时间和最终投递状态
+```
+
+失败必须可解释：未建立信任、目标未公开、目标离线、等待所有者确认、消息过期分别使用不同状态，不统一显示为“发送失败”。
+
 ## 6. 当前体验审计
 
 | 价值主张 | 状态 | 产品结论 |
@@ -214,8 +243,9 @@ AgentLink 提供可信的本地 Agent 目录，用户可以从 UI 添加已检�
 
 ### 7.3 P2：规模化与生态
 
-- 桌面 Hub Client 接入现有 Relay Server。
-- P2P/mDNS、跨设备离线消息和端到端加密。
+- User 实体、Agent owner 归属和历史身份快照。
+- 桌面 Hub Client 通过加密目录声明发现远程 User/Agent。
+- P2P/mDNS、跨设备离线消息、端到端加密和跨 Hub 群聊。
 - 第三方 Catalog、插件签名与发布流程。
 - MCP、Google A2A 等标准协议兼容。
 - 团队策略、审计和多用户管理。
@@ -268,6 +298,32 @@ i18n、主题、动画、埋点供应商、更多 UI 基础组件不是当前发
 - 每条消息展示真实发送者；A2A 子消息默认折叠。
 - 调用链限制深度、并发和总超时，并支持级联取消。
 
+### 8.5 用户、所有者与命名 / User, Ownership & Naming
+
+- 首次启动创建一个本机 User；不要求云账号。User 与 Hub 分离，Hub 是设备/传输身份。
+- 每个 Agent 必须有 `ownerId`。`ownerType=local` 表示用户显式添加，`remote` 表示从可信远程目录同步，`system` 表示本机自动检测；`system` Agent 仍归本机 User 所有。
+- UI 默认分成“我的 Agent”和按远程 User 分组的目录。会话成员、消息气泡、搜索结果至少显示 Owner 名称、Agent 名称和本地/远程标识。
+- Agent 名称只是显示名，不参与唯一寻址。协议路由使用稳定的 `agentId + homeHubId`；UI 在有冲突时显示 `Owner / Agent`，必要时附 Hub 短指纹。
+- 远程用户或 Agent 被撤销后，历史保留不可变的 Owner/Agent 名称与头像快照，但不得继续显示为在线目录项。
+
+### 8.6 权限、信任与隐私 / Permission, Trust & Privacy
+
+默认策略：
+
+| 对象 | 默认可见/可调用范围 | 用户可配置项 |
+|------|--------------------|--------------|
+| User | 仅显示名、头像和公钥指纹；仅对已配对 Hub | 名称/头像是否对房间成员公开 |
+| Agent | 未配对不可发现；已配对只公开名称、类型、能力摘要、状态 | `private` / `trusted` / `room` / `public` |
+| A2A 调用 | 自有 Agent 可 `auto`；可信远程调用默认 `confirm`；陌生来源 `deny` | 会话级与 Agent 级 `auto` / `confirm` / `deny` |
+| 内容 | 只发送当前消息和明确构造的 ContextPacket | 是否包含文件、路径、历史摘要和工具结果 |
+
+- 信任建立使用邀请/配对码并核验 User 与 Hub 公钥指纹；Relay 登录成功不等于用户之间互信。
+- 权限判断使用签名后的 `fromUserId`、`fromAgentId` 和会话/房间成员关系，不信任可伪造的显示名。
+- Relay 只路由加密信封，但仍能观察 Hub ID、房间、时间、大小和在线状态等元数据；产品必须明确提示这一边界。
+- 目录声明必须带版本、过期时间和撤销机制。隐身、删除 Agent 或取消信任后，不等待缓存自然过期。
+
+**English summary:** Address agents by stable IDs, display them as `Owner / Agent`, default remote calls to confirmation, and disclose only a minimal signed directory to trusted peers.
+
 ## 9. 成功指标
 
 ### 9.1 激活指标
@@ -297,6 +353,8 @@ i18n、主题、动画、埋点供应商、更多 UI 基础组件不是当前发
 | 历史搜索成功率 | 搜索后 60 秒内打开目标会话 ≥ 70% |
 | Agent 安装成功率 | 发起安装后通过健康检查 ≥ 90% |
 | 群聊任务完成率 | 创建群任务后至少一个目标 Agent 成功回复 ≥ 85% |
+| 远程目录一致性 | Agent 上线、下线或撤销后 60 秒内在可信对端收敛 ≥ 99% |
+| 远程误路由率 | 因重名或陈旧目录投递给错误 Agent | 0 |
 
 ### 9.4 隐私指标
 
@@ -333,6 +391,7 @@ i18n、主题、动画、埋点供应商、更多 UI 基础组件不是当前发
 | 已完成 | 用户能安装 Agent、管理长期历史、创建本地群聊 | 已实现 |
 | 已完成 | 多 Agent 协作可控、可取消、可审计 | 已实现 |
 | 已完成 | 团队可跨设备安全协作 | Hub Client、Relay、加密和运维方案完成 |
+| 下一阶段 | 用户能识别并控制“谁的哪个 Agent” | User/owner 迁移、目录发现、权限默认值、身份化 UI 和外部 Agent 协议通过验收 |
 
 ## 13. 开放决策
 
@@ -343,3 +402,5 @@ i18n、主题、动画、埋点供应商、更多 UI 基础组件不是当前发
 3. `needs_auth` 的探测方式，确保不会发出计费请求或污染用户历史。
 4. UI 配置、数据库记录与 `agentlink.config.ts` 冲突时的精确合并规则。
 5. 系统钥匙串落地前，API Agent 是否允许通过 UI 保存密钥；建议默认不开放。
+6. 一个 User 多设备时采用独立 User 签名密钥同步，还是先限制 v1 为一个主 Hub；当前设计按“User 密钥稳定、Hub 密钥可多设备扩展”预留。
+7. `public` Agent 是否允许被 Relay 全局搜索；v1 建议不提供全局目录，只在已配对 Hub 或共同房间内发现。

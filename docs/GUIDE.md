@@ -57,17 +57,23 @@ export default {
 ### 创建群聊
 1. 侧边栏 **群聊** 区域 → 点 **"+"** 创建
 2. 选择至少 2 个 Agent
-3. 输入消息 → 所有在线 Agent 都会收到
+3. 在输入框左侧的 AgentSelector 选择目标 Agent
+4. 输入消息 → 只有选中的 Agent 接收并回复
 
-### @提及路由
-- `@codex 帮我 review` → 只有 Codex 回复
-- 不 @ → 第一个在线 Agent 回复（不广播，避免成本失控）
-- 选择 **"All"** → 显式广播给所有在线 Agent
+### @提及与 Agent 间转发
+- **@mention 是 A2A 提示，不改变路由**：消息只会发送给 AgentSelector 选中的 Agent
+- 选中 Claude Code，输入 `帮我问下 @Codex 这个问题` → CC 收到消息并回复
+- CC 回复中如果包含 `@Codex`，系统自动将 CC 的消息转发给 Codex
+- Codex 收到后独立回复，完整的对话链 `用户 → CC → Codex` 在聊天中可见
+- 不选 Agent 时，默认路由给第一个在线 Agent（不广播）
 
-### Agent 间 A2A 调用
-- **API Agent（OpenAI 等）**：通过 tool-calling 自动调用其他 Agent
-- **CLI Agent（Claude Code 等）**：通过 prompt-based 协议，Agent 输出 `[A2A_CALL: target: message]` 发起调用
-- 调用过程实时可视化，可随时取消
+### Agent 间通信（A2A）机制
+- **群聊 @mention 转发**（主要方式）：Agent 回复中 @了其他 Agent → 自动创建 agent→agent 消息 → 目标 Agent 独立回复。每个 Agent 的回复都是对话中的独立消息
+- **A2A Bus**（编程式调用）：支持 OpenAI tool-calling 格式的 API Agent 可通过函数调用直接调用其他 Agent。有权限控制（auto / confirm / deny 三种模式）
+- **跨设备 A2A**：通过 Relay Server，不同设备上的 Agent 也可以互相通信
+
+### 外部 Agent 接入
+外部 Agent（如 OpenClaw）可通过 AgentLink 的 REST API 发送消息、创建会话、管理 Agent。详见 [Platform Skill 文档](../skills/agentlink-platform/SKILL.md)。
 
 ## 5. 会话管理
 

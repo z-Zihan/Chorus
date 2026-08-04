@@ -400,7 +400,9 @@ type ServerEvent =
   | { type: "pong"; eventId: string };
 ```
 
-## 5. 数据库设计
+## 5. 数据库设计 / Database Design
+
+> 状态说明：以下是多用户目标模型。当前 Drizzle schema 尚未包含 `users` 和 owner 字段，必须通过版本化迁移落地，不能把文档中的目标字段当成现有 API 已返回字段。
 
 ```sql
 -- 启用 WAL 模式（并发读写，避免读写锁）
@@ -409,33 +411,59 @@ PRAGMA journal_mode=WAL;
 -- 启用外键约束
 PRAGMA foreign_keys=ON;
 
--- Agent 注册表
--- 注意: agents.status 不持久化到数据库，只存在于内存 Registry 中。
--- 数据库只存静态配置，运行时状态由 AgentRegistry 在内存中维护。
+-- 人的身份；Hub 是设备/路由端点，不等同于 User。
+CREATE TABLE users (
+  id            TEXT PRIMARY KEY,       -- usr_<SHA-256(user public key)>，全局稳定
+  name          TEXT NOT NULL,
+  avatar        TEXT,
+  hub_id        TEXT NOT NULL,          -- 当前承载/发现该用户的 Hub
+  public_key    TEXT NOT NULL UNIQUE,   -- User Ed25519 公钥，验证目录声明
+  kind          TEXT NOT NULL,          -- 'local' | 'remote'
+  created_at    INTEGER NOT NULL,
+  updated_at    INTEGER NOT NULL,
+  last_seen_at  INTEGER
+);
+
+-- Agent 注册表。status 不持久化，只存在于内存 Registry。
 CREATE TABLE agents (
-  id          TEXT PRIMARY KEY,
-  name        TEXT NOT NULL,
-  description TEXT,
-  avatar      TEXT,
-  type        TEXT NOT NULL,           -- 'openai' | 'openclaw' | 'dify' | 'custom'
-  config      TEXT,                    -- JSON: API key, model, system prompt 等
-  created_at  INTEGER NOT NULL,
-  updated_at  INTEGER NOT NULL
+  id              TEXT PRIMARY KEY,     -- 本地记录 ID；远程记录使用确定性 ID
+  name            TEXT NOT NULL,
+  description     TEXT,
+  avatar          TEXT,
+  type            TEXT NOT NULL,
+  config          TEXT,                 -- 远程 Agent 不保存凭据或可执行配置
+  owner_id        TEXT NOT NULL REFERENCES users(id),
+  owner_type      TEXT NOT NULL,        -- 'local' | 'remote' | 'system'
+  home_hub_id     TEXT NOT NULL,
+  source_agent_id TEXT NOT NULL,        -- 对端 Hub 内原始 Agent ID
+  capabilities    TEXT NOT NULL DEFAULT '[]',
+  visibility      TEXT NOT NULL DEFAULT 'private', -- private|trusted|room|public
+  directory_version INTEGER NOT NULL DEFAULT 0,
+  created_at      INTEGER NOT NULL,
+  updated_at      INTEGER NOT NULL,
+  last_seen_at    INTEGER
 );
 
 -- 会话表
 CREATE TABLE conversations (
   id          TEXT PRIMARY KEY,
   title       TEXT,
-  type        TEXT DEFAULT 'dm',       -- 'dm' | 'channel' | 'group'
+  type        TEXT DEFAULT 'dm',       -- 'dm' | 'group' | 'cross_hub'
+  relay_room_id TEXT,
   created_at  INTEGER NOT NULL,
   updated_at  INTEGER NOT NULL
 );
 
--- 会话-Agent 关联表
+-- 会话成员同时保存 owner/agent 身份快照，保证撤销或重命名后历史仍可解释。
 CREATE TABLE conversation_agents (
   conversation_id TEXT NOT NULL REFERENCES conversations(id),
   agent_id        TEXT NOT NULL REFERENCES agents(id),
+  owner_id        TEXT NOT NULL REFERENCES users(id),
+  agent_name_snapshot TEXT NOT NULL,
+  owner_name_snapshot TEXT NOT NULL,
+  owner_avatar_snapshot TEXT,
+  hub_id_snapshot TEXT NOT NULL,
+  joined_at       INTEGER NOT NULL,
   PRIMARY KEY (conversation_id, agent_id)
 );
 
@@ -459,7 +487,22 @@ CREATE TABLE messages (
 CREATE INDEX idx_messages_conversation ON messages(conversation_id, created_at);
 CREATE INDEX idx_messages_thread ON messages(thread_id) WHERE thread_id IS NOT NULL;
 CREATE INDEX idx_messages_parent ON messages(parent_id) WHERE parent_id IS NOT NULL;
+CREATE INDEX idx_users_hub ON users(hub_id);
+CREATE UNIQUE INDEX idx_agents_wire_identity ON agents(home_hub_id, source_agent_id);
+CREATE INDEX idx_agents_owner ON agents(owner_id, owner_type);
 ```
+
+身份与寻址规则：
+
+- `User` 表示人或组织身份，User 私钥保存在系统钥匙串；`Hub` 表示一台设备上的路由身份，Hub 私钥继续由 Hub identity 模块管理。
+- 自动检测 CLI 的 `ownerType=system` 只表示来源受系统管理；其 `ownerId` 仍指向本机 User。
+- 显示名不唯一。线上寻址使用 `{ homeHubId, sourceAgentId }`，本地远程记录 ID 建议为 `remote_<base64url(sha256(homeHubId + ":" + sourceAgentId))>`。
+- `channel` 自目标 schema 起弃用；迁移时映射为 `group`。远程 DM 仍是 `dm`，只有包含多个 Hub 的群聊使用 `cross_hub`。
+- 第一阶段允许一个 User 只有一个活动 `hub_id`；未来多设备扩展为 `user_hubs(user_id, hub_id, role)`，不改变 User ID。
+
+迁移顺序：创建本机 User → 回填现有 Agent owner（`auto_detected` 为 `system`，其余为 `local`）→ 重建带非空外键的 agents 表 → 扩展会话成员快照 → 把 `channel` 转为 `group`。整个迁移在 SQLite 事务中执行，升级失败保持旧库可恢复。
+
+**English summary:** Users are people, Hubs are device identities, and Agents are owned executors. Wire identity is `(homeHubId, sourceAgentId)`; names are display-only.
 
 ## 6. API 设计
 
@@ -470,6 +513,9 @@ CREATE INDEX idx_messages_parent ON messages(parent_id) WHERE parent_id IS NOT N
 | GET | `/api/agents` | 获取所有 Agent |
 | POST | `/api/agents` | 注册新 Agent |
 | GET | `/api/agents/:id` | 获取 Agent 详情 |
+| GET | `/api/users` | 获取可见 User（目标协议） |
+| GET | `/api/users/:id/agents` | 获取某 User 的可见 Agent（目标协议） |
+| GET | `/api/agents/:id/capabilities` | 获取能力、状态、可见性与寻址信息（目标协议） |
 | PATCH | `/api/agents/:id` | 更新 Agent 配置 |
 | DELETE | `/api/agents/:id` | 删除 Agent |
 | GET | `/api/conversations` | 获取会话列表 |
@@ -477,6 +523,10 @@ CREATE INDEX idx_messages_parent ON messages(parent_id) WHERE parent_id IS NOT N
 | DELETE | `/api/conversations/:id` | 删除会话 |
 | GET | `/api/conversations/:id/messages` | 获取会话消息历史 |
 | POST | `/api/conversations/:id/messages` | 发送消息（非流式） |
+| GET/PATCH | `/api/conversations/:id/a2a-permission` | 查询或设置会话 A2A 模式 |
+| POST | `/api/a2a/confirm` | 批准或拒绝待确认 A2A 调用 |
+| GET | `/api/hub/status` | 获取 Relay/P2P 状态和已知 Hub |
+| GET | `/api/hub/contacts` | 获取当前已知 Hub 联系人；不是完整 Agent 目录 |
 | GET | `/api/health` | 健康检查 |
 
 ### 6.2 WebSocket
@@ -567,13 +617,17 @@ ws.on("message", (data) => {
 
 | 层面 | 方案 |
 |------|------|
-| 认证 | MVP 单用户：user id 固定为 "user"，不启用认证；多用户场景启用 Bearer Token |
+| 认证 | 当前本机 API 可关闭认证；外部进程/非 loopback 访问必须启用 Bearer Token。User 身份与 API client token 分离 |
 | CORS | 仅允许 localhost |
 | 输入校验 | Zod schema 验证所有输入 |
 | API Key 存储 | **当前缺口：** 配置 JSON 会直接存入 SQLite，尚未加密；UI 不应宣称已安全保管。目标是系统钥匙串 + 数据库仅存引用 |
 | SQL 注入 | Drizzle ORM 参数化查询 |
 
-### 7.1 认证策略
+### 7.1 认证策略 / Authentication Strategy
+
+> 下方代码是早期身份映射草案，不代表当前实现，也不应作为多用户方案落地。当前实现已有可选 Bearer Token 校验：启用后保护 `/api/*`（`/api/health` 除外），WebSocket 使用 `?token=` 校验；它只认证“允许访问本机 API 的客户端”，尚未把 token 映射为 User，也没有 scope。
+
+<details><summary>历史草案 / Historical draft</summary>
 
 **MVP 单用户场景（默认）：**
 
@@ -627,9 +681,17 @@ wsServer.on("connection", (ws, req) => {
     ws.close(4001, "Unauthorized");
     return;
   }
-  ws.userId = userId ?? "user";
+ws.userId = userId ?? "user";
 });
 ```
+
+</details>
+
+目标 token 记录为 `{ tokenHash, clientId, userId, scopes, expiresAt }`，至少支持 `agents:read`、`messages:write`、`conversations:write`、`hub:read`。关闭认证只适用于绑定 loopback 的桌面进程；外部 Agent 使用最小 scope，token 只展示一次并存入系统钥匙串，日志、URL、错误消息不得记录明文 token。WebSocket 后续优先使用短期 ticket 或 `Sec-WebSocket-Protocol`，兼容期才接受 query token。
+
+身份校验分三层，不能互相替代：API token 验证本机 API client；Hub signature 验证传输端点；User directory signature 和策略验证远程调用者。Relay 登录成功永远不自动授予 A2A 权限。
+
+**English summary:** API tokens authenticate local API clients; Hub and User signatures authenticate remote senders. Relay authentication alone never grants A2A permission.
 
 ## 8. 配置
 
@@ -1983,35 +2045,71 @@ Agent1 发起 A2A 调用给 Agent2:
 4. 整个调用过程通过 WebSocket 推送给群聊展示
 ```
 
-### 13.5 数据模型扩展
+### 13.5 多用户数据与 Hub 协议 / Multi-user Data & Hub Protocol
 
-```sql
--- 用户表 (新增)
-CREATE TABLE users (
-  id          TEXT PRIMARY KEY,
-  name        TEXT NOT NULL,
-  email       TEXT UNIQUE,
-  avatar      TEXT,
-  created_at  INTEGER NOT NULL
-);
+数据库以 §5 的目标 schema 为准，不再使用含义模糊的 `agents.user_id/device_id` 草案。核心关系为 `users.id → agents.owner_id`，设备路由由 `users.hub_id` 和 `agents.home_hub_id` 表示；未来一个 User 多 Hub 时再引入 `user_hubs` 关联表。
 
--- 设备表 (新增)
-CREATE TABLE devices (
-  id          TEXT PRIMARY KEY,
-  user_id     TEXT NOT NULL REFERENCES users(id),
-  name        TEXT NOT NULL,        -- "子涵的 MacBook Pro"
-  last_seen   INTEGER,
-  created_at  INTEGER NOT NULL
-);
+#### HubPayload v2
 
--- Agent 表扩展 (增加 user_id 和 device_id)
-ALTER TABLE agents ADD COLUMN user_id TEXT REFERENCES users(id);
-ALTER TABLE agents ADD COLUMN device_id TEXT REFERENCES devices(id);
+```typescript
+interface HubPayloadV2 {
+  protocolVersion: 2;
+  messageType:
+    | "chat" | "a2a_call" | "a2a_response"
+    | "agent_status" | "typing"
+    | "directory_request" | "directory_announce" | "directory_revoke"
+    | "delivery_ack";
+  conversationId?: string;
+  messageId: string;
+  content?: string;
 
--- Agent 目录: 用户名 → Agent 映射
--- 查询: 找到 "小明" 的 Agent
--- SELECT a.* FROM agents a JOIN users u ON a.user_id = u.id WHERE u.name = '小明';
+  // 所有业务 payload 都携带签名后可验证的 User 身份。
+  fromUserId: string;
+  fromUserName: string;             // 仅展示，不用于授权
+  toUserId?: string;                // 房间广播/目录控制消息可省略
+  fromAgentId?: string;
+  toAgentId?: string;
+  directory?: DirectoryManifest;
+  metadata?: Record<string, unknown>;
+}
 ```
+
+`fromUserId` 和 User 公钥的绑定来自签名后的目录声明；接收端必须验证 `SHA-256(publicKey)` 与 User ID 一致、声明的 `hubId` 与 envelope.from 一致。`fromUserName` 不参与寻址、去重或权限判断。v1 的 `agentId` 只在兼容读取时解释为 `fromAgentId`，新发送方不得继续产生该字段。
+
+#### User/Agent 目录声明
+
+```typescript
+interface DirectoryManifest {
+  schemaVersion: 1;
+  directoryVersion: number;        // 每次变更单调递增
+  issuedAt: number;
+  expiresAt: number;               // 建议 10 分钟
+  user: {
+    id: string;
+    name: string;
+    avatar?: string;
+    hubId: string;
+    publicKey: string;
+  };
+  agents: Array<{
+    id: string;                     // sourceAgentId，对该 Hub 稳定
+    name: string;
+    description?: string;
+    type: string;
+    capabilities: string[];
+    status: "online" | "busy" | "offline" | "error";
+    visibility: "trusted" | "room" | "public";
+  }>;
+  revokedAgentIds: string[];
+  signature: string;                // User key 对 canonical JSON 签名
+}
+```
+
+发现流程：Hub 建连后先向“已配对 Hub + 共同房间成员”发送 `directory_request`；本端按 visibility 过滤后回复完整 `directory_announce`。后续状态/目录变化发送更高 `directoryVersion` 的增量声明；隐身、删除或解除信任立即发送 `directory_revoke`。接收端事务性 upsert remote User，再以 `(homeHubId, sourceAgentId)` upsert remote Agent；过期声明把状态置为 `offline/stale`，不立即删除历史身份。
+
+会话语义：`dm` 可本地或跨 Hub，但只有一个目标 Agent；`group` 只含本 Hub Agent；`cross_hub` 绑定 `relayRoomId` 且至少包含两个 Hub。成员表保存 Owner/Agent 快照，消息 metadata 同时记录 `fromUserId/fromAgentId/homeHubId`，避免目录后续改名造成历史漂移。
+
+**English summary:** HubPayload v2 carries verifiable user identity. Trusted peers exchange signed, versioned, expiring directory manifests and upsert remote users before remote agents.
 
 ### 13.6 权限与安全
 
@@ -2024,6 +2122,10 @@ ALTER TABLE agents ADD COLUMN device_id TEXT REFERENCES devices(id);
 | Agent 修改代码并 push | ⚙️ 需主人确认（高敏感操作） |
 | Agent 读取本地文件 | ⚙️ 需主人确认（首次） |
 | Agent 跨设备传文件 | ⚙️ 需双方确认 |
+
+权限求值顺序为“API scope → Hub/User 信任 → Agent 可见性 → Agent 入站策略 → 会话 A2A 模式 → 操作级审批”，任一层拒绝即停止。默认值：同一 owner 的本机 Agent 为 `auto`；已配对远程 User 为 `confirm`；陌生或声明过期来源为 `deny`。当前实现的会话级默认 `auto` 只适用于单机兼容模式，多用户迁移必须显式改为上述风险感知默认值。
+
+信任记录至少保存 `remoteUserId`、User 公钥指纹、`hubId`、Hub 公钥指纹、来源（邀请/房间/LAN 配对）、状态（pending/trusted/blocked）和时间戳。公钥变化不得静默覆盖，必须重新核验。
 
 #### 权限配置
 
@@ -2042,6 +2144,8 @@ interface AgentPermission {
   };
 }
 ```
+
+目录可见性和调用权限相互独立：能看见 Agent 不代表能调用，不能调用也不应泄露拒绝原因之外的配置、模型参数、系统提示词、本地路径或凭据。审计日志只记录 ID、决策、策略命中和时间，不记录消息正文。
 
 #### 审批流程
 
@@ -2114,15 +2218,16 @@ function routeMessage(
     return mentionedAgents;
   }
 
-  // 2. 没有 @ → 路由给群聊中所有在线 Agent
-  return conversation.agentIds.filter(id =>
-    registry.getStatus(id) === "online"
-  );
+  // 2. 没有 @ → 只路由给会话主 Agent；广播必须由用户显式选择。
+  return conversation.primaryAgentId
+    ? [conversation.primaryAgentId]
+    : conversation.agentIds.filter(id => registry.getStatus(id) === "online").slice(0, 1);
 }
 
 // 群聊会话结构
 interface GroupConversation extends Conversation {
-  type: "group";
+  type: "group" | "cross_hub";
+  primaryAgentId?: string;
   participantUserIds: string[];   // 群里的用户
   participantAgentIds: string[];  // 群里的 Agent
 }
@@ -2386,6 +2491,6 @@ interface OrchestrationStep {
 
 用户在群聊中发送消息:
   → @某人Agent: 只路由给被@的Agent
-  → 无@: 路由给群内所有在线Agent
+  → 无@: 只路由给群主/主 Agent；用户明确选择“广播”才扇出
   → Agent 回复在群聊中展示
 ```

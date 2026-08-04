@@ -30,6 +30,7 @@ describe("conversation routes", () => {
     expect(response.body).toMatchObject({
       title: "Test conversation",
       type: "dm",
+      a2aMode: "mention",
       agentIds: ["test-agent"],
     });
     expect(response.body.id).toEqual(expect.any(String));
@@ -141,5 +142,88 @@ describe("conversation routes", () => {
       .send({ mode: "sometimes" });
 
     expect(response.status).toBe(400);
+  });
+
+  it("updates and persists the conversation A2A mode", async () => {
+    const created = await request(app.server)
+      .post("/api/conversations")
+      .send({ title: "A2A mode", agentId: "test-agent" });
+    const path = `/api/conversations/${created.body.id}/a2a-mode`;
+
+    const updated = await request(app.server).patch(path).send({ mode: "call" });
+    expect(updated.status).toBe(200);
+    expect(updated.body).toEqual({ mode: "call" });
+
+    const conversations = await request(app.server).get("/api/conversations");
+    expect(conversations.body).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: created.body.id, a2aMode: "call" })]),
+    );
+  });
+
+  it("rejects an invalid conversation A2A mode", async () => {
+    const created = await request(app.server)
+      .post("/api/conversations")
+      .send({ title: "A2A mode", agentId: "test-agent" });
+
+    const response = await request(app.server)
+      .patch(`/api/conversations/${created.body.id}/a2a-mode`)
+      .send({ mode: "sometimes" });
+
+    expect(response.status).toBe(400);
+  });
+
+  it("forwards agent @mentions in mention mode", async () => {
+    const created = await request(app.server)
+      .post("/api/conversations")
+      .send({
+        title: "Mention mode",
+        type: "group",
+        agentIds: ["test-agent", "second-agent"],
+      });
+
+    const response = await request(app.server)
+      .post(`/api/conversations/${created.body.id}/messages`)
+      .send({ content: "request\n@Second Agent please continue" });
+
+    expect(response.status).toBe(201);
+    const messages = await request(app.server).get(
+      `/api/conversations/${created.body.id}/messages`,
+    );
+    const respondingAgentIds = messages.body
+      .filter((message: { fromType: string }) => message.fromType === "agent")
+      .map((message: { fromId: string }) => message.fromId);
+    expect(respondingAgentIds).toEqual(["test-agent", "test-agent", "second-agent"]);
+    const initialReply = messages.body.find(
+      (message: { fromType: string; toType?: string }) =>
+        message.fromType === "agent" && message.toType === "user",
+    );
+    expect(initialReply.content).toContain("You are in a group chat with: [Second Agent]");
+  });
+
+  it("does not forward agent @mentions in off mode", async () => {
+    const created = await request(app.server)
+      .post("/api/conversations")
+      .send({
+        title: "Off mode",
+        type: "group",
+        agentIds: ["test-agent", "second-agent"],
+      });
+    await request(app.server)
+      .patch(`/api/conversations/${created.body.id}/a2a-mode`)
+      .send({ mode: "off" });
+
+    const response = await request(app.server)
+      .post(`/api/conversations/${created.body.id}/messages`)
+      .send({ content: "request\n@Second Agent please continue" });
+
+    expect(response.status).toBe(201);
+    const messages = await request(app.server).get(
+      `/api/conversations/${created.body.id}/messages`,
+    );
+    const respondingAgentIds = messages.body
+      .filter((message: { fromType: string }) => message.fromType === "agent")
+      .map((message: { fromId: string }) => message.fromId);
+    expect(respondingAgentIds).toEqual(["test-agent"]);
+    expect(messages.body.at(-1).content).not.toContain("You are in a group chat with:");
   });
 });
