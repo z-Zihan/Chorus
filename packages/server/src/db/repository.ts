@@ -705,8 +705,16 @@ export class Repository {
     return this.createConversation("New conversation", "dm", [agentId]);
   }
 
-  addAgentToConversation(conversationId: string, agentId: string): Conversation | undefined {
-    return this.addAgentsToConversation(conversationId, [agentId]);
+  addAgentToConversation(
+    conversationId: string,
+    agentIds: string | string[],
+    ownerProofs: Record<string, string> = {},
+  ): Conversation | undefined {
+    return this.addAgentsToConversation(
+      conversationId,
+      Array.isArray(agentIds) ? agentIds : [agentIds],
+      ownerProofs,
+    );
   }
 
   removeAgentFromConversation(conversationId: string, agentId: string): Conversation | undefined {

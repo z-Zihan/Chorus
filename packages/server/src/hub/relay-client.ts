@@ -142,12 +142,17 @@ export class RelayClient {
   }
 
   async getRoomMembersRequest(relayUrl: string, roomId: string): Promise<RoomMember[]> {
+    const room = await this.getRoomRequest(relayUrl, roomId);
+    return room.members;
+  }
+
+  async getRoomRequest(relayUrl: string, roomId: string): Promise<RoomInfo> {
     const room = await this.roomRequest<RoomInfo>(
       relayUrl,
       `/api/rooms/${encodeURIComponent(roomId)}`,
     );
     this.cacheRoomMembers(roomId, room.members);
-    return room.members;
+    return room;
   }
 
   cachePeerPublicKey(hubId: string, publicKey: string): void {

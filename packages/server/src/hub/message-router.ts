@@ -350,7 +350,10 @@ export class HubMessageRouter {
   }
 
   private async handleDirectoryRequest(fromHubId: string, request: HubPayload): Promise<void> {
-    const directory = await this.directoryService.buildSignedLocalDirectory();
+    const directory = await this.directoryService.buildSignedLocalDirectory({
+      trusted: true,
+      sharedRoom: false,
+    });
     if (!directory) {
       logger.warn({ fromHubId }, "Unable to answer directory request without a signed directory");
       return;

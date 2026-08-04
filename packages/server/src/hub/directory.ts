@@ -13,7 +13,7 @@ export interface DirectoryAudience {
   sharedRoom: boolean;
 }
 
-const TRUSTED_AUDIENCE: DirectoryAudience = { trusted: true, sharedRoom: false };
+const PRIVATE_AUDIENCE: DirectoryAudience = { trusted: false, sharedRoom: false };
 
 export class DirectoryService {
   private directoryVersion = 0;
@@ -27,7 +27,7 @@ export class DirectoryService {
   ) {}
 
   /** Build an unsigned directory manifest containing only agents visible to the audience. */
-  buildLocalDirectory(audience: DirectoryAudience = TRUSTED_AUDIENCE): DirectoryManifest | null {
+  buildLocalDirectory(audience: DirectoryAudience = PRIVATE_AUDIENCE): DirectoryManifest | null {
     const localUser = this.repository.getUser("usr_local");
     if (!localUser?.publicKey) return null;
 
@@ -67,7 +67,7 @@ export class DirectoryService {
 
   /** Read the User private key from credential storage and build a signed manifest. */
   async buildSignedLocalDirectory(
-    audience: DirectoryAudience = TRUSTED_AUDIENCE,
+    audience: DirectoryAudience = PRIVATE_AUDIENCE,
   ): Promise<DirectoryManifest | null> {
     const manifest = this.buildLocalDirectory(audience);
     if (!manifest) return null;

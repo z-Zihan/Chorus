@@ -39,7 +39,7 @@ describe("DirectoryService", () => {
     } as unknown as AgentRegistry;
     const service = new DirectoryService(repository, registry, "hub-local");
 
-    const manifest = service.buildLocalDirectory();
+    const manifest = service.buildLocalDirectory({ trusted: true, sharedRoom: false });
 
     expect(manifest).toMatchObject({
       schemaVersion: 1,

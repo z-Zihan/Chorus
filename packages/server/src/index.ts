@@ -174,6 +174,7 @@ async function main(): Promise<void> {
     hubIdentity && relayClient && connectionManager && connectHub
       ? {
           identity: hubIdentity,
+          repository,
           relayClient,
           registry,
           connectionManager,
