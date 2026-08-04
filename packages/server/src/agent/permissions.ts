@@ -1,21 +1,20 @@
+import type { A2APolicy } from "@agentlink/shared";
 import type { Repository } from "../db/repository";
 
-export type A2APermissionMode = "auto" | "confirm" | "deny";
+export type A2APermissionMode = A2APolicy;
 
 export const DEFAULT_A2A_PERMISSION: A2APermissionMode = "auto";
-
-const SETTING_PREFIX = "a2a-permission:";
 
 export class A2APermissions {
   constructor(private readonly repository: Repository) {}
 
   getPermission(conversationId: string): A2APermissionMode {
-    const value = this.repository.getSetting(`${SETTING_PREFIX}${conversationId}`);
+    const value = this.repository.getConversation(conversationId)?.a2aPolicy;
     return isPermissionMode(value) ? value : DEFAULT_A2A_PERMISSION;
   }
 
   setPermission(conversationId: string, mode: A2APermissionMode): void {
-    this.repository.setSetting(`${SETTING_PREFIX}${conversationId}`, mode);
+    this.repository.updateConversation(conversationId, { a2aPolicy: mode });
   }
 }
 

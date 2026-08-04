@@ -57,6 +57,7 @@ export const conversations = sqliteTable("conversations", {
   title: text("title"),
   type: text("type").notNull().default("dm"),
   a2aMode: text("a2a_mode").notNull().default("mention"),
+  a2aPolicy: text("a2a_policy").notNull().default("auto"),
   pinned: integer("pinned", { mode: "boolean" }).notNull().default(false),
   archived: integer("archived", { mode: "boolean" }).notNull().default(false),
   relayRoomId: text("relay_room_id"),

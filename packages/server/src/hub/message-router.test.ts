@@ -2,6 +2,7 @@ import type { HubEnvelope } from "@agentlink/shared";
 import { describe, expect, it, vi } from "vitest";
 import type { AgentRegistry } from "../agent/registry.js";
 import type { AgentRuntime } from "../agent/runtime.js";
+import type { Repository } from "../db/repository.js";
 import type { ConnectionManager } from "./connection-manager.js";
 import type { DirectoryService } from "./directory.js";
 import type { HubIdentity } from "./identity.js";
@@ -14,6 +15,7 @@ describe("HubMessageRouter trust checks", () => {
     const relayClient = {
       onMessage: vi.fn(),
       onOfflineMessages: vi.fn(),
+      onPresence: vi.fn(),
     } as unknown as RelayClient;
     const registry = {
       getHubPublicKey: vi.fn(),
@@ -34,6 +36,7 @@ describe("HubMessageRouter trust checks", () => {
       { id: "local-user", name: "Local User" },
       {} as DirectoryService,
       trustStore,
+      { getAgentRow: vi.fn() } as unknown as Repository,
     );
     const envelope: HubEnvelope = {
       id: "message-1",

@@ -4,6 +4,7 @@ import type {
   AgentConfig,
   AgentStatus,
   A2AMode,
+  A2APolicy,
   Conversation,
   ConversationType,
   Message,
@@ -442,6 +443,7 @@ export class Repository {
       type: type as Conversation["type"],
       agentIds: uniqueAgentIds,
       a2aMode: "mention",
+      a2aPolicy: "auto",
       pinned: false,
       archived: false,
       relayRoomId,
@@ -589,7 +591,13 @@ export class Repository {
 
   updateConversation(
     id: string,
-    input: { title?: string; pinned?: boolean; archived?: boolean; a2aMode?: A2AMode },
+    input: {
+      title?: string;
+      pinned?: boolean;
+      archived?: boolean;
+      a2aMode?: A2AMode;
+      a2aPolicy?: A2APolicy;
+    },
   ): Conversation | undefined {
     if (!this.getConversation(id)) return undefined;
     this.context.db
@@ -758,6 +766,7 @@ export class Repository {
       title: row.title ?? "Untitled",
       type: row.type as Conversation["type"],
       a2aMode: row.a2aMode as A2AMode,
+      a2aPolicy: row.a2aPolicy as A2APolicy,
       agentIds: links.map((link) => link.agentId),
       pinned: row.pinned,
       archived: row.archived,

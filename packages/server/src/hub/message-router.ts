@@ -2,7 +2,9 @@ import { randomUUID } from "node:crypto";
 import type { ConversationContext, HubEnvelope, HubPayload } from "@agentlink/shared";
 import type { AgentRegistry } from "../agent/registry.js";
 import type { AgentRuntime } from "../agent/runtime.js";
+import type { Repository } from "../db/repository.js";
 import { logger } from "../utils/logger.js";
+import { AuthorizationService } from "./authorization.js";
 import { decryptPayload, encryptPayload, signEnvelope, verifySignature } from "./crypto.js";
 import type { ConnectionManager } from "./connection-manager.js";
 import type { HubIdentity } from "./identity.js";
@@ -11,9 +13,11 @@ import { normalizeHubPayload, rejectIncompatibleVersion } from "./payload-compat
 import type { RelayClient } from "./relay-client.js";
 import type { DirectoryService } from "./directory.js";
 import type { TrustStore } from "./trust-store.js";
+import { OfflineStore } from "./offline-store.js";
 
 const REMOTE_CALL_TIMEOUT_MS = 120_000;
 const MAX_SEEN_MESSAGES = 1_000;
+const OFFLINE_PURGE_INTERVAL_MS = 60 * 60 * 1000;
 
 interface PendingMessage {
   resolve: (content: string) => void;
@@ -37,6 +41,9 @@ interface LocalUserIdentity {
 export class HubMessageRouter {
   private readonly pendingOutbound = new Map<string, PendingMessage>();
   private readonly seenMessageIds = new Set<string>();
+  private readonly offlineHubIds = new Set<string>();
+  private readonly authorizationService: AuthorizationService;
+  private readonly offlinePurgeTimer: NodeJS.Timeout;
   private p2pListener?: P2PListener;
   private removeP2PMessageListener?: () => void;
 
@@ -49,7 +56,16 @@ export class HubMessageRouter {
     private readonly localUser: LocalUserIdentity,
     private readonly directoryService: DirectoryService,
     private readonly trustStore: TrustStore,
+    repository: Repository,
+    private readonly offlineStore = new OfflineStore(),
   ) {
+    this.authorizationService = new AuthorizationService(trustStore, repository);
+    this.offlineStore.purgeExpired();
+    this.offlinePurgeTimer = setInterval(() => {
+      const purged = this.offlineStore.purgeExpired();
+      if (purged > 0) logger.info({ purged }, "Purged expired offline Hub messages");
+    }, OFFLINE_PURGE_INTERVAL_MS);
+    this.offlinePurgeTimer.unref();
     relayClient.onMessage((envelope) => {
       void this.onEnvelope(envelope, relayClient).catch((error: unknown) => {
         logger.warn({ err: error, envelopeId: envelope.id }, "Unable to route Hub envelope");
@@ -58,10 +74,22 @@ export class HubMessageRouter {
     relayClient.onOfflineMessages((envelopes) => {
       void this.routeOfflineMessages(envelopes);
     });
+    relayClient.onPresence((hubId, status) => {
+      if (status === "offline") {
+        this.offlineHubIds.add(hubId);
+        return;
+      }
+      this.offlineHubIds.delete(hubId);
+      void this.deliverPendingForHub(hubId);
+    });
   }
 
   get pendingCount(): number {
     return this.pendingOutbound.size;
+  }
+
+  destroy(): void {
+    clearInterval(this.offlinePurgeTimer);
   }
 
   setP2PListener(listener: P2PListener): void {
@@ -113,10 +141,15 @@ export class HubMessageRouter {
     }
     const payload = normalizeHubPayload(rawPayload);
 
-    if (trustedHub.trustLevel === "pending" && payload.messageType !== "directory_request") {
-      logger.info(
-        { fromHubId: envelope.from, messageType: payload.messageType },
-        "Ignoring message from a pending Hub",
+    const authorization = this.authorizationService.authorize(envelope.from, payload);
+    if (!authorization.allowed) {
+      logger.warn(
+        {
+          fromHubId: envelope.from,
+          messageType: payload.messageType,
+          reason: authorization.reason,
+        },
+        "Dropping unauthorized inbound Hub message",
       );
       return;
     }
@@ -142,6 +175,8 @@ export class HubMessageRouter {
       || payload.messageType === "directory_revoke"
     ) {
       this.handleDirectoryUpdate(envelope.from, payload);
+    } else if (payload.messageType === "delivery_ack") {
+      this.handleDeliveryAck(payload);
     }
   }
 
@@ -184,8 +219,13 @@ export class HubMessageRouter {
       ...unsigned,
       signature: await signEnvelope(signingData(unsigned), this.identity.getSecretKey()),
     };
-    if (!this.connectionManager.sendEnvelope(toHubId, envelope)) {
-      throw new Error(`No connection available for Hub ${toHubId}`);
+    const hasP2PConnection = this.connectionManager.getActivePath(toHubId) === "p2p";
+    if (
+      (this.offlineHubIds.has(toHubId) && !hasP2PConnection)
+      || !this.connectionManager.sendEnvelope(toHubId, envelope)
+    ) {
+      this.offlineStore.queue(envelope, this.identity.hubId, toHubId);
+      logger.info({ toHubId, envelopeId: envelope.id }, "Queued message for offline Hub");
     }
     return payload.messageId;
   }
@@ -323,6 +363,23 @@ export class HubMessageRouter {
     this.directoryService.applyRemoteDirectory(manifest);
   }
 
+  private handleDeliveryAck(payload: HubPayload): void {
+    const messageId = stringMetadata(payload.metadata, "envelopeId")
+      ?? stringMetadata(payload.metadata, "messageId")
+      ?? stringMetadata(payload.metadata, "correlationId")
+      ?? stringMetadata(payload.metadata, "replyTo")
+      ?? payload.content
+      ?? payload.messageId;
+    const status = stringMetadata(payload.metadata, "status") ?? "accepted";
+    if (status === "accepted" || status === "denied") {
+      this.offlineStore.markSettled(messageId, status);
+    } else if (status === "done" || status === "error") {
+      this.offlineStore.markComplete(messageId, status);
+    } else {
+      logger.warn({ messageId, status }, "Ignoring delivery ACK with invalid status");
+    }
+  }
+
   private async sendResponse(
     toHubId: string,
     request: HubPayload,
@@ -385,6 +442,13 @@ export class HubMessageRouter {
       } catch (error) {
         logger.warn({ err: error, envelopeId: envelope.id }, "Unable to route offline Hub envelope");
       }
+    }
+  }
+
+  private async deliverPendingForHub(hubId: string): Promise<void> {
+    for (const message of this.offlineStore.getPendingForHub(hubId)) {
+      if (!this.connectionManager.sendEnvelope(hubId, message.envelope)) return;
+      this.offlineStore.markDelivered(message.id);
     }
   }
 

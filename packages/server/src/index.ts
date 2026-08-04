@@ -61,6 +61,7 @@ async function main(): Promise<void> {
   let p2pDiscovery: P2PDiscovery | undefined;
   let p2pListener: P2PListener | undefined;
   let connectionManager: ConnectionManager | undefined;
+  let messageRouter: HubMessageRouter | undefined;
   let relayToken = config.hub?.relay.token;
   if (config.hub?.enabled) {
     hubIdentity = new HubIdentity(resolve(rootDir, "data/hub-keypair.json"));
@@ -87,7 +88,7 @@ async function main(): Promise<void> {
     const manager = new ConnectionManager(listener, client);
     connectionManager = manager;
     const directoryService = new DirectoryService(repository, registry, identity.hubId, trustStore);
-    const messageRouter = new HubMessageRouter(
+    messageRouter = new HubMessageRouter(
       identity,
       registry,
       runtime,
@@ -96,6 +97,7 @@ async function main(): Promise<void> {
       localProtocolUser,
       directoryService,
       trustStore,
+      repository,
     );
     runtime.setHubMessageRouter(messageRouter);
     if (hubConfig.p2p?.enabled) {
@@ -199,6 +201,7 @@ async function main(): Promise<void> {
     p2pDiscovery?.stop();
     await p2pListener?.stop();
     relayClient?.disconnect();
+    messageRouter?.destroy();
     await app.close();
     scheduler.destroy();
     registry.stopHealthChecks();

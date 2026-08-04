@@ -93,6 +93,9 @@ function ensureConversationColumns(sqlite: Database.Database): void {
   if (!conversationColumns.some((column) => column.name === "relay_room_id")) {
     sqlite.exec("ALTER TABLE conversations ADD COLUMN relay_room_id TEXT");
   }
+  if (!conversationColumns.some((column) => column.name === "a2a_policy")) {
+    sqlite.exec("ALTER TABLE conversations ADD COLUMN a2a_policy TEXT NOT NULL DEFAULT 'auto'");
+  }
   sqlite.exec("UPDATE conversations SET type = 'group' WHERE type = 'channel'");
 
   const memberColumns = sqlite.prepare("PRAGMA table_info(conversation_agents)").all() as Array<{
