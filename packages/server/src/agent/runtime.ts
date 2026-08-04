@@ -200,6 +200,26 @@ export class AgentRuntime {
       return;
     }
 
+    // Pre-flight: verify the CLI command actually exists before "thinking"
+    if ("preflightCheck" in adapter && typeof adapter.preflightCheck === "function") {
+      const preflight = await adapter.preflightCheck();
+      if (!preflight.ok) {
+        const errorMessage = createMessage({
+          conversationId,
+          fromType: "agent",
+          fromId: agentId,
+          content: `⚠️ ${preflight.detail ?? "Agent command not available."}`,
+          status: "error",
+        });
+        this.repository.saveMessage(errorMessage);
+        this.events.publish(conversationId, { type: "message", message: errorMessage });
+        this.registry.setStatus(agentId, "error");
+        logger.warn({ conversationId, agentId, detail: preflight.detail }, "Agent preflight failed");
+        track("error", { message: "Preflight failed", source: "agent_runtime", agentId });
+        return;
+      }
+    }
+
     const reply = createMessage({
       conversationId,
       fromType: "agent",

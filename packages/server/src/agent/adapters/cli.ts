@@ -244,6 +244,20 @@ export class CliAdapter extends BaseAdapter {
     this.status = "online";
   }
 
+
+  /** Quick pre-flight check: can we find and execute the command? */
+  async preflightCheck(): Promise<{ ok: boolean; detail?: string }> {
+    const config = this.config as unknown as CliAdapterConfig;
+    const healthy = await this.healthCheck();
+    if (!healthy) {
+      return {
+        ok: false,
+        detail: `Command "${config.command}" not found in PATH. Install it or check the path in Agent settings.`,
+      };
+    }
+    return { ok: true };
+  }
+
   override async healthCheck(): Promise<boolean> {
     const config = this.config as unknown as CliAdapterConfig;
     const executable = config.command;
@@ -477,7 +491,13 @@ ${message}`;
         const detail = result.stderr.trim();
         throw new Error(`CLI process timed out after ${timeoutMs}ms${detail ? `: ${detail}` : ""}`);
       }
-      if (result.error) throw result.error;
+      if (result.error) {
+        const err = result.error as NodeJS.ErrnoException;
+        if (err.code === "ENOENT") {
+          throw new Error(`Command not found: "${cfg.command}". Please ensure it is installed and in your PATH.`);
+        }
+        throw result.error;
+      }
       if (result.code !== 0) {
         const detail = result.stderr.trim();
         throw new Error(
