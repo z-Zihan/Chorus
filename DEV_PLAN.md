@@ -90,7 +90,7 @@
 | ID | 任务 | 交付物与验收 | 依赖 |
 |----|------|--------------|------|
 | API-01 | Owner-aware discovery API | /api/users、按 owner/scope 查询 Agent、capabilities/status；分页与 stale 字段 | DISC-02 | ✅ done | ✅ code-review skill |
-| API-02 | Scoped client tokens | token hash、clientId/userId、scope、expiry、撤销；WS 短期 ticket；默认 loopback | ID-01 |
+| API-02 | Scoped client tokens | token hash、clientId/userId、scope、expiry、撤销；WS 短期 ticket；默认 loopback | ID-01 | ✅ done | ✅ code-review skill |
 | UI-01 | User-grouped directory | “我的 Agent”+远程 User 分组；`Owner / Agent` 消歧；本地/远程/离线/待确认状态 | API-01 |
 | UI-02 | Cross-hub conversation | remote DM、`cross_hub` 群聊、Owner 身份、路由路径和离线状态展示 | ID-04, SEC-03, UI-01 |
 | UI-03 | Privacy & permission settings | User/Agent 可见性、auto/confirm/deny、trust revoke、披露预览 | SEC-02 |
