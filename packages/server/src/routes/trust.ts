@@ -7,8 +7,11 @@ export function registerTrustRoutes(app: FastifyInstance, trustStore: TrustStore
   app.post("/api/trust/pair", async (request, reply) => {
     const hubId = readRequiredString(request.body, "hubId", reply);
     if (!hubId) return;
-    const code = trustStore.generatePairingCode(hubId);
-    return { hubId, code, expiresInSeconds: 600 };
+    const challenge = trustStore.generatePairingCode(hubId);
+    return {
+      ...challenge,
+      sas: trustStore.getPairingSAS(hubId, challenge.nonce),
+    };
   });
 
   app.post("/api/trust/confirm", async (request, reply) => {
@@ -16,8 +19,15 @@ export function registerTrustRoutes(app: FastifyInstance, trustStore: TrustStore
     if (!hubId) return;
     const code = readRequiredString(request.body, "code", reply);
     if (!code) return;
-    if (!trustStore.confirmPairing(hubId, code)) {
-      return reply.code(400).send({ success: false, error: "Invalid or expired pairing code" });
+    const nonce = readRequiredString(request.body, "nonce", reply);
+    if (!nonce) return;
+    const ephemeralPublicKey = readRequiredString(request.body, "ephemeralPublicKey", reply);
+    if (!ephemeralPublicKey) return;
+    if (!trustStore.confirmPairing(hubId, code, nonce, ephemeralPublicKey)) {
+      return reply.code(400).send({
+        success: false,
+        error: "Invalid or expired pairing confirmation",
+      });
     }
     return { success: true, hub: trustStore.get(hubId) };
   });

@@ -21,10 +21,18 @@ describe("trust routes", () => {
     const pair = await request(app.server).post("/api/trust/pair").send({ hubId: "hub-api" });
     expect(pair.status).toBe(200);
     expect(pair.body.code).toMatch(/^\d{6}$/);
+    expect(Buffer.from(pair.body.nonce, "base64url")).toHaveLength(16);
+    expect(pair.body.ephemeralPublicKey).toEqual(expect.any(String));
+    expect(pair.body.sas).toMatch(/^\d{6}$/);
 
     const confirm = await request(app.server)
       .post("/api/trust/confirm")
-      .send({ hubId: "hub-api", code: pair.body.code });
+      .send({
+        hubId: "hub-api",
+        code: pair.body.code,
+        nonce: pair.body.nonce,
+        ephemeralPublicKey: pair.body.ephemeralPublicKey,
+      });
     expect(confirm.status).toBe(200);
     expect(confirm.body.hub.trustLevel).toBe("trusted");
 

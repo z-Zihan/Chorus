@@ -408,6 +408,11 @@ function manifestFixture(overrides: Partial<DirectoryManifest> = {}): DirectoryM
 }
 
 function trustHub(store: TrustStore, hubId: string): void {
-  const code = store.generatePairingCode(hubId);
-  if (!store.confirmPairing(hubId, code)) throw new Error(`Unable to trust ${hubId}`);
+  const challenge = store.generatePairingCode(hubId);
+  if (!store.confirmPairing(
+    hubId,
+    challenge.code,
+    challenge.nonce,
+    challenge.ephemeralPublicKey,
+  )) throw new Error(`Unable to trust ${hubId}`);
 }

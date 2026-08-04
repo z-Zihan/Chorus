@@ -355,7 +355,7 @@ describe("AgentLink SKILL.md contract", () => {
       const pair = await request(app.server).post("/api/trust/pair").send({ hubId: "hub-list" });
       await request(app.server)
         .post("/api/trust/confirm")
-        .send({ hubId: "hub-list", code: pair.body.code });
+        .send({ hubId: "hub-list", code: pair.body.code, nonce: pair.body.nonce, ephemeralPublicKey: pair.body.ephemeralPublicKey });
 
       const response = await request(app.server).get("/api/trust");
 
@@ -372,9 +372,10 @@ describe("AgentLink SKILL.md contract", () => {
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual({
-        hubId: "hub-pair",
         code: expect.stringMatching(/^\d{6}$/),
-        expiresInSeconds: 600,
+        nonce: expect.any(String),
+        ephemeralPublicKey: expect.any(String),
+        sas: expect.stringMatching(/^\d{6}$/),
       });
     });
 
@@ -383,7 +384,7 @@ describe("AgentLink SKILL.md contract", () => {
 
       const response = await request(app.server)
         .post("/api/trust/confirm")
-        .send({ hubId: "hub-confirm", code: pair.body.code });
+        .send({ hubId: "hub-confirm", code: pair.body.code, nonce: pair.body.nonce, ephemeralPublicKey: pair.body.ephemeralPublicKey });
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual({
@@ -409,7 +410,7 @@ describe("AgentLink SKILL.md contract", () => {
       const pair = await request(app.server).post("/api/trust/pair").send({ hubId: "hub-remove" });
       await request(app.server)
         .post("/api/trust/confirm")
-        .send({ hubId: "hub-remove", code: pair.body.code });
+        .send({ hubId: "hub-remove", code: pair.body.code, nonce: pair.body.nonce, ephemeralPublicKey: pair.body.ephemeralPublicKey });
 
       const response = await request(app.server).delete("/api/trust/hub-remove");
 

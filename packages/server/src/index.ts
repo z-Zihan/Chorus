@@ -51,7 +51,6 @@ async function main(): Promise<void> {
   const { sqlite, db } = createDatabase(dbPath);
   const repository = new Repository({ sqlite, db });
   const tokenStore = new TokenStore(repository);
-  const trustStore = new TrustStore(repository);
   const localUser = await repository.getOrCreateLocalUser("本机用户");
   if (!localUser.publicKey) throw new Error("Local User public key is unavailable");
   const localProtocolUser = {
@@ -69,6 +68,7 @@ async function main(): Promise<void> {
   // Always initialize Hub identity so routes are available
   hubIdentity = new HubIdentity(resolve(rootDir, "data/hub-keypair.json"));
   await hubIdentity.getOrCreateKeypair();
+  const trustStore = new TrustStore(repository, hubIdentity.hubId);
   relayClient = new RelayClient();
 
   const registry = new AgentRegistry(repository, relayClient);
