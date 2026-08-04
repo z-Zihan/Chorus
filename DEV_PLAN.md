@@ -93,7 +93,7 @@
 | API-02 | Scoped client tokens | token hash、clientId/userId、scope、expiry、撤销；WS 短期 ticket；默认 loopback | ID-01 | ✅ done | ✅ code-review skill |
 | UI-01 | User-grouped directory | "我的 Agent"+远程 User 分组；`Owner / Agent` 消歧；本地/远程/离线/待确认状态 | API-01 | ✅ done | ✅ code-review skill |
 | UI-02 | Cross-hub conversation | remote DM、`cross_hub` 群聊、Owner 身份、路由路径和离线状态展示 | ID-04, SEC-03, UI-01 | ✅ done | ✅ code-review skill |
-| UI-03 | Privacy & permission settings | User/Agent 可见性、auto/confirm/deny、trust revoke、披露预览 | SEC-02 |
+| UI-03 | Privacy | UI-03 | Privacy & permission settings | User/Agent 可见性、auto/confirm/deny、trust revoke、披露预览 | SEC-02 | permission settings | User/Agent 可见性、auto/confirm/deny、trust revoke、披露预览 | SEC-02 | ✅ done | ✅ code-review skill |
 | EXT-01 | External Agent contract | 以 `skills/agentlink-platform/SKILL.md` 为契约补齐 discovery/send/stream/error API conformance tests | API-01, API-02 |
 | TEST-01 | Two-device E2E matrix | 在线/离线、重名、重放、撤销、密钥变化、权限拒绝、Relay/P2P fallback | SEC-03, UI-02 |
 
