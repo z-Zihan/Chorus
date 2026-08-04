@@ -85,7 +85,7 @@ User、Hub、Agent 必须分层：User 是拥有者，Hub 是设备/路由端点
 - Hub ID = Ed25519 公钥完整 hex；UI 仅将前 8 位作为短指纹
 - 显示名：用户自定义，不唯一
 
-本机另生成 User Ed25519 密钥并存入系统钥匙串；`userId = usr_<base64url(SHA-256(userPublicKey))>`。v1 一个 Hub 绑定一个本机 User，未来一个 User 可签名绑定多个 Hub。绑定对象同时由 User key 和 Hub key 签名：
+本机另生成 User Ed25519 密钥并存入系统钥匙串；`userId = usr_<base64url(SHA-256(userPublicKey))>`。一个 User 可通过已实现的 `user_hubs` 表绑定多个 Hub；每个绑定对象同时由 User key 和对应 Hub key 签名：
 
 ```typescript
 interface UserHubBinding {
@@ -124,7 +124,7 @@ Response:
 3. 双方验证签名和 5 分钟时间窗口，再把 Ed25519 key 转换为 X25519 建立加密通道。
 4. UserHubBinding 通过双签名验证后，才把 Hub 上的目录归属于 User。
 
-**English summary:** A User owns agents; a Hub authenticates a device transport. Both keys sign the User-to-Hub binding.
+**English summary:** A User owns agents and may bind multiple device Hubs through the implemented `user_hubs` table. A Hub authenticates a device transport, and both the User key and that Hub's key sign each binding.
 
 ## 3. 消息协议
 
@@ -171,7 +171,7 @@ interface HubPayload {
 
 **English:** Contact acceptance, room acceptance, and room-agent admission are separate signed events. None implies the next. In particular, pairing never triggers directory synchronization.
 
-### 加密方案
+### 直连与成对加密方案 / Direct and pairwise encryption
 
 - **算法**：libsodium `crypto_box` (X25519 + XSalsa20-Poly1305)
 - **流程**：
@@ -180,6 +180,10 @@ interface HubPayload {
   3. 用自己的 Ed25519 私钥签名 envelope → signature
 - **Relay 无法解密**：只有 ciphertext 和元数据经过 Relay
 - **离线消息**：Relay 存储 ciphertext，等接收方上线后投递
+
+此方案用于 Hub 直连消息、逐成员 fallback 和 Room 群组密钥分发；Room 正文的 v1 默认加密方案是 §7 定义的 `GroupKeyManager` AES-256-GCM。
+
+**English:** `crypto_box` protects direct Hub messages, the per-member fallback, and Room group-key distribution. Room content uses the `GroupKeyManager` AES-256-GCM group key by default in v1, as specified in §7.
 
 ### 消息去重
 
@@ -431,11 +435,30 @@ Relay Server
 │                                  → Hub C (offline, 存入 offline store)
 │
 └── 消息加密:
-    · 每个成员用自己的密钥解密
-    · 发送方对每个接收方分别加密 payload (或用群组密钥)
-    · v1: 逐个加密 (简单，群成员少时可行)
-    · v2: MLS 群组密钥 (高效，支持大群)
+    · v1 默认使用 Room 群组密钥
+    · GroupKeyManager 使用 AES-256-GCM 加解密 Room payload
+    · rekey 后把新密钥分别安全分发给所有 Room 成员
+    · 成员数 ≤5 时可选择逐成员加密作为 fallback
 ```
+
+### Room 加密决策 / Room encryption decision
+
+- v1 默认使用 `GroupKeyManager` 已实现的 AES-256-GCM 群组密钥；Relay 只接触密文，不持有 Room 明文密钥。
+- 所有者把 Agent 加入 Room 时必须触发 rekey，并通过各成员 Hub 的成对加密通道把新密钥分发给所有 Room 成员。
+- 人类成员离开或被移除、Agent 被移除时必须触发 rekey；旧密钥立即作废，不得继续用于新的 Room 消息。
+- 群组成员数不超过 5 时，可选用逐成员加密作为 fallback：发送方为每个接收 Hub 单独生成密文，但权限和审计语义不变。
+
+**English:** v1 uses the existing `GroupKeyManager` AES-256-GCM group key by default. Adding an agent, removing an agent, or a human member leaving or being removed triggers a rekey; the new key is distributed to every remaining room member over pairwise encrypted channels and the old key is invalid for new messages. Per-member encryption is an optional fallback for rooms with at most five members.
+
+### Room 角色与管理权限 / Room roles and administration
+
+- Room 创建者默认为管理员；角色绑定 User 身份，而不是某个设备 Hub。
+- 管理员可以邀请联系人、移除成员、移除任何已入房 Agent，并可把其他 Room 成员委派为管理员。
+- 管理员不能添加别人的 Agent；无论角色如何，只有 Agent 所有者能执行 `room_agent_upsert` 将自己的 Agent 加入 Room。
+- 非管理员只能退出 Room，以及添加或移除自己的 Agent；不能邀请、移除其他成员或更改管理员角色。
+- 管理员移除他人的 Agent 时，必须向该 Agent 所有者的所有已绑定 Hub 发送通知，并写入包含 `roomId`、`agentId`、`ownerUserId`、`actorUserId`、时间和原因的审计日志。移除事件同时触发 rekey。
+
+**English:** The room creator is an administrator by default. Administrators may invite contacts, remove members, remove any room agent, and delegate the administrator role to another member, but they can never add an agent owned by someone else. Non-administrators may only leave and add or remove their own agents. An administrator removal of another user's agent must notify the owner on all bound Hubs, write an audit event, and trigger rekeying.
 
 ### 创建群聊
 
@@ -446,20 +469,48 @@ Relay Server
 5. 各 Hub 本地创建 `type: "cross_hub"` 会话并保存 `relayRoomId`
 6. 本地 `conversation_agents` 记录 Agent、ownerId 以及 Owner/Agent/Hub 身份快照
 
-### 消息路由
+### 同一 User 的多 Hub 状态同步 / Multi-Hub state for one User
+
+- 一个 User 可绑定多个 Hub，绑定关系由已实现的 `user_hubs` 表维护；Room 人类成员资格和管理员角色属于 User，Hub 只是同步与路由端点。
+- 用户在 Mac Hub 上把自己的 Agent 加入 Room 后，该 Hub 发送签名的 `room_agent_upsert`；Relay 把状态事件同步给同一 User 的其他已绑定 Hub，因此手机 Hub 能看到该 Agent 已入房。`room_agent_remove` 以相同方式在各设备收敛。
+- 每个 Room Agent 记录必须包含 `ownerUserId` 和 `ownerHubId`。本文路由流程中的 `homeHubId` 即该 Agent 的实际执行 `ownerHubId`；其他同用户 Hub 只展示和同步状态，不运行该 Agent。
+- 若 `ownerHubId` 离线，发送端立即显示投递状态 `Agent unavailable (owner offline)`，同时 Relay 可将加密的 @mention 存入 offline store。owner Hub 在 TTL 内上线后仍会收到并处理；该状态表示即时不可用，不等于消息已丢弃。
+
+**English:** One User may bind multiple Hubs through `user_hubs`. Room membership and roles are User-scoped, while signed `room_agent_upsert` and `room_agent_remove` events synchronize room-agent state to all of that User's Hubs. A phone therefore reflects an agent added on a Mac. Only the agent's `ownerHubId`—called `homeHubId` in the routing flow—executes it. If that Hub is offline, the sender sees `Agent unavailable (owner offline)` while the encrypted mention may remain queued for later delivery within the offline-store TTL.
+
+### 跨 Hub @mention 路由 / Cross-Hub @mention routing
+
+```text
+用户 A 在 Room 中发送 "@Codex 帮我 review"
+→ 本地 Hub A 检测 @Codex，以 (roomId, agentId) 精确匹配并查找 Codex 的 homeHubId
+→ Hub A 用 Room 密钥加密 payload → HubEnvelope(to: "room:xxx") → Relay
+→ Relay 向所有在线 Room 成员 Hub fan-out；离线目标写入 offline store
+→ Hub B（Codex 的 owner/home Hub）收到并解密，只由 Hub B 把调用路由给 Codex
+→ Codex 流式回复 → Hub B 加密各回复帧 → HubEnvelope(to: "room:xxx") → Relay
+→ Relay 向所有在线 Room 成员 Hub fan-out
+→ Hub A 收到并解密回复，在原 Room 中显示
+```
+
+Room fan-out 用于让成员显示同一段房间历史，不代表每个 Hub 都调用 Agent。加密 payload 必须携带不可伪造的 `toAgentId` 和目标 `homeHubId`；除该 `homeHubId` 外，其他成员 Hub 只保存/展示消息，不把 @mention 分发给本地 Agent。若 Codex 的 owner Hub 离线，Relay 为该 Hub 保存密文；它上线并验证 Room membership、Agent membership 和目标 ID 后处理并回复。不得按 Agent 显示名广播给所有成员，也不得由同一 User 的其他 Hub 代执行。
+
+**English:** Hub A resolves the mention by `(roomId, agentId)`, includes the authenticated target `homeHubId` inside the encrypted room payload, and sends a room envelope. Relay fans the room content out for a consistent room history, but only the agent's home/owner Hub dispatches the invocation. Other Hubs display or store the message without invoking local agents. If the owner Hub is offline, Relay queues its ciphertext; when it reconnects, it validates the room and agent membership, invokes the agent, and streams encrypted room replies.
+
+### 消息路由 / Message routing
 
 - **发送方** → Relay（`to: "room:xxx"`）
 - **Relay** → 查询房间成员 → fan-out 给所有在线成员
 - **离线成员** → 存入 offline store，上线后推送
 - **P2P 群聊** → 发送方逐个 unicast 给局域网内的成员
-- **应用层目标** → 有 `@` 时只投递目标 Agent；无 `@` 时只投递会话主 Agent，只有显式广播才让各 Hub 扇出给多个 Agent
+- **应用层目标** → 有 `@` 时仅目标 Agent 的 `homeHubId` 执行；不得把调用广播给所有成员 Hub 上的 Agent。无 `@` 时只投递会话主 Agent，只有显式广播才让各 Hub 扇出给多个 Agent
+
+**English:** Relay fan-out distributes encrypted room content, whereas application dispatch is narrower: an @mention is executed only on the target agent's `homeHubId`. Offline room recipients use the offline store, and explicit broadcast is the only operation that may dispatch to multiple agents.
 
 ## 8. 安全
 
 | 层面 | 措施 |
 |------|------|
 | 传输层 | WSS (TLS) 用于 Relay 连接 |
-| 消息层 | End-to-End 加密 (libsodium crypto_box) |
+| 消息层 | 直连/密钥分发使用 libsodium `crypto_box`；Room 正文默认使用 `GroupKeyManager` AES-256-GCM |
 | 身份层 | Ed25519 签名验证 |
 | 用户绑定 | UserHubBinding 双签名；User/Hub 公钥变化必须重新配对 |
 | 调用授权 | own=`auto`，trusted remote=`confirm`，unknown/stale=`deny`；Relay JWT 不授予 Agent 权限 |
@@ -679,15 +730,15 @@ const x25519PublicKey = sodium.crypto_sign_ed25519_pk_to_curve25519(ed25519Publi
 const ciphertext = sodium.crypto_box(payload, nonce, x25519PublicKey, x25519SecretKey);
 ```
 
-### 13.2 群聊加密：群成员公钥分发（已修订 §7）
+### 13.2 群聊加密：GroupKeyManager（已修订 §7）
 
-**问题**：发送方需要所有群成员的公钥才能逐个加密。
+**问题**：逐成员加密的密文数量随成员数线性增长，且 Room 成员或 Agent 变更后需要明确的密钥撤销边界。
 
 **方案**：
-- 创建/加入房间时，Relay 返回所有成员的 Hub ID + 公钥
-- 发送方缓存群成员公钥列表，定期刷新
-- v1 逐个加密（群成员 ≤ 50 时可行）
-- v2 引入 MLS 群组密钥（支持大群）
+- v1 默认使用 `GroupKeyManager` 的 AES-256-GCM 群组密钥
+- 创建/加入房间时，Relay 返回所有成员的 Hub ID + 公钥，供各 Hub 建立成对加密的群组密钥分发通道；Relay 不接触明文群组密钥
+- Agent 加入、Agent 移除以及人类成员离开或被移除时执行 rekey，并向所有剩余 Room 成员分发新密钥；旧密钥作废
+- 逐成员加密仅作为成员数 ≤5 时的可选 fallback
 
 ```
 POST /api/rooms/:id/join
@@ -700,6 +751,8 @@ Response:
   ]
 }
 ```
+
+**English:** v1 uses the AES-256-GCM key managed by `GroupKeyManager`. Pairwise member public keys protect group-key distribution, membership or agent changes trigger rekeying, and per-member encryption is retained only as an optional fallback for rooms of at most five members.
 
 ### 13.3 Tauri sidecar mDNS 验证（已修订 §5, R3-01）
 

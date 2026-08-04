@@ -364,6 +364,15 @@ i18n、主题、动画、埋点供应商、更多 UI 基础组件不是当前发
 
 **English:** Contacts and rooms are first-class sidebar sections. DMs are direct rooms, named chats are group rooms, and invitations require acceptance. Human membership and agent membership are separate; the only add-agent action is “Add my agent.” New cross-user conversations use `type=room`.
 
+#### Room 管理员 / Room administrators
+
+- Room 创建者默认为管理员。管理员可以邀请联系人、移除成员、移除任何 Agent，并把其他 Room 成员委派为管理员。
+- 管理员不能添加别人的 Agent；Agent 入房始终只能由所有者发起。
+- 非管理员只能退出 Room，以及添加或移除自己的 Agent。
+- 管理员移除他人的 Agent 时，系统必须通知所有者、写入可审计事件，并立即撤销该 Agent 的后续调用权限。
+
+**English:** The room creator is an administrator by default. Administrators may invite contacts, remove members or any room agent, and delegate the role to another member, but they cannot add someone else's agent. Non-administrators may only leave and manage their own agents. Removing another user's agent must notify its owner, create an audit event, and immediately revoke further invocation rights.
+
 #### 成功与权限验收 / Acceptance
 
 1. 保存有效 Relay URL 后 500 ms 内出现成功 Toast，并开始展示连接状态；无论连接成败，已保存值在重启后保留。
@@ -371,8 +380,9 @@ i18n、主题、动画、埋点供应商、更多 UI 基础组件不是当前发
 3. 非所有者尝试添加 Agent 返回 `403 AGENT_OWNER_REQUIRED`；未入房 Agent 的消息返回 `403 AGENT_NOT_IN_ROOM`。
 4. 所有者移除 Agent 或改为 `private` 后，目录撤销在在线链路 60 秒内收敛，后续调用被拒绝。
 5. 联系人、Room 和 Agent 撤销分别可审计，且不会误删历史消息。
+6. Room 创建者自动获得管理员角色；非管理员邀请/移除他人返回 `403 ROOM_ADMIN_REQUIRED`，管理员移除他人 Agent 会通知所有者并生成审计事件。
 
-**English:** Acceptance covers immediate save feedback, persisted connection settings, zero agent disclosure on pairing, owner-only room agent admission, fast revocation, and auditable history-preserving removal.
+**English:** Acceptance covers immediate save feedback, persisted connection settings, zero agent disclosure on pairing, owner-only room agent admission, administrator enforcement, owner notification, fast revocation, and auditable history-preserving removal.
 
 ## 9. 成功指标
 
@@ -454,9 +464,11 @@ i18n、主题、动画、埋点供应商、更多 UI 基础组件不是当前发
 3. `needs_auth` 的探测方式，确保不会发出计费请求或污染用户历史。
 4. UI 配置、数据库记录与 `agentlink.config.ts` 冲突时的精确合并规则。
 5. 系统钥匙串落地前，API Agent 是否允许通过 UI 保存密钥；建议默认不开放。
-6. 一个 User 多设备时采用独立 User 签名密钥同步，还是先限制 v1 为一个主 Hub；当前设计按“User 密钥稳定、Hub 密钥可多设备扩展”预留。
+6. 一个 User 的多设备模型；已决策：User 身份稳定并可绑定多个 Hub，Room 状态跨绑定 Hub 同步，Agent 仅在其 `ownerHubId` 上实际执行。
 7. `public` Agent 是否允许被 Relay 全局搜索；已决策：v1 不提供全局目录，`public` 仅表示已配对联系人可发现。
-8. Room 管理员是否能移除他人加入的 Agent；建议允许管理员从 Room 移除，但不允许再次添加，且必须通知所有者并写入审计事件。
+8. Room 管理员移除 Agent；已决策：管理员可以移除任意 Agent，但不能添加别人的 Agent，且必须通知所有者并写入审计事件。
+
+**English:** Decisions 6 and 8 are closed: a stable User may bind multiple Hubs while each agent executes only on its `ownerHubId`; room administrators may remove any agent but may neither add another user's agent nor omit owner notification and auditing.
 
 ## 14. 设计参考 / Design References
 
