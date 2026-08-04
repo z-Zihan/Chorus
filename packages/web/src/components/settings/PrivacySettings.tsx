@@ -156,7 +156,7 @@ export function PrivacySettings() {
                 <span className="block truncate text-sm text-[var(--text-primary)]">
                   {hub.userName ?? "Unknown"}
                 </span>
-                <span className="block truncate text-[10px] text-[var(--text-tertiary)]">
+                <span className="block break-all font-mono text-[10px] text-[var(--text-tertiary)]">
                   {hub.hubFingerprint}
                 </span>
               </div>

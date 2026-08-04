@@ -237,7 +237,7 @@ export class P2PListener {
     }
     const signature = await this.handshake.signChallenge(
       state.remoteNonce,
-      this.requiredIdentity().getSecretKey(),
+      await this.requiredIdentity().getSecretKey(),
     );
     this.send(socket, { type: "p2p_confirm", signature });
     this.authenticate(socket, state);
@@ -261,7 +261,7 @@ export class P2PListener {
       state.remoteNonce = message.nonce;
       const signature = await this.handshake.signChallenge(
         message.nonce,
-        this.requiredIdentity().getSecretKey(),
+        await this.requiredIdentity().getSecretKey(),
       );
       this.send(socket, { type: "p2p_response", signature });
       return;

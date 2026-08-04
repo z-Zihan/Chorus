@@ -132,7 +132,7 @@ export class HubMessageRouter {
       envelope.ciphertext,
       envelope.nonce,
       senderPublicKey,
-      this.identity.getSecretKey(),
+      await this.identity.getSecretKey(),
     );
     if (rejectIncompatibleVersion(rawPayload as unknown as HubPayload)) {
       throw new Error(
@@ -204,7 +204,7 @@ export class HubMessageRouter {
     const encrypted = await encryptPayload(
       payload,
       recipientPublicKey,
-      this.identity.getSecretKey(),
+      await this.identity.getSecretKey(),
     );
     const unsigned: Omit<HubEnvelope, "signature"> = {
       id: randomUUID(),
@@ -217,7 +217,7 @@ export class HubMessageRouter {
     };
     const envelope: HubEnvelope = {
       ...unsigned,
-      signature: await signEnvelope(signingData(unsigned), this.identity.getSecretKey()),
+      signature: await signEnvelope(signingData(unsigned), await this.identity.getSecretKey()),
     };
     const hasP2PConnection = this.connectionManager.getActivePath(toHubId) === "p2p";
     if (

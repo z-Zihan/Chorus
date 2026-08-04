@@ -133,9 +133,14 @@ export class TrustStore {
 function newHub(hubId: string): TrustedHub {
   return {
     hubId,
-    hubFingerprint: createHash("sha256").update(hubId).digest("hex").slice(0, 16),
+    hubFingerprint: fingerprintHubId(hubId),
     trustLevel: "pending",
   };
+}
+
+function fingerprintHubId(hubId: string): string {
+  const bytes = /^[0-9a-f]{64}$/iu.test(hubId) ? Buffer.from(hubId, "hex") : Buffer.from(hubId);
+  return createHash("sha256").update(bytes).digest("hex").slice(0, 32);
 }
 
 function requireHubId(hubId: string): string {

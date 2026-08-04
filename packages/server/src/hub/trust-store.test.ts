@@ -23,7 +23,7 @@ describe("TrustStore", () => {
     expect(code).toMatch(/^\d{6}$/);
     expect(store.get("hub-a")).toEqual({
       hubId: "hub-a",
-      hubFingerprint: createHash("sha256").update("hub-a").digest("hex").slice(0, 16),
+      hubFingerprint: createHash("sha256").update("hub-a").digest("hex").slice(0, 32),
       trustLevel: "pending",
     });
     expect(store.confirmPairing("hub-a", "000000" === code ? "000001" : "000000")).toBe(false);

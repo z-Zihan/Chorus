@@ -11,6 +11,7 @@ import { logger } from "./utils/logger.js";
 const execFileAsync = promisify(execFile);
 const SERVICE_NAME = "AgentLink";
 const USER_KEY_IDENTIFIER = "agentlink:user-key";
+const HUB_KEY_IDENTIFIER = "agentlink:hub-key";
 const FILE_VERSION = 1;
 const FALLBACK_FILE = resolve(
   process.env.AGENTLINK_CREDENTIAL_FILE?.trim() || resolve(homedir(), ".agentlink", "credentials.enc"),
@@ -24,6 +25,11 @@ interface EncryptedCredentialFile {
   iv: string;
   tag: string;
   ciphertext: string;
+}
+
+export interface HubKeypair {
+  publicKey: string;
+  secretKey: string;
 }
 
 let selectedBackend: NativeBackend | "file" | undefined;
@@ -95,6 +101,25 @@ export async function getUserKey(): Promise<UserKeyPair | null> {
 
 export async function setUserKey(key: UserKeyPair): Promise<void> {
   await setCredential(USER_KEY_IDENTIFIER, JSON.stringify(key));
+}
+
+export async function getHubKey(): Promise<HubKeypair | null> {
+  const serialized = await getCredential(HUB_KEY_IDENTIFIER);
+  if (serialized === null) return null;
+
+  try {
+    const key = JSON.parse(serialized) as Partial<HubKeypair>;
+    if (typeof key.publicKey !== "string" || typeof key.secretKey !== "string") {
+      throw new Error("Hub key is missing public or secret key material");
+    }
+    return { publicKey: key.publicKey, secretKey: key.secretKey };
+  } catch (error) {
+    throw new Error("Stored Hub key is invalid", { cause: error });
+  }
+}
+
+export async function setHubKey(key: HubKeypair): Promise<void> {
+  await setCredential(HUB_KEY_IDENTIFIER, JSON.stringify(key));
 }
 
 export async function getCredentialStorageBackend(): Promise<CredentialStorageBackend> {
