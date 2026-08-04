@@ -315,7 +315,7 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
             }}
             onClick={(event) => event.stopPropagation()}
             aria-label={t("sidebar:renameConversation")}
-            className={`absolute ${nested ? "left-8 top-1" : "left-14 top-2"} right-9 h-8 bg-[var(--bg-base)]`}
+            className={`absolute ${nested ? "left-8 top-1" : "left-14 top-2"} right-9 h-8 max-w-[calc(100%-3.5rem)] truncate bg-[var(--bg-base)]`}
           />
         )}
 
