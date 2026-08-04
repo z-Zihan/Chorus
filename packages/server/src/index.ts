@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import type { P2PDiscoveredHub } from "@agentlink/shared";
+import type { P2PDiscoveredHub, HubConfig } from "@agentlink/shared";
 import Fastify from "fastify";
 import type { FastifyBaseLogger } from "fastify";
 import cors from "@fastify/cors";
@@ -65,11 +65,11 @@ async function main(): Promise<void> {
   let connectionManager: ConnectionManager | undefined;
   let messageRouter: HubMessageRouter | undefined;
   let relayToken = config.hub?.relay.token;
-  if (config.hub?.enabled) {
-    hubIdentity = new HubIdentity(resolve(rootDir, "data/hub-keypair.json"));
-    await hubIdentity.getOrCreateKeypair();
-    relayClient = new RelayClient();
-  }
+
+  // Always initialize Hub identity so routes are available
+  hubIdentity = new HubIdentity(resolve(rootDir, "data/hub-keypair.json"));
+  await hubIdentity.getOrCreateKeypair();
+  relayClient = new RelayClient();
 
   const registry = new AgentRegistry(repository, relayClient);
   await registry.initialize(config.agents);
@@ -82,10 +82,15 @@ async function main(): Promise<void> {
   await pluginLoader.initPlugins({ registry, repository, events, logger });
   const runtime = new AgentRuntime(repository, registry, events, config, relayClient);
   let connectHub: (() => Promise<void>) | undefined;
-  if (config.hub?.enabled && hubIdentity && relayClient) {
+  const hubConfig: HubConfig = config.hub ?? {
+    enabled: true,
+    displayName: "My Device",
+    relay: { url: "" },
+    p2p: { enabled: false, port: 3212, discovery: "none" },
+  };
+  if (hubIdentity && relayClient) {
     const identity = hubIdentity;
     const client = relayClient;
-    const hubConfig = config.hub;
     const listener = new P2PListener(client);
     const manager = new ConnectionManager(listener, client);
     connectionManager = manager;
@@ -102,7 +107,7 @@ async function main(): Promise<void> {
       repository,
     );
     runtime.setHubMessageRouter(messageRouter);
-    if (hubConfig.p2p?.enabled) {
+    if (hubConfig.p2p.enabled) {
       const discovery = new P2PDiscovery();
       const p2pPort = hubConfig.p2p.port ?? 3212;
       const connectPeer = (hub: P2PDiscoveredHub) => {
@@ -125,6 +130,7 @@ async function main(): Promise<void> {
       p2pListener = listener;
     }
     connectHub = async () => {
+      if (!hubConfig.relay.url) throw new Error("Relay URL not configured");
       relayToken ??= await registerHub(
         hubConfig.relay.url,
         identity.getPublicKey(),
@@ -165,13 +171,13 @@ async function main(): Promise<void> {
     undefined,
     undefined,
     pluginLoader,
-    hubIdentity && relayClient && connectionManager && connectHub && config.hub
+    hubIdentity && relayClient && connectionManager && connectHub
       ? {
           identity: hubIdentity,
           relayClient,
           registry,
           connectionManager,
-          hubConfig: config.hub,
+          hubConfig,
           connect: connectHub,
         }
       : undefined,
