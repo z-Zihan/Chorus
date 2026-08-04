@@ -161,6 +161,7 @@ function rowToPersistedAgent(
     avatar: row.avatar ?? undefined,
     type: row.type as AgentConfig["type"],
     config: safeJson<Record<string, unknown>>(row.config, {}),
+    capabilities: safeJson<string[]>(row.capabilities, []),
     source: row.source as PersistedAgentConfig["source"],
     managed: row.managed,
     customizedFields: safeJson<string[]>(row.customizedFields, []),

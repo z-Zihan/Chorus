@@ -500,6 +500,9 @@ export class AgentRegistry {
       ownerId: row?.ownerId ?? undefined,
       ownerType: row?.ownerType as Agent["ownerType"],
       owner: owner ? { id: owner.id, name: owner.name, kind: owner.kind } : undefined,
+      capabilities: parseCapabilities(row?.capabilities),
+      stale: row?.ownerType === "remote" ? row.stale : false,
+      homeHubId: row?.homeHubId ?? owner?.hubId ?? "",
       createdAt: row?.createdAt ?? Date.now(),
       updatedAt: row?.updatedAt ?? Date.now(),
     };
@@ -521,6 +524,9 @@ export class AgentRegistry {
       ownerId: row?.ownerId ?? undefined,
       ownerType: row?.ownerType as Agent["ownerType"],
       owner: owner ? { id: owner.id, name: owner.name, kind: owner.kind } : undefined,
+      capabilities: parseCapabilities(row?.capabilities),
+      stale: row?.ownerType === "remote" ? row.stale : false,
+      homeHubId: row?.homeHubId ?? owner?.hubId ?? "",
       createdAt: row?.createdAt ?? Date.now(),
       updatedAt: row?.updatedAt ?? Date.now(),
     };
@@ -591,6 +597,18 @@ export class AgentRegistry {
     } finally {
       this.healthCheckRunning = false;
     }
+  }
+}
+
+function parseCapabilities(value?: string): string[] {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed)
+      ? parsed.filter((capability): capability is string => typeof capability === "string")
+      : [];
+  } catch {
+    return [];
   }
 }
 

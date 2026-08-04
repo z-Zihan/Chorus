@@ -13,6 +13,7 @@ const createAgentSchema = z.object({
   avatar: z.string().url().max(2_000).optional(),
   type: agentTypeSchema,
   config: z.record(z.unknown()).default({}),
+  capabilities: z.array(z.string().trim().min(1).max(100)).max(100).optional(),
 });
 const updateAgentSchema = createAgentSchema.pick({
   name: true,
@@ -22,13 +23,33 @@ const updateAgentSchema = createAgentSchema.pick({
 }).partial().extend({ disabled: z.boolean().optional() })
   .refine((value) => Object.keys(value).length > 0, "At least one field is required");
 
+const booleanQuerySchema = z.enum(["true", "false"]).transform((value) => value === "true");
+const agentQuerySchema = z.object({
+  ownerId: z.string().trim().min(1).optional(),
+  ownerType: z.enum(["local", "remote", "system"]).optional(),
+  includeRemote: booleanQuerySchema.default("true"),
+  includeDisabled: booleanQuerySchema.default("false"),
+  status: z.enum(["online", "busy", "offline"]).optional(),
+  capability: z.string().trim().min(1).optional(),
+  limit: z.coerce.number().int().min(1).max(500).default(100),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+const userQuerySchema = z.object({
+  kind: z.enum(["local", "remote"]).optional(),
+  includeAgents: booleanQuerySchema.default("false"),
+});
+
 export function registerAgentRoutes(
   app: FastifyInstance,
   registry: AgentRegistry,
   repository: Repository,
 ): void {
-  app.get<{ Querystring: { includeDisabled?: string } }>("/api/agents", async (request) => {
-    return registry.list(request.query.includeDisabled === "true").map(stripApiKey);
+  app.get("/api/agents", async (request, reply) => {
+    const parsed = agentQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: "Invalid query", issues: parsed.error.flatten() });
+    }
+    return repository.listAgents(parsed.data).map(stripApiKey);
   });
 
   app.get<{ Params: { id: string } }>("/api/agents/:id", async (req, reply) => {
@@ -40,7 +61,25 @@ export function registerAgentRoutes(
     return stripApiKey(agent);
   });
 
-  app.get("/api/users", async () => repository.listUsers());
+  app.get("/api/users", async (request, reply) => {
+    const parsed = userQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: "Invalid query", issues: parsed.error.flatten() });
+    }
+    return repository.listUsers({ kind: parsed.data.kind }).map((user) => {
+      const userWithAgents = repository.getUserWithAgents(user.id);
+      if (!userWithAgents) return { ...user, agentCount: 0 };
+      if (parsed.data.includeAgents) return userWithAgents;
+      const { agents: _agents, ...userWithoutAgents } = userWithAgents;
+      return userWithoutAgents;
+    });
+  });
+
+  app.get<{ Params: { userId: string } }>("/api/users/:userId/agents", async (request, reply) => {
+    const user = repository.getUserWithAgents(request.params.userId);
+    if (!user) return reply.code(404).send({ error: "User not found" });
+    return user.agents.map(stripApiKey);
+  });
 
   app.post("/api/agents", async (req, reply) => {
     const parsed = createAgentSchema.safeParse(req.body);

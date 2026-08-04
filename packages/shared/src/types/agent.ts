@@ -12,6 +12,7 @@ export interface AgentConfig {
   avatar?: string;
   type: AgentType;
   config: Record<string, unknown>;
+  capabilities?: string[];
 }
 
 export type AgentConfigSource = "explicit_config" | "user" | "auto_detected" | "catalog";
@@ -39,6 +40,9 @@ export interface Agent {
   ownerId?: string;
   ownerType?: "local" | "remote" | "system";
   owner?: { id: string; name: string; kind: UserKind };
+  capabilities?: string[];
+  stale?: boolean;
+  homeHubId?: string;
   createdAt: number;
   updatedAt: number;
 }

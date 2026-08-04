@@ -33,9 +33,23 @@ export function createDatabase(dbPath: string) {
   ensureCredentialRefColumn(sqlite);
   ensureConversationColumns(sqlite);
   ensureUserColumns(sqlite);
+  ensureAgentDiscoveryColumns(sqlite);
   ensureTrustedHubsTable(sqlite);
   initializeMessageSearch(sqlite);
   return { sqlite, db };
+}
+
+function ensureAgentDiscoveryColumns(sqlite: Database.Database): void {
+  const columns = sqlite.prepare("PRAGMA table_info(agents)").all() as Array<{ name: string }>;
+  if (!columns.some((column) => column.name === "capabilities")) {
+    sqlite.exec("ALTER TABLE agents ADD COLUMN capabilities TEXT NOT NULL DEFAULT '[]'");
+  }
+  if (!columns.some((column) => column.name === "stale")) {
+    sqlite.exec("ALTER TABLE agents ADD COLUMN stale INTEGER NOT NULL DEFAULT 0");
+  }
+  if (!columns.some((column) => column.name === "home_hub_id")) {
+    sqlite.exec("ALTER TABLE agents ADD COLUMN home_hub_id TEXT");
+  }
 }
 
 function ensureTrustedHubsTable(sqlite: Database.Database): void {

@@ -11,6 +11,7 @@ import type {
   MessageStatus,
   PersistedAgentConfig,
   User,
+  UserWithAgents,
 } from "@agentlink/shared";
 import { and, asc, desc, eq, inArray, isNull, lt } from "drizzle-orm";
 import { getUserKey, setUserKey } from "../credential-store.js";
@@ -29,6 +30,21 @@ import {
   users,
 } from "./schema";
 
+export interface AgentListFilter {
+  ownerId?: string;
+  ownerType?: "local" | "remote" | "system";
+  includeRemote?: boolean;
+  includeDisabled?: boolean;
+  status?: AgentStatus;
+  capability?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface UserListFilter {
+  kind?: User["kind"];
+}
+
 export class Repository {
   private agentStatusResolver: (agentId: string) => AgentStatus = () => "offline";
 
@@ -42,6 +58,8 @@ export class Repository {
     agent: (AgentConfig | PersistedAgentConfig) & {
       ownerId?: string;
       ownerType?: Agent["ownerType"];
+      stale?: boolean;
+      homeHubId?: string;
     },
     credentialRef?: string | null,
   ): void {
@@ -50,6 +68,9 @@ export class Repository {
     const current = this.getAgentRow(persisted.id);
     const ownerId = agent.ownerId ?? current?.ownerId ?? "usr_local";
     const ownerType = agent.ownerType ?? current?.ownerType ?? "system";
+    const capabilities = agent.capabilities ?? safeJson<string[]>(current?.capabilities ?? null, []);
+    const stale = agent.stale ?? current?.stale ?? false;
+    const homeHubId = agent.homeHubId ?? current?.homeHubId ?? null;
     const storedConfig = ownerType === "remote" ? {} : persisted.config;
     const storedCredentialRef = ownerType === "remote" ? null : credentialRef;
     this.context.db
@@ -70,6 +91,9 @@ export class Repository {
         disabled: persisted.disabled,
         ownerId,
         ownerType,
+        capabilities: JSON.stringify(capabilities),
+        stale,
+        homeHubId,
         createdAt: now,
         updatedAt: now,
       })
@@ -94,6 +118,9 @@ export class Repository {
           disabled: persisted.disabled,
           ownerId,
           ownerType,
+          capabilities: JSON.stringify(capabilities),
+          stale,
+          homeHubId,
           updatedAt: now,
         },
       })
@@ -144,13 +171,44 @@ export class Repository {
     return transaction();
   }
 
-  listUsers(): User[] {
-    return this.context.db.select().from(users).orderBy(asc(users.createdAt)).all().map(toUser);
+  listUsers(filter: UserListFilter = {}): User[] {
+    const rows = this.context.db.select().from(users).orderBy(asc(users.createdAt)).all();
+    return rows
+      .filter((row) => !filter.kind || row.kind === filter.kind)
+      .map(toUser);
   }
 
   getUser(id: string): User | undefined {
     const row = this.context.db.select().from(users).where(eq(users.id, id)).get();
     return row ? toUser(row) : undefined;
+  }
+
+  listAgents(filter: AgentListFilter = {}): Agent[] {
+    const limit = Math.min(Math.max(filter.limit ?? 100, 0), 500);
+    const offset = Math.max(filter.offset ?? 0, 0);
+    const agents = this.listAgentRows()
+      .filter((row) => !filter.ownerId || row.ownerId === filter.ownerId)
+      .filter((row) => !filter.ownerType || row.ownerType === filter.ownerType)
+      .filter((row) => filter.includeRemote !== false || row.ownerType !== "remote")
+      .filter((row) => filter.includeDisabled === true || row.ownerType === "remote" || !row.disabled)
+      .map((row) => this.toAgent(row))
+      .filter((agent) => !filter.status || agent.status === filter.status)
+      .filter((agent) => !filter.capability || agent.capabilities?.includes(filter.capability));
+    return agents.slice(offset, offset + limit);
+  }
+
+  getUserWithAgents(userId: string): UserWithAgents | undefined {
+    const user = this.getUser(userId);
+    if (!user) return undefined;
+    const userAgents: Agent[] = [];
+    let offset = 0;
+    while (true) {
+      const page = this.listAgents({ ownerId: userId, limit: 500, offset });
+      userAgents.push(...page);
+      if (page.length < 500) break;
+      offset += page.length;
+    }
+    return { ...user, agents: userAgents, agentCount: userAgents.length };
   }
 
   upsertRemoteUser(user: User): void {
@@ -273,11 +331,37 @@ export class Repository {
     if (ids.length > 0) {
       this.context.db
         .update(agents)
-        .set({ disabled, updatedAt: Date.now() })
+        .set({ disabled, stale: disabled, updatedAt: Date.now() })
         .where(inArray(agents.id, ids))
         .run();
     }
     return ids;
+  }
+
+  private toAgent(row: typeof agents.$inferSelect): Agent {
+    const owner = row.ownerId ? this.getUser(row.ownerId) : undefined;
+    const capabilities = safeJson<unknown[]>(row.capabilities, []).filter(
+      (capability): capability is string => typeof capability === "string",
+    );
+    return {
+      id: row.id,
+      name: row.name,
+      description: row.description ?? "",
+      avatar: row.avatar ?? undefined,
+      type: row.type as Agent["type"],
+      status: this.agentStatusResolver(row.id),
+      model: String(safeJson<Record<string, unknown>>(row.config, {}).model ?? ""),
+      disabled: row.disabled,
+      catalogEntryId: row.catalogEntryId ?? undefined,
+      ownerId: row.ownerId ?? undefined,
+      ownerType: row.ownerType as Agent["ownerType"],
+      owner: owner ? { id: owner.id, name: owner.name, kind: owner.kind } : undefined,
+      capabilities,
+      stale: row.ownerType === "remote" ? row.stale : false,
+      homeHubId: row.homeHubId ?? owner?.hubId ?? "",
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+    };
   }
 
   clearAgentCredentialRefs(): void {

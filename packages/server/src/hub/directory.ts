@@ -41,7 +41,7 @@ export class DirectoryService {
         name: agent.name,
         description: agent.description || undefined,
         type: agent.type,
-        capabilities: [],
+        capabilities: agent.capabilities ?? [],
         status: agent.status,
         visibility,
       }));
@@ -149,8 +149,11 @@ export class DirectoryService {
             managed: false,
             customizedFields: [],
             disabled: false,
+            capabilities: agent.capabilities,
             ownerId: manifest.user.id,
             ownerType: "remote",
+            stale: false,
+            homeHubId: manifest.user.hubId,
           },
           null,
         );

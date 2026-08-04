@@ -184,6 +184,7 @@ export class InstallExecutor extends EventEmitter {
       managed: true,
       customizedFields: [],
       catalogEntryId: entry.id,
+      capabilities: entry.capabilities,
       disabled: false,
     } satisfies PersistedAgentConfig);
     const apiKey = options.apiKey?.trim();
@@ -211,6 +212,7 @@ export class InstallExecutor extends EventEmitter {
       managed: true,
       customizedFields: [],
       catalogEntryId: entry.id,
+      capabilities: entry.capabilities,
       detectionFingerprint: detection.fingerprint,
       disabled: false,
     } satisfies PersistedAgentConfig);

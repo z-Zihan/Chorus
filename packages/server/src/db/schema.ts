@@ -42,6 +42,9 @@ export const agents = sqliteTable("agents", {
   disabled: integer("disabled", { mode: "boolean" }).notNull().default(false),
   ownerId: text("owner_id").references(() => users.id),
   ownerType: text("owner_type").notNull().default("system"),
+  capabilities: text("capabilities").notNull().default("[]"),
+  stale: integer("stale", { mode: "boolean" }).notNull().default(false),
+  homeHubId: text("home_hub_id"),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 });

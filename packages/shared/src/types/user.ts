@@ -12,6 +12,11 @@ export interface User {
   lastSeenAt?: number;
 }
 
+export interface UserWithAgents extends User {
+  agents: import("./agent").Agent[];
+  agentCount: number;
+}
+
 export interface UserHubBinding {
   userId: string;
   userPublicKey: string;
