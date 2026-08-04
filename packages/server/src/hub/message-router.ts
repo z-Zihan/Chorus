@@ -7,6 +7,7 @@ import { decryptPayload, encryptPayload, signEnvelope, verifySignature } from ".
 import type { ConnectionManager } from "./connection-manager.js";
 import type { HubIdentity } from "./identity.js";
 import type { P2PListener } from "./p2p-listener.js";
+import { normalizeHubPayload, rejectIncompatibleVersion } from "./payload-compat.js";
 import type { RelayClient } from "./relay-client.js";
 
 const REMOTE_CALL_TIMEOUT_MS = 120_000;
@@ -20,7 +21,16 @@ interface PendingMessage {
   abort?: () => void;
 }
 
-type OutboundMessage = string | HubPayload;
+type OutboundPayload = Omit<
+  HubPayload,
+  "protocolVersion" | "fromUserId" | "fromUserName" | "agentId"
+>;
+type OutboundMessage = string | OutboundPayload;
+
+interface LocalUserIdentity {
+  id: string;
+  name: string;
+}
 
 export class HubMessageRouter {
   private readonly pendingOutbound = new Map<string, PendingMessage>();
@@ -34,6 +44,7 @@ export class HubMessageRouter {
     private readonly runtime: AgentRuntime,
     private readonly relayClient: RelayClient,
     private readonly connectionManager: ConnectionManager,
+    private readonly localUser: LocalUserIdentity,
   ) {
     relayClient.onMessage((envelope) => {
       void this.onEnvelope(envelope, relayClient).catch((error: unknown) => {
@@ -76,12 +87,18 @@ export class HubMessageRouter {
     );
     if (!validSignature) throw new Error(`Invalid Hub envelope signature from ${envelope.from}`);
 
-    const payload = await decryptPayload<HubPayload>(
+    const rawPayload = await decryptPayload<Record<string, unknown>>(
       envelope.ciphertext,
       envelope.nonce,
       senderPublicKey,
       this.identity.getSecretKey(),
     );
+    if (rejectIncompatibleVersion(rawPayload as unknown as HubPayload)) {
+      throw new Error(
+        `Unsupported Hub payload protocol version: ${String(rawPayload.protocolVersion)}`,
+      );
+    }
+    const payload = normalizeHubPayload(rawPayload);
 
     const correlationId = stringMetadata(payload.metadata, "correlationId")
       ?? stringMetadata(payload.metadata, "replyTo");
@@ -89,7 +106,7 @@ export class HubMessageRouter {
       const error = payload.metadata?.error === true
         ? new Error(payload.content || "Remote Agent call failed")
         : undefined;
-      this.settlePending(correlationId, payload.content, error);
+      this.settlePending(correlationId, payload.content ?? "", error);
       return;
     }
 
@@ -106,14 +123,21 @@ export class HubMessageRouter {
     conversationId: string,
   ): Promise<string> {
     const recipientPublicKey = this.registry.getHubPublicKey(toHubId) ?? toHubId;
-    const payload: HubPayload = typeof message === "string"
-      ? {
-          messageType: "chat",
-          conversationId,
-          messageId: randomUUID(),
-          content: message,
-        }
-      : { ...message, conversationId };
+    const outbound: OutboundPayload =
+      typeof message === "string"
+        ? {
+            messageType: "chat",
+            conversationId,
+            messageId: randomUUID(),
+            content: message,
+          }
+        : { ...message, conversationId };
+    const payload: HubPayload = {
+      ...outbound,
+      protocolVersion: 2,
+      fromUserId: this.localUser.id,
+      fromUserName: this.localUser.name,
+    };
     const encrypted = await encryptPayload(
       payload,
       recipientPublicKey,
@@ -147,12 +171,13 @@ export class HubMessageRouter {
   ): Promise<string> {
     const messageId = randomUUID();
     const response = this.waitForResponse(messageId, context.signal);
-    const payload: HubPayload = {
+    const payload: OutboundPayload = {
       messageType: "a2a_call",
       conversationId: context.conversationId,
       messageId,
       content: message,
-      agentId: fromAgentId,
+      fromAgentId,
+      toAgentId,
       metadata: {
         targetAgentId: toAgentId,
         callStack: context.callStack,
@@ -176,18 +201,21 @@ export class HubMessageRouter {
     payload: HubPayload,
     relayClient: RelayClient,
   ): Promise<void> {
-    const targetAgentId = stringMetadata(payload.metadata, "targetAgentId");
+    const targetAgentId = payload.toAgentId ?? stringMetadata(payload.metadata, "targetAgentId");
     if (!targetAgentId) throw new Error("Inbound A2A call has no targetAgentId");
+    const conversationId = requiredString(payload.conversationId, "conversationId", "A2A call");
+    const message = requiredString(payload.content, "content", "A2A call");
+    const fromAgentId = payload.fromAgentId ?? `${fromHubId}:remote`;
     const callStack = Array.isArray(payload.metadata?.callStack)
       ? payload.metadata.callStack.filter((value): value is string => typeof value === "string")
-      : [payload.agentId ?? `${fromHubId}:remote`];
+      : [fromAgentId];
     try {
       const content = await this.runtime.handleRemoteA2ACall(
-        payload.agentId ?? `${fromHubId}:remote`,
+        fromAgentId,
         targetAgentId,
-        payload.content,
+        message,
         {
-          conversationId: payload.conversationId,
+          conversationId,
           history: [],
           callStack,
           a2aThreadId: stringMetadata(payload.metadata, "a2aThreadId"),
@@ -206,12 +234,14 @@ export class HubMessageRouter {
     relayClient: RelayClient,
   ): Promise<void> {
     try {
-      const targetAgentId = stringMetadata(payload.metadata, "targetAgentId");
-      const content = await this.runtime.handleHubMessage(
+      const conversationId = requiredString(
         payload.conversationId,
-        payload.content,
-        targetAgentId,
+        "conversationId",
+        "chat message",
       );
+      const message = requiredString(payload.content, "content", "chat message");
+      const targetAgentId = payload.toAgentId ?? stringMetadata(payload.metadata, "targetAgentId");
+      const content = await this.runtime.handleHubMessage(conversationId, message, targetAgentId);
       await this.sendResponse(fromHubId, payload, content, false, relayClient, "chat");
     } catch (error) {
       const content = error instanceof Error ? error.message : String(error);
@@ -227,13 +257,20 @@ export class HubMessageRouter {
     _relayClient: RelayClient,
     messageType: HubPayload["messageType"] = "a2a_response",
   ): Promise<void> {
-    await this.handleOutbound(toHubId, {
-      messageType,
-      conversationId: request.conversationId,
-      messageId: randomUUID(),
-      content,
-      metadata: { correlationId: request.messageId, error },
-    }, request.conversationId);
+    await this.handleOutbound(
+      toHubId,
+      {
+        messageType,
+        conversationId: request.conversationId,
+        messageId: randomUUID(),
+        content,
+        toUserId: request.fromUserId,
+        fromAgentId: request.toAgentId ?? stringMetadata(request.metadata, "targetAgentId"),
+        toAgentId: request.fromAgentId,
+        metadata: { correlationId: request.messageId, error },
+      },
+      requiredString(request.conversationId, "conversationId", "response"),
+    );
   }
 
   private waitForResponse(messageId: string, signal?: AbortSignal): Promise<string> {
@@ -300,4 +337,15 @@ function signingData(envelope: Omit<HubEnvelope, "signature"> | HubEnvelope): st
 function stringMetadata(metadata: Record<string, unknown> | undefined, key: string): string | undefined {
   const value = metadata?.[key];
   return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function requiredString(
+  value: string | undefined,
+  field: string,
+  payloadDescription: string,
+): string {
+  if (typeof value !== "string") {
+    throw new Error(`Inbound ${payloadDescription} has no ${field}`);
+  }
+  return value;
 }

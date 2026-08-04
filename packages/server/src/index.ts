@@ -27,6 +27,7 @@ import { HubMessageRouter } from "./hub/message-router.js";
 import { P2PDiscovery } from "./hub/p2p-discovery.js";
 import { P2PListener } from "./hub/p2p-listener.js";
 import { ConnectionManager } from "./hub/connection-manager.js";
+import { deriveUserId } from "./identity/user-keys.js";
 
 process.on("uncaughtException", (error) => {
   logger.fatal({ err: error }, "Uncaught exception");
@@ -46,7 +47,12 @@ async function main(): Promise<void> {
 
   const { sqlite, db } = createDatabase(dbPath);
   const repository = new Repository({ sqlite, db });
-  await repository.getOrCreateLocalUser("本机用户");
+  const localUser = await repository.getOrCreateLocalUser("本机用户");
+  if (!localUser.publicKey) throw new Error("Local User public key is unavailable");
+  const localProtocolUser = {
+    id: deriveUserId(localUser.publicKey),
+    name: localUser.name,
+  };
   let hubIdentity: HubIdentity | undefined;
   let relayClient: RelayClient | undefined;
   let p2pDiscovery: P2PDiscovery | undefined;
@@ -77,7 +83,14 @@ async function main(): Promise<void> {
     const listener = new P2PListener(client);
     const manager = new ConnectionManager(listener, client);
     connectionManager = manager;
-    const messageRouter = new HubMessageRouter(identity, registry, runtime, client, manager);
+    const messageRouter = new HubMessageRouter(
+      identity,
+      registry,
+      runtime,
+      client,
+      manager,
+      localProtocolUser,
+    );
     runtime.setHubMessageRouter(messageRouter);
     if (hubConfig.p2p?.enabled) {
       const discovery = new P2PDiscovery();

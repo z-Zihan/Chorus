@@ -71,18 +71,66 @@ export interface HubEnvelope {
  * 解密后的消息 payload
  */
 export interface HubPayload {
+  /** 协议版本 */
+  protocolVersion: 2;
   /** 消息语义类型 */
-  messageType: "chat" | "a2a_call" | "a2a_response" | "agent_status" | "typing";
+  messageType:
+    | "chat"
+    | "a2a_call"
+    | "a2a_response"
+    | "agent_status"
+    | "typing"
+    | "directory_request"
+    | "directory_announce"
+    | "directory_revoke"
+    | "delivery_ack";
   /** 会话 ID */
-  conversationId: string;
+  conversationId?: string;
   /** 消息 ID */
   messageId: string;
   /** 消息内容 */
-  content: string;
+  content?: string;
+  /** 来源 User ID */
+  fromUserId: string;
+  /** 来源 User 展示名，不用于授权 */
+  fromUserName: string;
+  /** 目标 User ID */
+  toUserId?: string;
   /** 来源 Agent ID */
+  fromAgentId?: string;
+  /** 目标 Agent ID */
+  toAgentId?: string;
+  /** v1 兼容字段；读取时解释为 fromAgentId */
   agentId?: string;
+  /** User/Agent 目录声明 */
+  directory?: DirectoryManifest;
   /** 附加元数据 */
   metadata?: Record<string, unknown>;
+}
+
+export interface DirectoryManifest {
+  schemaVersion: 1;
+  directoryVersion: number;
+  issuedAt: number;
+  expiresAt: number;
+  user: {
+    id: string;
+    name: string;
+    avatar?: string;
+    hubId: string;
+    publicKey: string;
+  };
+  agents: Array<{
+    id: string;
+    name: string;
+    description?: string;
+    type: string;
+    capabilities: string[];
+    status: "online" | "busy" | "offline" | "error";
+    visibility: "trusted" | "room" | "public";
+  }>;
+  revokedAgentIds: string[];
+  signature: string;
 }
 
 /**
