@@ -65,5 +65,20 @@
   "errors": {
     "nameRequired": "Agent 名称不能为空"
   },
-  "guide": "使用指南"
+  "guide": "使用指南",
+  "privacy": "隐私与权限",
+  "a2aPermission": "A2A 权限",
+  "a2aPermissionDesc": "控制每个会话中 Agent 之间如何互相调用。",
+  "a2aAuto": "自动",
+  "a2aConfirm": "需要确认",
+  "a2aDeny": "禁用",
+  "trustedHubs": "已配对 Hub",
+  "trustedHubsDesc": "管理已配对的远程设备。被阻止的 Hub 无法发送消息。",
+  "blockHub": "阻止",
+  "removeTrust": "移除信任",
+  "noTrustedHubs": "暂无已配对的 Hub。",
+  "disclosurePreview": "披露预览",
+  "disclosurePreviewDesc": "你的可信 Hub 能看到的 Agent。",
+  "noConversations": "暂无会话。",
+  "noAgents": "暂无已配置的 Agent。"
 }

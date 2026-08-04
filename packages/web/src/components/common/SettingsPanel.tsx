@@ -12,12 +12,14 @@ import {
   Palette,
   RefreshCw,
   Shield,
+  ShieldCheck,
   Trash2,
   X,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { useTranslation } from "react-i18next";
+import { PrivacySettings } from "@/components/settings/PrivacySettings";
 import { LogViewer } from "@/components/common/LogViewer";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -42,7 +44,7 @@ interface SettingsPanelProps {
   onOpenChange: (open: boolean) => void;
 }
 
-type SettingsTab = "appearance" | "language" | "security" | "hub" | "diagnostics" | "about";
+type SettingsTab = "appearance" | "language" | "security" | "privacy" | "hub" | "diagnostics" | "about";
 
 export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
   const { t } = useTranslation(["common", "settings"]);
@@ -68,6 +70,7 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
     { id: "appearance", label: t("common:settings.appearance"), icon: Palette },
     { id: "language", label: t("common:settings.language"), icon: Languages },
     { id: "security", label: t("common:settings.security"), icon: Shield },
+    { id: "privacy", label: t("common:settings.privacy"), icon: ShieldCheck },
     { id: "hub", label: t("common:settings.hub"), icon: Network },
     { id: "diagnostics", label: t("common:settings.diagnostics"), icon: Activity },
     { id: "about", label: t("common:settings.about"), icon: Info },
@@ -321,6 +324,12 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
                         : t("common:settings.clearCredentials")}
                     </Button>
                   </div>
+                </section>
+              )}
+
+              {activeTab === "privacy" && (
+                <section id="settings-panel-privacy" role="tabpanel" aria-labelledby="settings-tab-privacy">
+                  <PrivacySettings />
                 </section>
               )}
 

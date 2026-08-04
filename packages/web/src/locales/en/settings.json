@@ -65,5 +65,20 @@
   "errors": {
     "nameRequired": "Agent name is required"
   },
-  "guide": "Usage Guide"
+  "guide": "Usage Guide",
+  "privacy": "Privacy & Permissions",
+  "a2aPermission": "A2A Permission",
+  "a2aPermissionDesc": "Control how agents can call each other in each conversation.",
+  "a2aAuto": "Auto",
+  "a2aConfirm": "Require confirmation",
+  "a2aDeny": "Disabled",
+  "trustedHubs": "Trusted Hubs",
+  "trustedHubsDesc": "Manage paired remote devices. Blocked hubs cannot send messages.",
+  "blockHub": "Block",
+  "removeTrust": "Remove trust",
+  "noTrustedHubs": "No trusted hubs yet.",
+  "disclosurePreview": "Disclosure Preview",
+  "disclosurePreviewDesc": "Agents visible to your trusted hubs.",
+  "noConversations": "No conversations yet.",
+  "noAgents": "No agents configured."
 }

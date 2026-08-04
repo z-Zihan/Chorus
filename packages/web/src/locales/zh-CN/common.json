@@ -109,7 +109,8 @@
     "clearCredentials": "清除所有凭据",
     "clearingCredentials": "正在清除…",
     "about": "关于",
-    "version": "版本"
+    "version": "版本",
+    "privacy": "隐私"
   },
   "catalog": {
     "title": "Agent 目录",

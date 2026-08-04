@@ -110,7 +110,8 @@
     "clearCredentials": "Clear all credentials",
     "clearingCredentials": "Clearing…",
     "about": "About",
-    "version": "Version"
+    "version": "Version",
+    "privacy": "Privacy"
   },
   "catalog": {
     "title": "Agent Catalog",

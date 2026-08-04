@@ -185,6 +185,13 @@ export const api = {
   // Plugins
   getPlugins: () => request<PluginInfo[]>("/plugins"),
 
+  // Trust management
+  getTrustList: () => request<Array<{ hubId: string; hubFingerprint: string; userName?: string; trustLevel: string; lastSeenAt?: number; pairedAt?: number }>>("/trust"),
+  blockHub: (hubId: string) =>
+    request<{ success: boolean }>(`/trust/block`, { method: "POST", body: JSON.stringify({ hubId }) }),
+  removeTrust: (hubId: string) =>
+    request<{ success: boolean }>(`/trust/${hubId}`, { method: "DELETE" }),
+
   // Conversations
   getConversations: (archived = false, type?: ConversationType) => {
     const params = new URLSearchParams();
