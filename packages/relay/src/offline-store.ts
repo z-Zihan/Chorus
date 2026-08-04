@@ -1,5 +1,5 @@
 import type { HubEnvelope } from "@agentlink/shared";
-import { asc, eq, lte } from "drizzle-orm";
+import { asc, eq, lte, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import type { DatabaseContext } from "./db/index.js";
 import { offlineMessages } from "./db/schema.js";
@@ -35,24 +35,28 @@ export class OfflineStore {
   }
 
   getForHub(hubId: string): HubEnvelope[] {
-    const transaction = this.database.sqlite.transaction(() => {
-      const rows = this.database.db
-        .select()
-        .from(offlineMessages)
-        .where(eq(offlineMessages.toHubId, hubId))
-        .orderBy(asc(offlineMessages.createdAt))
-        .all();
-      this.database.db.delete(offlineMessages).where(eq(offlineMessages.toHubId, hubId)).run();
-      return rows;
-    });
-
-    return transaction().flatMap((row) => {
+    const rows = this.database.db
+      .select()
+      .from(offlineMessages)
+      .where(eq(offlineMessages.toHubId, hubId))
+      .orderBy(asc(offlineMessages.createdAt))
+      .all();
+    return rows.flatMap((row) => {
       try {
         return [JSON.parse(row.envelope) as HubEnvelope];
       } catch {
         return [];
       }
     });
+  }
+
+  /** Delete a persisted envelope only after transport delivery succeeds. */
+  ackMessage(messageId: string): number {
+    if (!messageId) return 0;
+    return this.database.db
+      .delete(offlineMessages)
+      .where(sql`json_extract(${offlineMessages.envelope}, '$.id') = ${messageId}`)
+      .run().changes;
   }
 
   cleanupExpired(): number {

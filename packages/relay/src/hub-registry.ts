@@ -7,6 +7,7 @@ export type HubRecord = typeof hubs.$inferSelect;
 
 export class HubRegistry {
   private readonly sockets = new Map<string, RelaySocket>();
+  private readonly blockedHubs = new Map<string, Set<string>>();
 
   constructor(private readonly database: DatabaseContext) {
     database.db.update(hubs).set({ online: false, updatedAt: Date.now() }).run();
@@ -53,6 +54,23 @@ export class HubRegistry {
     return this.sockets.get(hubId) ?? null;
   }
 
+  blockHub(hubId: string, blockedHubId: string): void {
+    const blocked = this.blockedHubs.get(hubId) ?? new Set<string>();
+    blocked.add(blockedHubId);
+    this.blockedHubs.set(hubId, blocked);
+  }
+
+  /** Clear all session-scoped blocks installed by this Hub. */
+  unblockHub(hubId: string): void {
+    this.blockedHubs.delete(hubId);
+  }
+
+  /** Blocks are symmetric for routing even though only one side installs them. */
+  isBlocked(fromHubId: string, toHubId: string): boolean {
+    return this.blockedHubs.get(fromHubId)?.has(toHubId) === true
+      || this.blockedHubs.get(toHubId)?.has(fromHubId) === true;
+  }
+
   list(): HubRecord[] {
     return this.database.db.select().from(hubs).all();
   }
@@ -70,6 +88,7 @@ export class HubRegistry {
     const socket = this.sockets.get(hubId);
     socket?.close(1000, "Hub deregistered");
     this.sockets.delete(hubId);
+    this.unblockHub(hubId);
     return this.database.db.delete(hubs).where(eq(hubs.hubId, hubId)).run().changes > 0;
   }
 }

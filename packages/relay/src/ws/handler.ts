@@ -1,4 +1,9 @@
-import type { HubEnvelope, RelayClientMessage, RelayServerMessage } from "@agentlink/shared";
+import type {
+  HubEnvelope,
+  RelayClientMessage,
+  RelayServerMessage,
+  TransportReceipt,
+} from "@agentlink/shared";
 import type { FastifyInstance } from "fastify";
 import { verifyHubToken } from "../auth.js";
 import type { HubRegistry } from "../hub-registry.js";
@@ -42,6 +47,22 @@ function parseMessage(data: { toString(): string }): RelayClientMessage | null {
 function broadcastPresence(registry: HubRegistry, hubId: string, status: "online" | "offline"): void {
   const message: RelayServerMessage = { type: "presence", hubId, status };
   for (const hub of registry.listOnline()) sendJson(hub.socket, message);
+}
+
+function notifyEnvelopeSender(
+  registry: HubRegistry,
+  envelope: HubEnvelope,
+  status: TransportReceipt["status"],
+  fallbackSocket?: RelaySocket,
+): void {
+  const socket = fallbackSocket ?? registry.getSocket(envelope.from);
+  if (!socket) return;
+  sendJson(socket, {
+    type: "transport_receipt",
+    messageId: envelope.id,
+    status,
+    timestamp: Date.now(),
+  } satisfies RelayServerMessage);
 }
 
 function broadcastRoomEvent(
@@ -129,10 +150,18 @@ export function registerWebSocket(app: FastifyInstance, dependencies: WebSocketD
         clearTimeout(registrationTimeout);
         registry.setOnline(hubId, socket);
         sendJson(socket, { type: "registered", relayHubId: hubId } satisfies RelayServerMessage);
-        sendJson(socket, {
+        const envelopes = offlineStore.getForHub(hubId)
+          .filter((envelope) => !registry.isBlocked(envelope.from, hubId!));
+        const delivered = sendJson(socket, {
           type: "offline_messages",
-          envelopes: offlineStore.getForHub(hubId),
+          envelopes,
         } satisfies RelayServerMessage);
+        if (delivered) {
+          for (const envelope of envelopes) {
+            offlineStore.ackMessage(envelope.id);
+            notifyEnvelopeSender(registry, envelope, "delivered");
+          }
+        }
         broadcastPresence(registry, hubId, "online");
         return;
       }
@@ -160,7 +189,25 @@ export function registerWebSocket(app: FastifyInstance, dependencies: WebSocketD
             socket.close(1008, "Message rate limit exceeded");
             return;
           }
-          messageRouter.routeMessage(message.envelope, registry, offlineStore);
+          const result = messageRouter.routeMessage(message.envelope, registry, offlineStore);
+          if (result === "delivered") {
+            notifyEnvelopeSender(registry, message.envelope, "delivered", socket);
+          } else if (result === "blocked") {
+            notifyEnvelopeSender(registry, message.envelope, "failed", socket);
+          }
+        } else if (message.type === "contact_block") {
+          const blockedHubId = typeof message.blockedHubId === "string"
+            ? message.blockedHubId.trim()
+            : "";
+          const success = blockedHubId.length > 0
+            && blockedHubId !== hubId
+            && registry.get(blockedHubId) !== null;
+          if (success) registry.blockHub(hubId, blockedHubId);
+          sendJson(socket, {
+            type: "contact_block_ack",
+            blockedHubId,
+            success,
+          } satisfies RelayServerMessage);
         } else if (message.type === "room:join" && typeof message.roomId === "string") {
           roomManager.joinRoom(message.roomId, hubId);
           broadcastRoomEvent(registry, roomManager, message.roomId, "join", hubId);
@@ -194,6 +241,9 @@ export function registerWebSocket(app: FastifyInstance, dependencies: WebSocketD
         }
       } catch (error) {
         app.log.warn({ err: error, hubId }, "Unable to handle relay WebSocket message");
+        if (message.type === "message" && validEnvelope(message.envelope)) {
+          notifyEnvelopeSender(registry, message.envelope, "failed", socket);
+        }
       }
     });
 
@@ -202,6 +252,7 @@ export function registerWebSocket(app: FastifyInstance, dependencies: WebSocketD
       clearInterval(heartbeat);
       if (hubId && registry.getSocket(hubId) === socket) {
         registry.setOffline(hubId);
+        registry.unblockHub(hubId);
         broadcastPresence(registry, hubId, "offline");
       }
     };
