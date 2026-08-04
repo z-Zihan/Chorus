@@ -36,7 +36,7 @@ export function registerRoutes(
 ): void {
   registerHealthRoutes(app);
   registerLogRoutes(app);
-  registerAgentRoutes(app, registry);
+  registerAgentRoutes(app, registry, repository);
   registerMetricsRoutes(app, registry, runtime);
   registerConversationRoutes(app, repository, registry, runtime);
   registerCleanupRoutes(app, repository);

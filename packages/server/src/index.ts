@@ -46,6 +46,7 @@ async function main(): Promise<void> {
 
   const { sqlite, db } = createDatabase(dbPath);
   const repository = new Repository({ sqlite, db });
+  repository.getOrCreateLocalUser("本机用户");
   let hubIdentity: HubIdentity | undefined;
   let relayClient: RelayClient | undefined;
   let p2pDiscovery: P2PDiscovery | undefined;

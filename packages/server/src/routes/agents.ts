@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { AgentRegistry } from "../agent/registry.js";
 import { setCredential } from "../credential-store.js";
+import type { Repository } from "../db/repository.js";
 
 const agentTypeSchema = z.enum(["openai", "openclaw", "dify", "cli", "mock", "custom", "langchain"]);
 const createAgentSchema = z.object({
@@ -21,7 +22,11 @@ const updateAgentSchema = createAgentSchema.pick({
 }).partial().extend({ disabled: z.boolean().optional() })
   .refine((value) => Object.keys(value).length > 0, "At least one field is required");
 
-export function registerAgentRoutes(app: FastifyInstance, registry: AgentRegistry): void {
+export function registerAgentRoutes(
+  app: FastifyInstance,
+  registry: AgentRegistry,
+  repository: Repository,
+): void {
   app.get<{ Querystring: { includeDisabled?: string } }>("/api/agents", async (request) => {
     return registry.list(request.query.includeDisabled === "true").map(stripApiKey);
   });
@@ -34,6 +39,8 @@ export function registerAgentRoutes(app: FastifyInstance, registry: AgentRegistr
     }
     return stripApiKey(agent);
   });
+
+  app.get("/api/users", async () => repository.listUsers());
 
   app.post("/api/agents", async (req, reply) => {
     const parsed = createAgentSchema.safeParse(req.body);

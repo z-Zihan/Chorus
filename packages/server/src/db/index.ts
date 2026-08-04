@@ -31,8 +31,31 @@ export function createDatabase(dbPath: string) {
   const db = drizzle(sqlite, { schema });
   migrate(db, { migrationsFolder: resolveMigrationsFolder() });
   ensureCredentialRefColumn(sqlite);
+  ensureUserColumns(sqlite);
   initializeMessageSearch(sqlite);
   return { sqlite, db };
+}
+
+function ensureUserColumns(sqlite: Database.Database): void {
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    avatar TEXT,
+    hub_id TEXT,
+    public_key TEXT,
+    kind TEXT NOT NULL DEFAULT 'local',
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    last_seen_at INTEGER
+  )`);
+
+  const agentColumns = sqlite.prepare("PRAGMA table_info(agents)").all() as Array<{ name: string }>;
+  if (!agentColumns.some((column) => column.name === "owner_id")) {
+    sqlite.exec("ALTER TABLE agents ADD COLUMN owner_id TEXT REFERENCES users(id)");
+  }
+  if (!agentColumns.some((column) => column.name === "owner_type")) {
+    sqlite.exec("ALTER TABLE agents ADD COLUMN owner_type TEXT NOT NULL DEFAULT 'system'");
+  }
 }
 
 function ensureCredentialRefColumn(sqlite: Database.Database): void {

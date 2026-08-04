@@ -9,8 +9,9 @@ import type {
   Message,
   MessageStatus,
   PersistedAgentConfig,
+  User,
 } from "@agentlink/shared";
-import { and, asc, desc, eq, lt } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, lt } from "drizzle-orm";
 import type { DatabaseContext } from "./index";
 import {
   agentFriends,
@@ -20,6 +21,7 @@ import {
   conversations,
   messages,
   scheduledTasks,
+  users,
 } from "./schema";
 
 export class Repository {
@@ -31,9 +33,18 @@ export class Repository {
     this.agentStatusResolver = resolver;
   }
 
-  upsertAgent(agent: AgentConfig | PersistedAgentConfig, credentialRef?: string | null): void {
+  upsertAgent(
+    agent: (AgentConfig | PersistedAgentConfig) & {
+      ownerId?: string;
+      ownerType?: Agent["ownerType"];
+    },
+    credentialRef?: string | null,
+  ): void {
     const now = Date.now();
     const persisted = toPersistedAgent(agent);
+    const current = this.getAgentRow(persisted.id);
+    const ownerId = agent.ownerId ?? current?.ownerId ?? this.getOrCreateLocalUser("本机用户").id;
+    const ownerType = agent.ownerType ?? current?.ownerType ?? "system";
     this.context.db
       .insert(agents)
       .values({
@@ -50,6 +61,8 @@ export class Repository {
         catalogEntryId: persisted.catalogEntryId,
         detectionFingerprint: persisted.detectionFingerprint,
         disabled: persisted.disabled,
+        ownerId,
+        ownerType,
         createdAt: now,
         updatedAt: now,
       })
@@ -68,7 +81,74 @@ export class Repository {
           catalogEntryId: persisted.catalogEntryId,
           detectionFingerprint: persisted.detectionFingerprint,
           disabled: persisted.disabled,
+          ownerId,
+          ownerType,
           updatedAt: now,
+        },
+      })
+      .run();
+  }
+
+  getOrCreateLocalUser(name: string): User {
+    const transaction = this.context.sqlite.transaction(() => {
+      let row = this.context.db.select().from(users).where(eq(users.id, "usr_local")).get();
+      if (!row) {
+        const now = Date.now();
+        this.context.db
+          .insert(users)
+          .values({
+            id: "usr_local",
+            name,
+            kind: "local",
+            createdAt: now,
+            updatedAt: now,
+          })
+          .run();
+        row = this.context.db.select().from(users).where(eq(users.id, "usr_local")).get();
+      }
+      this.context.db
+        .update(agents)
+        .set({ ownerId: "usr_local" })
+        .where(isNull(agents.ownerId))
+        .run();
+      return toUser(row as NonNullable<typeof row>);
+    });
+    return transaction();
+  }
+
+  listUsers(): User[] {
+    return this.context.db.select().from(users).orderBy(asc(users.createdAt)).all().map(toUser);
+  }
+
+  getUser(id: string): User | undefined {
+    const row = this.context.db.select().from(users).where(eq(users.id, id)).get();
+    return row ? toUser(row) : undefined;
+  }
+
+  upsertRemoteUser(user: User): void {
+    this.context.db
+      .insert(users)
+      .values({
+        id: user.id,
+        name: user.name,
+        avatar: user.avatar,
+        hubId: user.hubId,
+        publicKey: user.publicKey,
+        kind: "remote",
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+        lastSeenAt: user.lastSeenAt,
+      })
+      .onConflictDoUpdate({
+        target: users.id,
+        set: {
+          name: user.name,
+          avatar: user.avatar,
+          hubId: user.hubId,
+          publicKey: user.publicKey,
+          kind: "remote",
+          updatedAt: user.updatedAt,
+          lastSeenAt: user.lastSeenAt,
         },
       })
       .run();
@@ -293,6 +373,8 @@ export class Repository {
       model: String(safeJson<Record<string, unknown>>(agent.config, {}).model ?? ""),
       disabled: agent.disabled,
       catalogEntryId: agent.catalogEntryId ?? undefined,
+      ownerId: agent.ownerId ?? undefined,
+      ownerType: agent.ownerType as Agent["ownerType"],
       createdAt: agent.createdAt,
       updatedAt: agent.updatedAt,
     }));
@@ -568,5 +650,19 @@ function toMessage(row: typeof messages.$inferSelect): Message {
     status: row.status as MessageStatus,
     metadata: safeJson(row.metadata, undefined),
     timestamp: row.createdAt,
+  };
+}
+
+function toUser(row: typeof users.$inferSelect): User {
+  return {
+    id: row.id,
+    name: row.name,
+    avatar: row.avatar ?? undefined,
+    hubId: row.hubId ?? undefined,
+    publicKey: row.publicKey ?? undefined,
+    kind: row.kind as User["kind"],
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    lastSeenAt: row.lastSeenAt ?? undefined,
   };
 }

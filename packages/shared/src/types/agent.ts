@@ -35,6 +35,8 @@ export interface Agent {
   error?: string;
   disabled: boolean;
   catalogEntryId?: string;
+  ownerId?: string;
+  ownerType?: "local" | "remote" | "system";
   createdAt: number;
   updatedAt: number;
 }

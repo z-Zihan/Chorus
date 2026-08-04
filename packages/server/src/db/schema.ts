@@ -1,5 +1,17 @@
 import { index, integer, primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
+export const users = sqliteTable("users", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  avatar: text("avatar"),
+  hubId: text("hub_id"),
+  publicKey: text("public_key"),
+  kind: text("kind").notNull().default("local"),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+  lastSeenAt: integer("last_seen_at"),
+});
+
 export const agents = sqliteTable("agents", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
@@ -14,6 +26,8 @@ export const agents = sqliteTable("agents", {
   catalogEntryId: text("catalog_entry_id"),
   detectionFingerprint: text("detection_fingerprint"),
   disabled: integer("disabled", { mode: "boolean" }).notNull().default(false),
+  ownerId: text("owner_id").references(() => users.id),
+  ownerType: text("owner_type").notNull().default("system"),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 });

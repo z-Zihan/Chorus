@@ -450,6 +450,8 @@ export class AgentRegistry {
       error: entry.error,
       disabled: false,
       catalogEntryId: entry.persisted.catalogEntryId,
+      ownerId: row?.ownerId ?? undefined,
+      ownerType: row?.ownerType as Agent["ownerType"],
       createdAt: row?.createdAt ?? Date.now(),
       updatedAt: row?.updatedAt ?? Date.now(),
     };
@@ -467,6 +469,8 @@ export class AgentRegistry {
       model: String(persisted.config.model ?? ""),
       disabled: true,
       catalogEntryId: persisted.catalogEntryId,
+      ownerId: row?.ownerId ?? undefined,
+      ownerType: row?.ownerType as Agent["ownerType"],
       createdAt: row?.createdAt ?? Date.now(),
       updatedAt: row?.updatedAt ?? Date.now(),
     };
