@@ -111,6 +111,7 @@ interface HubEnvelope {
   type: "direct" | "group" | "broadcast" | "presence" | "discovery";
   timestamp: number;          // sender Unix time in ms
   nonce: string;              // base64; algorithm-specific uniqueness is mandatory
+  keyEpoch?: number;          // required for every Room-key-encrypted envelope
   ciphertext: string;         // encrypted HubPayload, base64
   signature: string;          // sender Ed25519 signature, base64
   relayTimestamp?: number;    // Relay-added, untrusted ordering fallback
@@ -132,6 +133,7 @@ interface HubPayload {
     | "room_invite" | "room_accept" | "room_leave"
     | "room_agent_upsert" | "room_agent_remove"
     | "directory_request" | "directory_announce" | "directory_revoke"
+    | "resync_request" | "resync_response"
     | "delivery_ack";
   conversationId?: string;
   messageId: string;
@@ -143,10 +145,37 @@ interface HubPayload {
   fromAgentId?: string;
   toAgentId?: string;
   homeHubId?: string;         // required for a targeted remote-agent invocation
+  roomId?: string;
+  roomRevision?: number;
+  keyEpoch?: number;          // must equal the authenticated envelope keyEpoch
+  ownerProof?: OwnerProof;
   directory?: DirectoryManifest;
   metadata?: Record<string, unknown>;
 }
 ```
+
+Room 密钥加密的每个 envelope 和其加密 payload 必须都携带相同的 `keyEpoch`；接收方必须先按 envelope 的 epoch 选择密钥，解密后再校验两处 epoch 相等。`delivery_ack` 仍是加密的 E2E 业务确认（例如接收、拒绝或处理结果），Relay 不得解析它，也不得依据它删除离线消息。
+
+Every room-key-encrypted envelope and its encrypted payload MUST carry the same `keyEpoch`. The receiver selects the epoch key from the authenticated envelope and then verifies the decrypted value matches. `delivery_ack` remains an encrypted end-to-end business acknowledgement; the Relay neither parses it nor uses it to delete queued ciphertext.
+
+投递层另定义 Relay 可读的明文控制帧；它不属于 `HubPayload`，不表达业务是否接受或执行成功：
+
+The delivery layer separately defines a Relay-readable plaintext control frame. It is not a `HubPayload` and conveys no application acceptance or execution result:
+
+```typescript
+interface TransportReceipt {
+  type: "transport_receipt";
+  messageId: string;          // the persisted HubEnvelope.id
+  recipientHubId: string;
+  status: "persisted";
+  timestamp: number;
+  signature: string;          // recipient Hub signature over all preceding fields
+}
+```
+
+Relay 必须验证 `recipientHubId` 与已认证连接一致并验证签名；只有匹配待投递记录的 `transport_receipt(status="persisted")` 才能删除该记录。明文 `messageId` 仅是投递幂等键，不泄露加密 payload 内的业务确认。
+
+The Relay verifies that `recipientHubId` matches the authenticated connection and verifies the signature. Only a matching `transport_receipt(status="persisted")` may delete an offline record. Its plaintext `messageId` is a transport idempotency key, not the encrypted business acknowledgement.
 
 v2 写入方必须发送 `protocolVersion: 2`。迁移期读取方可兼容 v1，但必须采取拒绝优先策略：无法安全映射 User、Agent 或 Room 身份时拒绝，不得用显示名补全。
 
@@ -162,7 +191,9 @@ Writers MUST emit protocol v2. Readers may accept v1 during migration, but MUST 
 | Room | `room_invite`, `room_accept`, `room_leave` | 人类成员关系 / Human room membership |
 | Room Agent | `room_agent_upsert`, `room_agent_remove` | 所有者授权 Agent 入房或撤销 / Owner-authorized agent admission or removal |
 | 目录 / Directory | `directory_request`, `directory_announce`, `directory_revoke` | 分范围、签名、带版本的 Agent Card 同步 / Scoped, signed, versioned Agent Card synchronization |
-| 投递 / Delivery | `delivery_ack` | Hub 持久化成功确认；不是 Agent 执行成功 / Persistence acknowledgement, not execution success |
+| 状态同步 / State sync | `resync_request`, `resync_response` | 按 Room revision 请求和返回增量状态 / Request and return incremental state by Room revision |
+| E2E 确认 / E2E acknowledgement | `delivery_ack` | 加密的业务接收、拒绝或处理语义；Relay 不可读 / Encrypted application receipt, rejection, or processing semantics; opaque to Relay |
+| 传输回执 / Transport receipt | `transport_receipt`（明文控制帧 / plaintext control frame） | Hub 持久化成功后供 Relay 删除离线记录；不代表业务接受或执行 / Lets Relay delete an offline record after durable persistence; no application acceptance or execution meaning |
 
 `contact_*`、`room_*`、`room_agent_*` 属于不同授权域。`contact_accept` 后不得自动发送目录请求；`room_accept` 只加入人类成员；只有所有者签名的 `room_agent_upsert` 才使 Agent 在该 Room 可寻址。
 
@@ -171,8 +202,8 @@ Contact, room-human, and room-agent events are separate authorization domains. A
 ### 3.4 接收验证顺序 / Receive validation order
 
 1. 验证协议版本、必填字段、大小限制、UUID 和时间窗口。
-2. 用 `from` Hub 公钥验证 envelope 签名、nonce 和重放缓存。
-3. 解密 payload，并确认内部目标与 envelope 路由一致。
+2. 用 `from` Hub 公钥验证 envelope 签名、nonce 和重放缓存；Room 消息还必须选择对应 `keyEpoch` 的 key。
+3. 解密 payload，并确认内部目标、`keyEpoch` 与 envelope 路由一致。
 4. 验证 `UserHubBinding`，再验证 User 签名的目录或成员事件。
 5. 验证 Contact/Room/Agent membership、可见性、trust 和 `auto/confirm/deny` 策略。
 6. 只有目标 `homeHubId` 可以执行 Agent；其他 Hub 仅保存和展示。
@@ -182,11 +213,11 @@ The receiver validates syntax, Hub signature and replay protection, decryption a
 
 ### 3.5 去重与排序 / Deduplication and ordering
 
-- `id` 和 `messageId` 必须全局唯一；接收方至少维护最近 1000 个 ID 的 LRU，并对持久化消息提供数据库幂等约束。
+- `id` 和 `messageId` 必须全局唯一；接收方至少维护最近 1000 个 ID 的 LRU，并对二者提供数据库唯一约束。即使 `transport_receipt` 丢失导致 Relay 重投，同一 `messageId` 也只能持久化和处理一次，但接收方必须再次发送 receipt。
 - 同一发送方与会话优先按 `sequence` 排序；否则按 `timestamp`，容忍 ±5 秒偏差，并以 `relayTimestamp` 作 UI 排序兜底。
 - `directory_revoke` 优先于更旧的 `directory_announce`；到达顺序不能覆盖更高 `directoryVersion`。
 
-IDs are idempotency keys. Sequence is preferred for per-conversation ordering; sender time and then Relay time are display fallbacks. A newer revoke or directory version always wins over older arrival order.
+IDs are idempotency keys. A redelivery caused by a lost transport receipt MUST be persisted and processed at most once, while the receiver re-emits the receipt. Sequence is preferred for per-conversation ordering; sender time and then Relay time are display fallbacks. A newer revoke or directory version always wins over older arrival order.
 
 ---
 
@@ -204,13 +235,17 @@ Identity uses Ed25519; pairwise encryption uses libsodium `crypto_box` after the
 
 ### 4.2 Room 群组密钥 / Room group key
 
-- v1 规范默认由 `GroupKeyManager` 管理 AES-256-GCM Room key；每条 Room payload 使用唯一的 GCM nonce。
-- Room 创建/加入后，通过各成员 Hub 的成对加密通道分发当前 key。Relay 只见密文。
-- Agent 加入、Agent 移除、人类成员离开或被移除时必须 rekey；旧 key 立即禁止用于新消息。
+- v1 规范默认由 `GroupKeyManager` 管理 AES-256-GCM Room key。Room 保存单调递增的 `keyEpoch`；初始 epoch 为 `1`，每次 rekey 必须恰好加 `1`，不得回退或复用。
+- 每条 Room 密文必须携带 `keyEpoch`。接收方按 epoch 取 key；未知或过期 epoch 必须拒绝并触发 §8.6 的 resync，不得尝试当前 key 或其他 key。
+- 同一 epoch 中，96-bit GCM nonce 固定为 `senderHubNonceId (8 bytes) || counter (4 bytes, unsigned big-endian)`。`senderHubNonceId` 是 `SHA-256(hubId UTF-8)` 的前 8 bytes；每个 Hub 对每个 Room/epoch 原子持久化自己的 counter，首次取值为 `0`，每条密文加 `1`，不得回绕或在崩溃恢复后复用。
+- counter 仅在成功安装新 epoch key 后重置为 `0`；到达 `2^32 - 1` 前必须 rekey。接收方按 `(roomId, keyEpoch, senderHubNonceId, counter)` 检测重复 nonce，发现碰撞即拒绝并记录安全事件。
+- Room 创建/加入后，通过各成员 Hub 的成对加密通道分发当前 epoch key。Relay 只见密文。
+- Agent 加入、Agent 移除、人类成员离开或被移除时必须 rekey；旧 key 立即禁止用于加密新消息，但必须仅为解密在途消息保留 5 分钟 grace period，之后安全销毁。
+- rekey 事件必须引用 `baseRevision` 和 `baseKeyEpoch` 并通过 Room 状态的 compare-and-swap 提交；并发提案只允许一个成为下一 `revision/keyEpoch`，失败提案方先 resync 再重试，禁止形成两个相同 epoch 的不同 key。
 - Room 人数不超过 5 时，可协商逐成员加密 fallback；授权、审计和撤销语义不变。
 - MLS 或其他大群方案只能作为新协议版本/能力协商启用，不得静默改变 v2 密文格式。
 
-The normative v1 room scheme is an AES-256-GCM key managed by `GroupKeyManager`. Membership or agent changes trigger rekeying, with the new key distributed pairwise to remaining members. Per-member encryption is an optional negotiated fallback for rooms of at most five members. Future MLS support requires explicit version/capability negotiation.
+The normative v1 room scheme is an epoch-indexed AES-256-GCM key managed by `GroupKeyManager`. Every ciphertext identifies its epoch and uses the per-sender nonce `senderHubNonceId(8) || counter(4)`. Counters are atomic and durable per room/epoch, reset only after a successful rekey, and never wrap. Membership or agent changes trigger a compare-and-swap rekey; losing concurrent proposals resync before retrying. The previous key is decrypt-only for a five-minute in-flight grace period. Per-member encryption is an optional negotiated fallback for rooms of at most five members. Future MLS support requires explicit version/capability negotiation.
 
 ### 4.3 传输加密与边界 / Transport encryption and boundary
 
@@ -247,6 +282,7 @@ The v1 baseline is a single Fastify/WebSocket/SQLite service packaged for Docker
 Hub → Relay
   { type: "register", hubId, token }
   { type: "message", envelope: HubEnvelope }
+  { type: "transport_receipt", messageId, recipientHubId, status: "persisted", timestamp, signature }
   { type: "presence", status: "online" | "offline" }
   { type: "room:join", roomId }
   { type: "room:leave", roomId }
@@ -261,9 +297,9 @@ Relay → Hub
   { type: "pong" }
 ```
 
-所有业务消息都通过 `message + HubEnvelope` 传输。Relay 不解析 `HubPayload` 或 `DirectoryManifest`。Room 帧中的 Hub membership 是投递路由数据，不是 User/Agent 授权证明。
+所有业务消息都通过 `message + HubEnvelope` 传输。`transport_receipt` 是唯一可携带明文消息 ID 和持久化状态的投递控制帧；它不得包含业务 ack、正文或授权结果。Relay 不解析 `HubPayload` 或 `DirectoryManifest`。Room 帧中的 Hub membership 是投递路由数据，不是 User/Agent 授权证明。
 
-All application traffic uses the encrypted envelope frame. Relay room membership is routing state, never proof of User or Agent authorization.
+All application traffic uses the encrypted envelope frame. The plaintext `transport_receipt` is a delivery-control exception limited to message ID and persistence status. Relay room membership is routing state, never proof of User or Agent authorization.
 
 ### 5.4 Hub 注册与互认证 / Hub registration and mutual authentication
 
@@ -392,6 +428,16 @@ A trusted contact may exchange human messages and room invitations and may recei
 
 Removing or blocking a contact revokes future delivery and related capabilities without deleting history. Contact, room, and agent revocations are auditable separately.
 
+### 7.4 Block 后的共享 Room / Shared rooms after blocking
+
+1. 发起 block 的 Hub 必须把对方所有已验证 Hub ID 加入本地 `TrustStore.blockedHubIds`，并广播签名的 `ContactBlockedEvent`。
+2. 每个受影响的共享 Room 将该 User 的成员状态标记为 `blocked`，并使其 Agent 显示 `unavailable`。
+3. Relay 路由 membership 必须停止向被 block 的 Hub 投递这些 Room 的新消息；该 Hub 发来的新 Room 消息、目录事件和调用也必须被拒绝。
+4. 历史 Room 消息及身份快照保持可读，但被 block 的成员不得新增消息、Agent 或调用。
+5. Room 管理员可随后正式移除该成员及其所有 Agent；移除产生明确授权事件、递增 `revision` 并触发 rekey。block 本身不得把旧 key 用于新消息。
+
+Blocking adds every verified Hub of the contact to `TrustStore.blockedHubIds`. In shared rooms the member becomes `blocked`, their agents become `unavailable`, and no new room traffic is delivered to or accepted from those Hubs. History remains readable. An administrator may formally remove the member and agents, which emits authorization events, increments the room revision, and rekeys.
+
 ---
 
 ## 8. Room 设计 / Room Design
@@ -402,8 +448,21 @@ Removing or blocking a contact revokes future delivery and related capabilities 
 - 新跨用户会话统一使用 `type=room` 并关联 `roomId`。旧 `cross_hub` 只作迁移期读取兼容，不得用于新建。
 - 人类成员与 Agent 成员是两张独立列表。Relay 维护 Hub 投递 membership；Local Hub 维护 User role、Agent membership 和本地会话映射。
 - 每条 Room Agent 记录包含 `agentId`、`ownerUserId`、`ownerHubId/homeHubId`、可见性和身份快照。
+- 每个 Room 必须保存单调递增的 `revision` 和 `keyEpoch`。创建时二者均为 `1`；成员增减、Agent 增减、rekey、角色变更和 block 状态变更各自产生一个签名状态事件并使 `revision + 1`。rekey 同时使 `keyEpoch + 1`；非 rekey 事件不得改变 epoch。
 
-A direct message is a two-person room; named rooms are groups. New cross-user conversations use `type=room`. Human and agent memberships are separate, and every room agent has an owner and one execution Hub.
+```typescript
+interface RoomState {
+  roomId: string;
+  kind: "direct" | "group";
+  revision: number;
+  keyEpoch: number;
+  managementState: "managed" | "unmanaged";
+  members: RoomMember[];
+  agents: RoomAgent[];
+}
+```
+
+A direct message is a two-person room; named rooms are groups. New cross-user conversations use `type=room`. Human and agent memberships are separate, and every room agent has an owner and one execution Hub. Every signed state transition increments the monotonic `revision`; rekey transitions also increment the monotonic `keyEpoch`.
 
 ### 8.2 角色与权限 / Roles and permissions
 
@@ -416,11 +475,15 @@ A direct message is a two-person room; named rooms are groups. New cross-user co
 | 添加他人的 Agent / Add another user's agent | **否 / Never** | **否 / Never** |
 | 移除自己的 Agent / Remove own agent | 是 / Yes | 是 / Yes |
 | 移除他人的 Agent / Remove another user's agent | 是，需通知、审计、rekey / Yes, with notice, audit, and rekey | 否 / No |
-| 退出 Room / Leave room | 是 / Yes | 是 / Yes |
+| 退出 Room / Leave room | 仅当仍有其他管理员 / Only if another admin remains | 是 / Yes |
 
 创建者默认是管理员，角色绑定 User。只有所有者能发出有效 `room_agent_upsert`。管理员移除他人 Agent 时，必须通知该 User 的所有绑定 Hub，审计 `roomId`、`agentId`、`ownerUserId`、`actorUserId`、时间和原因，并触发 rekey。
 
 The creator is an administrator by default. Only an owner can admit their agent. An administrator may remove another user's agent only with owner notification across bound Hubs, a complete audit event, immediate authorization revocation, and rekeying.
+
+最后一个管理员不得离开或退出 Room；Local Hub 和 Relay 都必须返回 `409 LAST_ROOM_ADMIN`，UI 必须禁用退出按钮并提示“请先委派新管理员 / Delegate a new administrator first”。如果该管理员 User 的所有有效 Hub 离线直至离线 TTL 过期，Room 进入 `unmanaged`（无人管理）状态。任一非 blocked 人类成员均可发起接管申请；只有当前非 blocked 人类成员中严格过半数（`yes > eligibleMembers / 2`）提交签名同意后，申请人才成为管理员，Room 回到 `managed`，角色事件使 `revision + 1`。接管期间不得执行邀请、移除成员或委派等管理员操作。
+
+The last administrator cannot leave. Both the Local Hub and Relay return `409 LAST_ROOM_ADMIN`, and the UI disables Leave with “Delegate a new administrator first.” If every valid Hub of that administrator remains offline beyond the offline TTL, the room becomes `unmanaged`. Any non-blocked human member may request takeover; signed approval from a strict majority of all current non-blocked human members is required. The resulting role event increments `revision` and restores `managed`; administrative mutations are forbidden while takeover is pending.
 
 ### 8.3 创建与邀请 / Creation and invitation
 
@@ -437,6 +500,22 @@ The Local Hub creates the conversation and the Relay routing room. Only paired c
 加入 Agent 时必须同时满足：`actorUserId === agent.ownerId`、操作者是 Room 人类成员、Agent visibility 为 `room|public`、manifest scope 与 `roomId` 匹配。否则返回 `403 AGENT_OWNER_REQUIRED`、`403 AGENT_NOT_IN_ROOM` 或相应 visibility 错误。
 
 Agent admission requires owner equality, human room membership, eligible visibility, and matching room scope. A remote member cannot browse or add another user's hidden agents.
+
+Agent 入房请求必须携带所有者签名证明；签名输入是 `agentId + roomId + keyEpoch` 的无歧义规范编码（长度前缀 UTF-8 tuple），不得使用显示名：
+
+Every agent-admission request carries an owner proof. The signature covers an unambiguous canonical, length-prefixed UTF-8 encoding of `agentId + roomId + keyEpoch`; display names are never signed as identifiers:
+
+```typescript
+interface OwnerProof {
+  agentId: string;
+  ownerId: string;
+  roomJoinSignature: string;
+}
+```
+
+接收方必须以已验证 `UserHubBinding` 中 `ownerId` 的 User 公钥验证 `roomJoinSignature`，并确认 proof 的 `agentId`、请求 `roomId` 和当前 `keyEpoch` 完全匹配。验证失败必须返回 `403 INVALID_OWNER_PROOF`；只有验证成功后才可接受 Agent 入房、递增 revision 并发起 rekey。
+
+Receivers verify `roomJoinSignature` with the `ownerId` User public key from a valid `UserHubBinding`, and require exact agreement with the requested agent, room, and current epoch. Failure returns `403 INVALID_OWNER_PROOF`; admission, revision advancement, and rekey occur only after successful verification.
 
 加入成功后广播签名的 `room_agent_upsert`、注册 Room-scoped 能力并 rekey。所有者移除、管理员移除、改回 `private`、删除 Agent 或所有者离开 Room 时发送 `room_agent_remove`/revoke，立即阻止新调用并 rekey。
 
@@ -468,8 +547,61 @@ Room fan-out distributes history, while application dispatch remains narrow. Onl
 - 其他 Hub 只展示状态；只有 Agent 的 `ownerHubId` 实际执行。
 - owner Hub 离线时，UI 立即显示 `Agent unavailable (owner offline)`；Relay 可在 TTL 内保留加密 mention，owner Hub 上线并重新验证后处理。
 - 设备撤销后不再接收新 Room key 或状态；剩余成员必须 rekey。
+- 每个 Hub 持久化最后应用的 `roomRevision`。在线增量事件只能按连续 revision 应用；发现缺口、未知 `keyEpoch` 或离线 TTL 过期后必须执行 resync。
 
 Signed room state converges across all Hubs bound to a User, but execution never migrates implicitly. An offline owner Hub may later process queued ciphertext within TTL after re-validation.
+
+离线超过 TTL 的恢复流程如下：
+
+1. Hub 重新上线后，为每个 Room 发送加密 `resync_request { roomId, lastKnownRevision }`。
+2. 其他已验证且未 blocked 的 Hub 回复加密 `resync_response { roomId, fromRevision, toRevision, events[], roomState }`；`events` 提供可用的连续增量，`roomState` 是 `toRevision` 的签名状态快照和当前 `keyEpoch`。
+3. Relay 已删除的超 TTL 离线消息不得重投，也不得伪造成增量事件。
+4. 恢复方验证事件签名、revision 连续性和快照；有完整增量时依次应用，否则以可验证的最高 revision Room state 补齐缺失状态。新 Room key 仍只通过成对加密分发给当前未 blocked 成员。
+
+After returning beyond the TTL, a Hub sends `resync_request` with its last known revision. Verified peers answer with signed incremental events and a room-state snapshot in `resync_response`. Expired Relay messages are never redelivered. The recovering Hub validates signatures and revision continuity, applies a complete delta when available, or installs the highest verifiable state snapshot; current keys are distributed only through pairwise encryption to eligible members.
+
+### 8.7 授权事件 schema / Authorization event schemas
+
+授权事件不得塞入任意 `metadata` 后由实现自行解释。以下业务对象字段是规范性的，并放入带 `eventId`、`revision`、`actorSignature` 的签名事件 envelope；接收方必须验证 actor 权限、时间戳、目标 Room 当前 revision 及签名。
+
+Authorization events MUST NOT be encoded as implementation-defined `metadata`. The following normative event bodies are carried in a signed event envelope containing `eventId`, `revision`, and `actorSignature`. Receivers verify actor authority, timestamp, expected room revision, and signature.
+
+```typescript
+interface RoomAgentRemovedEvent {
+  roomId: string;
+  agentId: string;
+  removedBy: string;
+  ownerNotified: boolean;
+  timestamp: number;
+}
+
+interface RoomMemberRemovedEvent {
+  roomId: string;
+  userId: string;
+  removedBy: string;
+  timestamp: number;
+}
+
+interface RoomRoleChangedEvent {
+  roomId: string;
+  userId: string;
+  oldRole: "admin" | "member";
+  newRole: "admin" | "member";
+  changedBy: string;
+  timestamp: number;
+}
+
+interface ContactBlockedEvent {
+  blockedHubId: string;
+  blockedBy: string;
+  timestamp: number;
+  affectedRooms: string[];
+}
+```
+
+`ownerNotified` 只有在向 owner 的所有有效 Hub 成功排队通知后才可为 `true`；该值不替代移除权限检查。`ContactBlockedEvent.affectedRooms` 必须列出 block 时所有共享 Room，供各实现一致地停止路由并更新成员/Agent 状态。
+
+`ownerNotified` may be true only after notification has been queued for every valid owner Hub and never substitutes for authorization. `affectedRooms` enumerates every shared room at block time so implementations consistently stop routing and update member and agent state.
 
 ---
 
@@ -494,31 +626,42 @@ queued → delivered → accepted → done
                     ├→ denied
                     └→ error
 queued ── TTL elapsed → expired
+queued ── 3 deliveries without receipt → failed
 ```
 
 | 状态 / State | 定义 / Definition |
 |---|---|
 | `queued` | Relay 已持久化密文；目标尚未确认 / Relay persisted ciphertext; target has not acknowledged |
-| `delivered` | 目标 Hub 已持久化并发送 `delivery_ack` / Target Hub persisted it and acknowledged |
+| `delivered` | 目标 Hub 已持久化并发送有效 `transport_receipt` / Target Hub persisted it and sent a valid transport receipt |
 | `accepted` | 目标通过授权并接受处理 / Target authorization accepted processing |
 | `denied` | trust、membership、visibility 或策略拒绝 / Trust, membership, visibility, or policy rejected it |
 | `done` | Agent/人类处理成功 / Processing completed successfully |
 | `error` | 已接受但执行失败 / Accepted, but execution failed |
 | `expired` | 默认 7 天 TTL 到期仍未完成投递 / Default seven-day TTL elapsed before delivery |
+| `failed` | 连续 3 次投递均未收到有效 transport receipt / Three delivery attempts completed without a valid transport receipt |
 
 `queued` 不表示 Agent 已执行；`delivered` 也不表示调用获准。客户端不得让过期消息长期停留在 queued。
 
-Queued is not executed, and delivered is not authorized. Expired messages MUST leave the queued state.
+Queued is not executed, and delivered is not authorized. Expired and failed messages MUST leave the queued state. An encrypted `delivery_ack` may refine the application state after delivery but never changes Relay storage directly.
 
 ### 9.3 离线存储 / Offline store
 
 - 目标 Hub 离线时，Relay 将完整加密 envelope 写入 SQLite `offline_messages`。
-- Hub 上线后收到批量 `offline_messages`；本地持久化成功才发送 `delivery_ack`，Relay 收到 ack 后删除。
+- 每条离线记录包含 `deliveryAttempts`（初始为 `0`）、最后尝试时间和状态。Relay 每次实际发送该记录前原子执行 `deliveryAttempts + 1`；未收到 receipt 时按退避策略重投。
+- Hub 上线后收到批量 `offline_messages`；本地持久化成功才发送明文签名 `transport_receipt`。Relay 验证 receipt 后删除；加密 `delivery_ack` 仅发送给业务对端。
+- 三次投递仍无有效 receipt 时，Relay 将记录标记为 `failed`、停止自动重投，并在发送方可达时通知投递失败。管理员显式重试必须创建新的 envelope/message ID。
 - 默认 TTL 为 7 天，可通过 `RELAY_OFFLINE_TTL_DAYS` 配置。过期时若发送方可达则通知 `expired`。
-- 离线记录只含密文和路由元数据。幂等、顺序和 revoke 优先级遵循 §3.5。
+- receipt 可能在持久化后丢失，因此 Hub 必须用 `HubEnvelope.id` 和解密后的 `HubPayload.messageId` 做持久化去重与幂等处理；收到重复投递时不得重复展示、授权或执行，但必须重发 receipt。
+- 离线记录只含密文、`deliveryAttempts` 和路由元数据。幂等、顺序和 revoke 优先级遵循 §3.5。
 - 单实例使用 WAL、同步刷盘和周期 checkpoint；多实例需要具备等价持久性语义。
 
-The Relay stores ciphertext durably while a target is offline and deletes it only after the target persists and acknowledges it. TTL, ordering, idempotency, and revoke precedence are protocol semantics, not implementation details.
+The Relay stores ciphertext durably while a target is offline and deletes it only after the target persists and returns a verified plaintext transport receipt. Each actual delivery increments `deliveryAttempts`; after three unacknowledged deliveries the record becomes `failed`. Receivers deduplicate both envelope and payload message IDs and re-emit receipts for duplicates. TTL, ordering, idempotency, and revoke precedence are protocol semantics, not implementation details.
+
+### 9.4 TTL 过期后的恢复 / Recovery after TTL expiry
+
+TTL 清理只删除无法投递的 ciphertext，不代表 Room 状态已经同步。Hub 检测到离线跨度超过 TTL 后必须把 Room 标记为 `resyncing`，执行 §8.6 的 `resync_request` / `resync_response` 流程；完成前不得发送依赖未知 revision/epoch 的新 Room 消息。同步成功后 UI 应区分“状态已恢复 / State restored”和“过期消息未恢复 / Expired messages not recovered”。
+
+TTL cleanup removes undeliverable ciphertext, not room state. A Hub returning after the TTL marks each room `resyncing`, completes the §8.6 request/response flow, and only then sends messages that depend on the recovered revision and epoch. The UI distinguishes restored state from expired messages, which are never recovered or redelivered.
 
 ---
 
@@ -530,8 +673,8 @@ The Relay stores ciphertext durably while a target is offline and deletes it onl
 |---|---|
 | 传输 / Transport | 公网 WSS/TLS；P2P 互认证 / WSS/TLS publicly; mutually authenticated P2P |
 | 身份 / Identity | Ed25519 Hub/User 签名、双签名 binding、指纹核验 / Ed25519 signatures, dual-signed binding, fingerprint verification |
-| 消息 / Message | direct 使用 `crypto_box`；Room 使用 AES-256-GCM group key / Pairwise `crypto_box`; AES-256-GCM room key |
-| 重放 / Replay | UUID、唯一 nonce、5 分钟握手窗口、LRU/数据库幂等 / IDs, unique nonces, five-minute handshake window, durable idempotency |
+| 消息 / Message | direct 使用 `crypto_box`；Room 使用带 `keyEpoch` 的 AES-256-GCM group key / Pairwise `crypto_box`; epoch-indexed AES-256-GCM room key |
+| 重放 / Replay | UUID、per-sender nonce counter、5 分钟握手窗口、LRU/数据库幂等 / IDs, per-sender nonce counters, five-minute handshake window, durable idempotency |
 | 授权 / Authorization | own=`auto`，trusted remote=`confirm`，unknown/stale=`deny` / Own auto, trusted remote confirm, unknown or stale deny |
 | 目录 / Directory | 最小披露、User 签名、scope、版本、TTL、主动撤销 / Minimal signed scoped manifests with version, TTL, and active revocation |
 | Relay 隔离 / Relay isolation | JWT 不授予 Agent 权限；Relay 不持有明文 key / JWT grants no agent permission; Relay has no plaintext key |
@@ -565,8 +708,27 @@ E2E encryption hides content and directory data, not traffic metadata. The produ
 - 撤销在线 60 秒内收敛，历史不丢失，后续调用被拒绝。
 - 公钥变化需要重新配对；重放、陈旧 manifest 和过期 invitation 被拒绝。
 - 两台真实设备必须覆盖 Relay/P2P、在线/离线、重名、重放、撤销、key 变化、拒绝与 fallback。
+- 多 Hub 同 epoch nonce 不碰撞；并发 rekey 不产生 split-brain；旧 epoch 在 5 分钟内仅可解密在途消息。
 
 Security acceptance requires zero pairing leakage and name-based misrouting, strict owner/admin enforcement, rapid revocation, key-change re-pairing, replay resistance, and a real two-device E2E matrix.
+
+### 10.5 E2E 测试场景矩阵 / E2E test scenario matrix
+
+除特别说明外，每行都必须在 Relay 和 P2P 路径各运行一次，并在 Hybrid fallback 后重复关键断言；所有接收端还要断言 `messageId` 幂等且审计日志不含明文正文或 key。
+
+Unless stated otherwise, each row runs once over Relay and once over P2P, with critical assertions repeated after Hybrid fallback. Every receiver also asserts message-ID idempotency and that audit logs contain neither plaintext content nor keys.
+
+| ID | 场景 / Scenario | 操作 / Actions | 必须断言 / Required assertions |
+|---|---|---|---|
+| E2E-01 | 完整协作链路 / Full collaboration flow | 配对 → 创建 Room → 邀请并接受 → owner proof 加 Agent → `@mention` → Agent 回复 / Pair → create room → invite/accept → add agent with owner proof → mention → reply | 配对不泄露 Agent；revision/epoch 单调；仅 home Hub 执行一次；回复对所有合法成员可见 / Pairing leaks no agents; revision/epoch are monotonic; only the home Hub executes once; eligible members see the reply |
+| E2E-02 | 并发 rekey / Concurrent rekey | 两个成员基于同一 revision 同时添加自己的 Agent / Two members concurrently add their own agents from one base revision | CAS 只接受一个 rekey；失败方 resync 后重试；无相同 epoch 不同 key；两个 Agent 最终各有有效 owner proof / One CAS wins; loser resyncs and retries; no same-epoch split key; both agents end with valid owner proofs |
+| E2E-03 | 管理员委派与退出 / Admin delegation and leave | 验证最后管理员退出被禁用；委派新管理员后原管理员退出 / Verify last-admin leave is disabled; delegate, then original admin leaves | 先返回 `409 LAST_ROOM_ADMIN` 和提示；委派事件 revision+1；退出、rekey 与角色在所有 Hub 收敛 / Initial 409 and UI hint; delegation increments revision; leave, rekey, and role converge |
+| E2E-04 | TTL 过期与 resync / TTL expiry and resync | Hub 离线超过 TTL，期间修改成员、角色和 Agent，再上线 / Keep a Hub offline beyond TTL while membership, role, and agent state change, then reconnect | 过期 ciphertext 不重投；发送 lastKnownRevision；验证增量/快照后补齐最新 Room state 与 epoch / Expired ciphertext is not redelivered; request carries lastKnownRevision; verified delta/snapshot restores latest state and epoch |
+| E2E-05 | block 后共享 Room / Shared room after block | block 联系人，观察共享 Room，再由管理员正式移除 / Block a contact in a shared room, then have an admin remove them | TrustStore、`blocked`、`unavailable` 和停止双向新投递一致；历史保留；正式移除 revision+1 并 rekey / TrustStore, blocked/unavailable state, and routing stop agree; history remains; removal increments revision and rekeys |
+| E2E-06 | nonce 碰撞检测 / Nonce collision detection | 两个 Hub 在同 epoch 各发送多条消息，并注入重复 `(senderHubNonceId,counter)` / Two Hubs send within one epoch; inject a duplicate sender/counter tuple | 正常 nonce 为 8+4 bytes 且跨 Hub 唯一；重复 nonce 被拒绝并审计；counter 不回绕，rekey 后才归零 / Normal nonces are 8+4 bytes and unique across Hubs; duplicate is rejected/audited; no wrap; reset only after rekey |
+| E2E-07 | keyEpoch 在途解密 / In-flight epoch decryption | 延迟 epoch N 消息，完成 rekey 到 N+1 后分别在 5 分钟内外送达 / Delay an epoch-N message and deliver it inside and outside five minutes after rekey | 5 分钟内用 N key 解密但不再用其加密；超时后拒绝；N+1 消息只用 N+1 key；epoch 不匹配失败 / N decrypts only within grace and never encrypts; later delivery fails; N+1 uses only its key; epoch mismatch fails |
+| E2E-08 | receipt 丢失重投 / Lost receipt redelivery | 让接收方持久化后丢弃前两次 transport receipt / Drop the first two receipts after durable persistence | Relay attempts 为 1→2→3；业务仅处理一次；重复投递重发 receipt；第三次 receipt 后删除队列 / Attempts advance 1→2→3; application processes once; duplicate re-emits receipt; third receipt deletes queue |
+| E2E-09 | 三次无 receipt / Three missing receipts | 连续丢弃 3 次 transport receipt / Drop three consecutive receipts | 记录标记 `failed`、停止自动重投并通知发送方；加密 E2E ack 不能删除队列 / Record becomes failed, redelivery stops, sender is notified; encrypted E2E ack cannot delete queue |
 
 ---
 
