@@ -57,6 +57,13 @@
       "when": 1785826995740,
       "tag": "0007_nasty_psynapse",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1785835372187,
+      "tag": "0008_tan_lord_tyger",
+      "breakpoints": true
     }
   ]
 }

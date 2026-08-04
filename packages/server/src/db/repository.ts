@@ -29,6 +29,7 @@ import {
   messages,
   scheduledTasks,
   trustedHubs,
+  userHubs,
   users,
 } from "./schema";
 
@@ -45,6 +46,23 @@ export interface AgentListFilter {
 
 export interface UserListFilter {
   kind?: User["kind"];
+}
+
+export interface UserHub {
+  id: string;
+  userId: string;
+  hubId: string;
+  hubDisplayName?: string;
+  bound: boolean;
+  createdAt: number;
+  updatedAt: number;
+  lastSeenAt?: number;
+}
+
+export interface UserHubSummary {
+  hubId: string;
+  displayName: string | null;
+  lastSeenAt: number | null;
 }
 
 export class Repository {
@@ -231,6 +249,87 @@ export class Repository {
     return row ? toUser(row) : undefined;
   }
 
+  bindUserHub(userId: string, hubId: string, displayName?: string): UserHub {
+    const normalizedHubId = hubId.trim();
+    if (!normalizedHubId) throw new Error("hubId must be a non-empty string");
+    if (!this.getUser(userId)) throw new Error(`User not found: ${userId}`);
+
+    const now = Date.now();
+    const current = this.context.db
+      .select()
+      .from(userHubs)
+      .where(and(eq(userHubs.userId, userId), eq(userHubs.hubId, normalizedHubId)))
+      .get();
+    if (current) {
+      this.context.db
+        .update(userHubs)
+        .set({
+          hubDisplayName: displayName ?? current.hubDisplayName,
+          bound: true,
+          updatedAt: now,
+          lastSeenAt: now,
+        })
+        .where(eq(userHubs.id, current.id))
+        .run();
+      return toUserHub({
+        ...current,
+        hubDisplayName: displayName ?? current.hubDisplayName,
+        bound: true,
+        updatedAt: now,
+        lastSeenAt: now,
+      });
+    }
+
+    const row: typeof userHubs.$inferInsert = {
+      id: randomUUID(),
+      userId,
+      hubId: normalizedHubId,
+      hubDisplayName: displayName ?? null,
+      bound: true,
+      createdAt: now,
+      updatedAt: now,
+      lastSeenAt: now,
+    };
+    this.context.db.insert(userHubs).values(row).run();
+    return toUserHub(row as typeof userHubs.$inferSelect);
+  }
+
+  unbindUserHub(userId: string, hubId: string): boolean {
+    const binding = this.context.db
+      .select()
+      .from(userHubs)
+      .where(and(eq(userHubs.userId, userId), eq(userHubs.hubId, hubId), eq(userHubs.bound, true)))
+      .get();
+    if (!binding) return false;
+    this.context.db
+      .update(userHubs)
+      .set({ bound: false, updatedAt: Date.now() })
+      .where(eq(userHubs.id, binding.id))
+      .run();
+    this.setRemoteAgentsDisabled(hubId, true);
+    return true;
+  }
+
+  listUserHubs(userId: string): UserHub[] {
+    return this.context.db
+      .select()
+      .from(userHubs)
+      .where(eq(userHubs.userId, userId))
+      .orderBy(asc(userHubs.createdAt))
+      .all()
+      .map(toUserHub);
+  }
+
+  listHubsForUser(userId: string): UserHubSummary[] {
+    return this.listUserHubs(userId)
+      .filter((hub) => hub.bound)
+      .map((hub) => ({
+        hubId: hub.hubId,
+        displayName: hub.hubDisplayName ?? null,
+        lastSeenAt: hub.lastSeenAt ?? null,
+      }));
+  }
+
   listAgents(filter: AgentListFilter = {}): Agent[] {
     const limit = Math.min(Math.max(filter.limit ?? 100, 0), 500);
     const offset = Math.max(filter.offset ?? 0, 0);
@@ -248,14 +347,14 @@ export class Repository {
   getUserWithAgents(userId: string): UserWithAgents | undefined {
     const user = this.getUser(userId);
     if (!user) return undefined;
-    const userAgents: Agent[] = [];
-    let offset = 0;
-    while (true) {
-      const page = this.listAgents({ ownerId: userId, limit: 500, offset });
-      userAgents.push(...page);
-      if (page.length < 500) break;
-      offset += page.length;
-    }
+    const boundHubIds = new Set(this.listHubsForUser(userId).map(({ hubId }) => hubId));
+    const userAgents = this.listAgentRows()
+      .filter((row) => {
+        if (row.ownerType !== "remote") return row.ownerId === userId;
+        if (row.homeHubId) return boundHubIds.has(row.homeHubId);
+        return row.ownerId === userId;
+      })
+      .map((row) => this.toAgent(row));
     return { ...user, agents: userAgents, agentCount: userAgents.length };
   }
 
@@ -286,6 +385,7 @@ export class Repository {
         },
       })
       .run();
+    if (user.hubId) this.bindUserHub(user.id, user.hubId);
   }
 
   getTrustedHub(hubId: string): TrustedHub | undefined {
@@ -372,8 +472,7 @@ export class Repository {
     const rows = this.context.db
       .select({ id: agents.id })
       .from(agents)
-      .innerJoin(users, eq(agents.ownerId, users.id))
-      .where(and(eq(agents.ownerType, "remote"), eq(users.hubId, hubId)))
+      .where(and(eq(agents.ownerType, "remote"), eq(agents.homeHubId, hubId)))
       .all();
     const ids = rows.map(({ id }) => id);
     if (ids.length > 0) {
@@ -958,6 +1057,19 @@ function toUser(row: typeof users.$inferSelect): User {
     hubId: row.hubId ?? undefined,
     publicKey: row.publicKey ?? undefined,
     kind: row.kind as User["kind"],
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    lastSeenAt: row.lastSeenAt ?? undefined,
+  };
+}
+
+function toUserHub(row: typeof userHubs.$inferSelect): UserHub {
+  return {
+    id: row.id,
+    userId: row.userId,
+    hubId: row.hubId,
+    hubDisplayName: row.hubDisplayName ?? undefined,
+    bound: row.bound,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     lastSeenAt: row.lastSeenAt ?? undefined,

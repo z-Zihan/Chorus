@@ -252,6 +252,87 @@ describe("DirectoryService", () => {
     expect(repository.getAgentRow("remote_pbICehaU4Xkd8Fp8")?.disabled).toBe(false);
     expect(service.getRemoteDirectory("hub-remote")).toBe(revoked);
   });
+
+  it("aggregates one User's Agents across multiple bound Hubs", () => {
+    const database = createDatabase(":memory:");
+    databases.push(database);
+    const repository = new Repository(database);
+    const registry = new AgentRegistry(repository);
+    const trustStore = new TrustStore(repository);
+    trustHub(trustStore, "hub-phone");
+    trustHub(trustStore, "hub-computer");
+    const service = new DirectoryService(repository, registry, "", trustStore);
+    const publicKey = generateUserKeyPair().publicKey;
+
+    service.applyRemoteDirectory(
+      manifestFixture({
+        user: { ...remoteUser("usr-multi", "hub-phone", "Multi User"), publicKey },
+        agents: [directoryAgent("phone-agent")],
+      }),
+    );
+    service.applyRemoteDirectory(
+      manifestFixture({
+        user: { ...remoteUser("usr-multi", "hub-computer", "Multi User"), publicKey },
+        agents: [directoryAgent("computer-agent")],
+      }),
+    );
+
+    expect(repository.listHubsForUser("usr-multi").map(({ hubId }) => hubId)).toEqual([
+      "hub-phone",
+      "hub-computer",
+    ]);
+    expect(repository.getUserWithAgents("usr-multi")?.agents).toEqual([
+      expect.objectContaining({ name: "phone-agent name", homeHubId: "hub-phone", stale: false }),
+      expect.objectContaining({
+        name: "computer-agent name",
+        homeHubId: "hub-computer",
+        stale: false,
+      }),
+    ]);
+  });
+
+  it("only marks Agents from an unbound Hub stale", () => {
+    const database = createDatabase(":memory:");
+    databases.push(database);
+    const repository = new Repository(database);
+    const registry = new AgentRegistry(repository);
+    const trustStore = new TrustStore(repository);
+    trustHub(trustStore, "hub-phone");
+    trustHub(trustStore, "hub-computer");
+    const service = new DirectoryService(repository, registry, "", trustStore);
+    const publicKey = generateUserKeyPair().publicKey;
+
+    for (const [hubId, agentId] of [
+      ["hub-phone", "phone-agent"],
+      ["hub-computer", "computer-agent"],
+    ] as const) {
+      service.applyRemoteDirectory(
+        manifestFixture({
+          user: { ...remoteUser("usr-multi", hubId, "Multi User"), publicKey },
+          agents: [directoryAgent(agentId)],
+        }),
+      );
+    }
+
+    expect(repository.unbindUserHub("usr-multi", "hub-phone")).toBe(true);
+
+    expect(repository.listHubsForUser("usr-multi").map(({ hubId }) => hubId)).toEqual([
+      "hub-computer",
+    ]);
+    expect(repository.listUserHubs("usr-multi")).toEqual([
+      expect.objectContaining({ hubId: "hub-phone", bound: false }),
+      expect.objectContaining({ hubId: "hub-computer", bound: true }),
+    ]);
+    const agents = repository.listAgents({ ownerId: "usr-multi", includeDisabled: true });
+    expect(agents.find(({ homeHubId }) => homeHubId === "hub-phone")).toMatchObject({
+      disabled: true,
+      stale: true,
+    });
+    expect(agents.find(({ homeHubId }) => homeHubId === "hub-computer")).toMatchObject({
+      disabled: false,
+      stale: false,
+    });
+  });
 });
 
 function mockService(publicKey: string): DirectoryService {

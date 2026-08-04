@@ -33,6 +33,7 @@ export function createDatabase(dbPath: string) {
   ensureCredentialRefColumn(sqlite);
   ensureConversationColumns(sqlite);
   ensureUserColumns(sqlite);
+  ensureUserHubsTable(sqlite);
   ensureAgentDiscoveryColumns(sqlite);
   ensureTrustedHubsTable(sqlite);
   ensureClientTokensTable(sqlite);
@@ -54,6 +55,32 @@ export function ensureClientTokensTable(sqlite: Database.Database): void {
   )`);
 }
 
+export function ensureUserHubsTable(sqlite: Database.Database): void {
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS user_hubs (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id),
+    hub_id TEXT NOT NULL,
+    hub_display_name TEXT,
+    bound INTEGER NOT NULL DEFAULT 1,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    last_seen_at INTEGER
+  )`);
+
+  sqlite
+    .prepare(`INSERT INTO user_hubs (
+      id, user_id, hub_id, hub_display_name, bound, created_at, updated_at, last_seen_at
+    )
+    SELECT 'legacy:' || id || ':' || hub_id, id, hub_id, NULL, 1, created_at, updated_at, last_seen_at
+    FROM users
+    WHERE hub_id IS NOT NULL AND hub_id != ''
+      AND NOT EXISTS (
+        SELECT 1 FROM user_hubs
+        WHERE user_hubs.user_id = users.id AND user_hubs.hub_id = users.hub_id
+      )`)
+    .run();
+}
+
 function ensureAgentDiscoveryColumns(sqlite: Database.Database): void {
   const columns = sqlite.prepare("PRAGMA table_info(agents)").all() as Array<{ name: string }>;
   if (!columns.some((column) => column.name === "capabilities")) {
@@ -65,6 +92,9 @@ function ensureAgentDiscoveryColumns(sqlite: Database.Database): void {
   if (!columns.some((column) => column.name === "home_hub_id")) {
     sqlite.exec("ALTER TABLE agents ADD COLUMN home_hub_id TEXT");
   }
+  sqlite.exec(`UPDATE agents
+    SET home_hub_id = (SELECT hub_id FROM users WHERE users.id = agents.owner_id)
+    WHERE owner_type = 'remote' AND home_hub_id IS NULL`);
 }
 
 function ensureTrustedHubsTable(sqlite: Database.Database): void {

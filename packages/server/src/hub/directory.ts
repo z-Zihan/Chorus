@@ -134,8 +134,9 @@ export class DirectoryService {
         updatedAt: manifest.issuedAt,
         lastSeenAt: Date.now(),
       });
+      this.repository.bindUserHub(manifest.user.id, hubId);
 
-      this.markStaleAgents(manifest.user.hubId);
+      this.markStaleAgents(hubId);
       for (const agent of manifest.agents) {
         const remoteId = this.registry.getRemoteAgentId(manifest.user.hubId, agent.id);
         this.repository.upsertAgent(

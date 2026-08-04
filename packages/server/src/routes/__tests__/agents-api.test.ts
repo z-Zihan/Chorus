@@ -152,6 +152,34 @@ describe("API-01 Owner-aware Discovery", () => {
     await app.close();
   });
 
+  it("binds, lists, and unbinds a User Hub", async () => {
+    const { app } = await setupApp();
+    const bound = await request(app.server)
+      .post("/api/users/usr_remote/hubs")
+      .send({ hubId: "hub-remote", displayName: "Phone" });
+    expect(bound.status).toBe(201);
+    expect(bound.body).toMatchObject({ hubId: "hub-remote", displayName: "Phone" });
+
+    const listed = await request(app.server).get("/api/users/usr_remote/hubs");
+    expect(listed.status).toBe(200);
+    expect(listed.body).toEqual([
+      expect.objectContaining({ hubId: "hub-remote", displayName: "Phone" }),
+    ]);
+
+    const unbound = await request(app.server).delete("/api/users/usr_remote/hubs/hub-remote");
+    expect(unbound.status).toBe(200);
+    expect(unbound.body).toEqual({ ok: true });
+
+    const agents = await request(app.server).get(
+      "/api/agents?ownerId=usr_remote&includeDisabled=true",
+    );
+    expect(agents.body).toEqual([
+      expect.objectContaining({ id: "remote_agent", disabled: true, stale: true }),
+    ]);
+    expect((await request(app.server).get("/api/users/usr_remote/hubs")).body).toEqual([]);
+    await app.close();
+  });
+
   it("filters by capability", async () => {
     const { app } = await setupApp();
     const res = await request(app.server).get("/api/agents?capability=coding");

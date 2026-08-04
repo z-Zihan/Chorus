@@ -38,6 +38,10 @@ const userQuerySchema = z.object({
   kind: z.enum(["local", "remote"]).optional(),
   includeAgents: booleanQuerySchema.default("false"),
 });
+const bindUserHubSchema = z.object({
+  hubId: z.string().trim().min(1).max(1_000),
+  displayName: z.string().trim().min(1).max(200).optional(),
+});
 
 export function registerAgentRoutes(
   app: FastifyInstance,
@@ -80,6 +84,46 @@ export function registerAgentRoutes(
     if (!user) return reply.code(404).send({ error: "User not found" });
     return user.agents.map(stripApiKey);
   });
+
+  app.get<{ Params: { userId: string } }>("/api/users/:userId/hubs", async (request, reply) => {
+    if (!repository.getUser(request.params.userId)) {
+      return reply.code(404).send({ error: "User not found" });
+    }
+    return repository.listHubsForUser(request.params.userId);
+  });
+
+  app.post<{ Params: { userId: string } }>("/api/users/:userId/hubs", async (request, reply) => {
+    if (!repository.getUser(request.params.userId)) {
+      return reply.code(404).send({ error: "User not found" });
+    }
+    const parsed = bindUserHubSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: "Invalid Hub binding", issues: parsed.error.flatten() });
+    }
+    const binding = repository.bindUserHub(
+      request.params.userId,
+      parsed.data.hubId,
+      parsed.data.displayName,
+    );
+    return reply.code(201).send({
+      hubId: binding.hubId,
+      displayName: binding.hubDisplayName ?? null,
+      lastSeenAt: binding.lastSeenAt ?? null,
+    });
+  });
+
+  app.delete<{ Params: { userId: string; hubId: string } }>(
+    "/api/users/:userId/hubs/:hubId",
+    async (request, reply) => {
+      if (!repository.getUser(request.params.userId)) {
+        return reply.code(404).send({ error: "User not found" });
+      }
+      const unbound = repository.unbindUserHub(request.params.userId, request.params.hubId);
+      if (!unbound) return reply.code(404).send({ error: "Hub binding not found" });
+      registry.markRemoteAgentsStale(request.params.hubId);
+      return { ok: true };
+    },
+  );
 
   app.post("/api/agents", async (req, reply) => {
     const parsed = createAgentSchema.safeParse(req.body);
