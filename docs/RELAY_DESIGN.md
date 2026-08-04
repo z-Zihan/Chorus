@@ -2,7 +2,9 @@
 
 > 最后更新：2026-08-04
 
-> 实现状态：`packages/relay` 已包含 Relay Server、Hub 注册、WebSocket 路由、离线消息和 Room 基础；`packages/server` 已有 Hub Client/P2P/E2E 代码。User 实体、签名目录、owner-aware 远程 Agent 注册和完整跨设备验收仍未实现。部署 Relay 不会自动解锁多用户身份能力。
+> 实现状态：`packages/relay` 已包含 Relay Server、Hub 注册、WebSocket 路由、离线消息和 Room 基础；`packages/server` 已有 Hub Client/P2P/E2E 代码。本文定义的新目标是“Contact → Room → owner-authorized Agent”。现有自动目录交换和直接远程 Agent 入口属于待迁移行为，不能作为新流程继续扩展。
+>
+> Target model: pairing creates a contact, rooms contain people, and each owner explicitly brings their own agents into a room. Transport readiness does not imply product-level authorization.
 
 ## 1. 架构总览
 
@@ -16,7 +18,7 @@
 └──────────┘         └─────────────┘         └──────────┘
                      · 离线消息存储
                      · 群聊扇出
-                     · Hub 发现
+                     · Hub 寻址（不提供 Agent 全局发现）
 
 模式二：P2P（内网直连）
 ┌──────────┐                    ┌──────────┐
@@ -45,8 +47,8 @@
 │  ┌───────────────────────────────────────────────┐  │
 │  │              Frontend (React)                  │  │
 │  │  · 连接状态指示器 (P2P/Relay/离线)            │  │
-│  │  · 跨 Hub 会话列表                            │  │
-│  │  · 群聊 UI                                    │  │
+│  │  · 联系人与 Room 列表                         │  │
+│  │  · 人类成员 / Agent 成员分离的聊天室 UI       │  │
 │  └───────────────────┬───────────────────────────┘  │
 │  ┌───────────────────▼───────────────────────────┐  │
 │  │            Local Hub Server (Fastify)          │  │
@@ -145,6 +147,9 @@ interface HubPayload {
   protocolVersion: 2;
   messageType:
     | "chat" | "a2a_call" | "a2a_response" | "agent_status" | "typing"
+    | "contact_request" | "contact_accept" | "contact_block"
+    | "room_invite" | "room_accept" | "room_leave"
+    | "room_agent_upsert" | "room_agent_remove"
     | "directory_request" | "directory_announce" | "directory_revoke"
     | "delivery_ack";
   conversationId?: string;
@@ -161,6 +166,10 @@ interface HubPayload {
 ```
 
 接收方先验证 envelope 的 Hub 签名，再解密 payload，再验证 UserHubBinding/DirectoryManifest 的 User 签名，最后执行权限策略。任一 ID、签名、绑定或目录版本不一致即拒绝；不得用 `fromUserName` 或 Agent 显示名回退寻址。
+
+`contact_*`、`room_*` 和 `directory_*` 是不同授权域。`contact_accept` 之后不得自动发送 `directory_request`；`room_accept` 只加入人类成员；只有所有者签名的 `room_agent_upsert` 才创建 Room 内的远程 Agent 能力。
+
+**English:** Contact acceptance, room acceptance, and room-agent admission are separate signed events. None implies the next. In particular, pairing never triggers directory synchronization.
 
 ### 加密方案
 
@@ -215,10 +224,27 @@ Relay → Hub:
 | `/api/hubs/discover` | POST | 按 Hub ID 查询在线状态 |
 | `/api/rooms` | POST | 创建群聊房间 |
 | `/api/rooms/:id` | GET | 获取房间信息 + 成员列表 |
-| `/api/rooms/:id/join` | POST | 加入房间 |
+| `/api/rooms/:id/join` | POST | 使用已接受的邀请加入房间 |
 | `/api/rooms/:id/leave` | POST | 离开房间 |
 | `/api/rooms/:id/invite` | POST | 邀请 Hub 加入 |
 | `/api/health` | GET | 健康检查 |
+
+Relay API 只管理 Hub 路由和加密 Room 信封，不能决定某个用户是否有权添加或调用 Agent。Local Hub API 才负责联系人、邀请、Owner 校验和本地会话映射：
+
+| Local Hub 端点 | 方法 | 语义 / Semantics |
+|----------------|------|------------------|
+| `/api/hub/config` | PATCH | 验证并保存 Relay 配置，返回 `{ ok, config, connectionState }` 后异步连接 |
+| `/api/hub/status` | GET | 返回 `disconnected/connecting/connected/reconnecting/error` 和最近错误 |
+| `/api/contacts/pairing-requests` | POST | 按 Hub ID 创建一次性配对码；不请求 Agent 目录 |
+| `/api/contacts/pairing-requests/:id/confirm` | POST | 校验配对码/指纹并创建 Contact |
+| `/api/contacts` | GET | 只列出联系人名片和 presence |
+| `/api/rooms` | POST | 创建 `direct` 或 `group` Room，并建立 `type=room` 本地会话 |
+| `/api/rooms/:id/invitations` | POST | 邀请已配对联系人 |
+| `/api/rooms/:id/invitations/:inviteId/accept` | POST | 被邀请者明确接受 |
+| `/api/rooms/:id/agents` | POST | 仅所有者把自己的 `room/public` Agent 加入 Room |
+| `/api/rooms/:id/agents/:agentId` | DELETE | 所有者或 Room 管理员移出；只有所有者可以再次加入 |
+
+**English:** Relay endpoints transport encrypted membership events. Local Hub endpoints enforce contact state, invitation acceptance, room roles, agent ownership, visibility, and conversation mapping.
 
 ### 离线消息
 
@@ -267,7 +293,7 @@ docker run -d -p 3211:3211 -v relay-data:/data \
 
 ### User/Agent 目录发现 / Directory Discovery
 
-Relay 不建立可搜索的明文用户目录。Hub 上线后只向已配对 Hub 和共同 Room 成员发送加密的 `directory_announce`；这里的“广播 Agent 列表”是面向授权 audience 的 fan-out，不是全网广播。
+Relay 不建立可搜索的明文用户或 Agent 目录。**配对成功和 Hub 上线都不触发 Agent 目录交换。** 联系人只同步最小 User Card（User ID、显示名、头像、Hub 指纹和 presence），Agent Card 必须由所有者按范围主动发布。
 
 ```typescript
 interface DirectoryManifest {
@@ -275,6 +301,8 @@ interface DirectoryManifest {
   directoryVersion: number;
   issuedAt: number;
   expiresAt: number;
+  scope: "contact" | "room";
+  roomId?: string;              // scope=room 时必填
   binding: UserHubBinding;
   user: {
     id: string;
@@ -289,25 +317,33 @@ interface DirectoryManifest {
     type: string;
     capabilities: string[];
     status: "online" | "busy" | "offline" | "error";
-    visibility: "trusted" | "room" | "public";
+    visibility: "room" | "public";
   }>;
   revokedAgentIds: string[];
   signature: string;             // User key 对 canonical JSON 签名
 }
 ```
 
-上线与同步流程：
+可见性语义：
 
-1. Hub 连接 Relay/P2P，完成 Hub challenge 和 UserHubBinding 验证。
-2. Hub 根据接收者过滤 Agent：`trusted` 仅配对用户，`room` 仅共同房间，`private` 永不发送；凭据、config、system prompt、本地路径和历史永不进入目录。
-3. Hub 用 User key 签名 manifest，再通过每个接收 Hub 的加密通道发送。
-4. 接收 Hub 验证签名、binding、版本和过期时间，在一个 SQLite 事务中 upsert remote User，再 upsert remote Agent。
-5. UI/外部 API 按 Owner 分组显示，寻址使用 `(homeHubId, sourceAgentId)`；两个都叫 “Claude Code” 的 Agent 分别显示为 `Alice / Claude Code`、`Bob / Claude Code`。
-6. 名称、能力或状态变化发送更高版本增量；删除、隐身或解除信任立即发送 `directory_revoke`。过期未续期的记录标记 `stale/offline`，历史快照保留。
+| 值 | 远程披露 / Remote disclosure | 是否自动加入 Room |
+|----|------------------------------|--------------------|
+| `private`（默认） | 从不进入远程 manifest | 否；跨用户 Room 中不可选择 |
+| `room` | 仅发送到所有者已明确加入该 Agent 的指定 Room，manifest 必须带 `roomId` | 否，仍需所有者操作 |
+| `public` | 可向已配对联系人发送最小 Agent Card，也可被所有者加入 Room；不进入 Relay 全局搜索 | 否，仍需所有者操作 |
+
+发布与同步流程：
+
+1. 配对成功后只创建 Contact；不得调用 `buildLocalDirectory()` 或发送 `directory_request`。
+2. 所有者在 Agent 设置中把可见性从默认 `private` 改为 `room` 或 `public`。只有 `public` 变更才生成 `scope=contact` 的声明并加密发送给联系人。
+3. 所有者在某 Room 点击“添加我的 Agent”时，Local Hub 验证 `actorUserId === ownerId`、Room 人类成员关系和可见性，再签发 `scope=room, roomId=<id>` 的单 Agent 声明及 `room_agent_upsert`。
+4. 接收 Hub 验证 envelope、UserHubBinding、所有者签名、Contact/Room membership、scope、版本和 TTL；仅将远程 Agent 注册为对应 Room 的可用成员，不加入全局 Agent 侧边栏。
+5. 凭据、config、system prompt、本地路径和历史永不进入声明。寻址使用 `(homeHubId, sourceAgentId)`，显示使用 `Owner / Agent`。
+6. 移出 Room、改回 `private`、删除 Agent、离开 Room、解除联系人或封禁时立即发送对应 scope 的 `directory_revoke` / `room_agent_remove`；缓存到期只是故障兜底，不是撤销机制。
 
 目录消息可以使用现有 `{ type: "message", envelope }` Relay frame，因此 Relay 无需解析 `DirectoryManifest`。Relay 只管理 Hub 在线状态和 Room membership，不得依据 User/Agent 内容做授权决策。
 
-**English summary:** Publish the minimal signed directory only to paired peers or shared rooms. Receivers register the remote user before its agents and address agents by Hub-scoped stable IDs.
+**English:** There is no automatic agent-directory exchange. `private` is the default. `room` cards are disclosed only after the owner adds that agent to a specific room; `public` cards may be advertised to paired contacts but are never globally searchable and grant no invocation permission. Receivers scope remote agent records to the authorized room.
 
 ## 5. P2P 发现
 

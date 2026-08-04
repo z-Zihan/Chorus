@@ -142,6 +142,8 @@ AgentLink 支持三种标准协议端点：
 
 ## 6. 跨设备协作
 
+> **隐私默认值 / Privacy default:** 添加好友只建立联系人关系，不会公开或交换任何 Agent。只有 Agent 所有者可以把自己的 Agent 加入聊天室。Pairing creates a contact only; it never exposes either side's agents. Only an agent's owner can add it to a room.
+
 ### 部署中继服务器
 在你的服务器上：
 ```bash
@@ -152,17 +154,41 @@ docker run -d -p 3211:3211 \
 ```
 
 ### 连接中继服务器
-1. 设置 → **跨设备协作** → 填入中继地址（如 `wss://relay.example.com/ws`）
-2. 设置你的显示名
-3. 点"连接"
-4. 连接成功后，你的 Agent 可以和其他设备上的 Agent 通信
 
-### 跨设备 Agent 通信
-- **私聊**：直接 @对方的 Agent，消息加密转发
-- **群聊**：创建跨设备群聊房间，邀请其他 Hub 加入
-- **离线消息**：对方不在线时，消息加密存储在中继，上线后自动推送
+1. 打开 **设置 → 跨设备协作**，填写可被其他设备访问的 Relay 地址，例如 `wss://your-relay.example.com/ws` 或局域网内的 `ws://192.168.1.20:3211/ws`。
+2. 不要填写 `localhost`、`127.0.0.1` 或 `::1`；这些地址只指向当前设备，不能用于跨设备协作。公网环境推荐 `wss://`，`ws://` 仅用于可信局域网或开发环境。
+3. 设置显示名并点击 **保存**。保存成功后会显示 Toast“保存成功，正在连接”；保存失败会保留输入并显示可操作的错误原因。
+4. 查看独立的连接状态：**连接中 / 已连接 / 未连接 / 正在重连 / 连接错误**。配置保存成功不代表 Relay 已连接。
 
-> 所有消息端到端加密，中继服务器无法解密内容。
+**English:** Open **Settings → Cross-device Collaboration**, enter an externally reachable URL such as `wss://your-relay.example.com/ws` or `ws://192.168.1.20:3211/ws`, and save. Loopback hosts (`localhost`, `127.0.0.1`, `::1`) are rejected outside explicit development mode. A successful save triggers a connection attempt; persistence and connection results are shown separately.
+
+### 添加好友 / Add a contact
+
+1. 在侧边栏点击 **添加好友**，输入对方的 Hub ID。
+2. 发送配对请求并把一次性配对码通过可信渠道告诉对方。
+3. 对方输入配对码并核对 Hub 指纹后确认。
+4. 配对成功后，对方出现在 **联系人** 中，只显示头像、名称和在线状态；双方的 Agent 仍保持私有。
+
+**English:** Enter the other person's Hub ID, exchange the one-time pairing code over a trusted channel, and verify the Hub fingerprint. A successful pairing creates a contact card only; no agent directory is exchanged.
+
+### 创建聊天室 / Create a room
+
+1. 点击联系人，选择 **发消息** 以创建或打开双人聊天室；选择 **创建聊天室** 可输入房间名并创建多人房间。
+2. 在房间的成员面板中选择 **邀请联系人**。被邀请人明确接受后才成为房间成员。
+3. 选择 **添加我的 Agent**，从自己拥有且可用于房间的 Agent 中选择。不能查看、选择或添加其他用户的 Agent。
+4. Agent 默认是 `private`。需要跨用户协作时，先在 Agent 设置中改为 `room`（仅被所有者加入的房间可见）或 `public`（所有已配对联系人可发现），再将它加入房间。
+
+**English:** A direct message is a two-person room; a named room can contain multiple contacts. Invitations require acceptance. Each participant may add only agents they own. `room` visibility means the agent is disclosed only to rooms where its owner explicitly adds it; `public` means discoverable by paired contacts, not globally searchable.
+
+### 在聊天室中协作 / Collaborate in a room
+
+- 普通消息发送给房间中的人；选择自己的 Agent 后，该 Agent 才会处理消息。
+- 只能 `@` 房间成员列表中已经由其所有者加入的 Agent。`@` 不会发现隐藏的远程 Agent。
+- 当双方都主动加入自己的 Agent 后，这些 Agent 才能在当前房间进行 A2A 协作；远程调用仍遵循 `auto / confirm / deny` 权限。
+- 所有者移除 Agent、将其改回 `private`、离开房间或解除联系人关系后，新的调用立即停止；历史消息保留身份快照。
+- 对方离线时，密文可由 Relay 暂存并在上线后投递。Relay 无法读取正文，但仍能看到 Hub ID、房间、时间、密文大小和在线状态等元数据。
+
+**English:** Agents are room-scoped participants, never implicit capabilities of a contact. A remote agent becomes addressable only after its owner adds it to that room. Removal or visibility revocation blocks new calls immediately while preserving historical identity snapshots.
 
 ## 7. 设置
 
@@ -174,6 +200,8 @@ docker run -d -p 3211:3211 \
 | API Key 存储 | 设置 → 安全 | 存入系统钥匙串，不明文存数据库 |
 | A2A 权限 | 设置 → 隐私与权限 | 每个会话 auto/confirm/deny |
 | 信任管理 | 设置 → 隐私与权限 | 配对 Hub、阻止/移除、披露预览 |
+| Agent 可见性 | Agent 设置 → 可见性 | 默认 private；可选 room / public，公开不等于授权调用 |
+| Relay | 设置 → 跨设备协作 | 外部可访问地址、保存反馈和实时连接状态 |
 | 日志 | 设置 → 诊断 | 查看前端 + 后端日志，支持导出 |
 | 检查更新 | 设置 → 诊断 | 检查新版本 |
 
@@ -205,6 +233,8 @@ docker run -d -p 3211:3211 \
 
 ### 跨设备通信安全吗？
 端到端加密，Relay 服务器无法解密内容。Hub 间需配对码认证，支持 block/remove。群组消息使用群组密钥加密。
+
+添加好友会看到我的 Agent 吗？不会。配对只交换最小联系人资料。你的 Agent 默认 `private`；只有你能把自己的 `room` 或 `public` Agent 加入聊天室。No. Pairing exchanges only minimal contact information, and only you can add your agents to a room.
 
 ### 外部 Agent 怎么接入？
 AgentLink 暴露 `GET /api/skill` 端点返回完整接入文档。外部 Agent 读取后通过 REST API 操作。非本机访问支持 Token 认证。

@@ -1,8 +1,9 @@
 # AgentLink 产品需求文档（PRD）
 
-> 版本：v2.1<br>
+> 版本：v2.2<br>
 > 日期：2026-08-04<br>
-> 产品阶段：已实现零配置 CLI 驾驶舱 + 多 Agent 协作 + 跨设备传输基础；多用户身份与远程目录进入设计落地阶段
+> 产品阶段：已实现零配置 CLI 驾驶舱 + 多 Agent 协作 + 跨设备传输基础；联系人—聊天室—所有者授权 Agent 的新协作模型进入设计落地阶段<br>
+> Product stage: the local cockpit and transport foundation exist; the new contact → room → owner-authorized agent model is now the target experience.
 
 ## 1. 产品定义
 
@@ -24,7 +25,7 @@ AgentLink 是一个本地优先的 AI CLI 即时通讯工作台：自动发现�
 | 安装与接入门槛高 | 用户要查命令、写配置、理解 Adapter | 像安装应用一样浏览、安装、验证和卸载 Agent |
 | Agent 之间彼此隔离 | 人工复制粘贴上下文，协作过程不可见 | 多 Agent 群聊与可展开的 A2A 调用链 |
 | Agent 缺少所有者身份 | 只知道 Hub/Agent ID，无法判断“谁的 Agent” | User、Hub、Agent 三层身份和可验证的 owner 信息 |
-| 跨设备目录不可用 | Hub 在线也不知道对端有哪些 Agent | 经授权的 User/Agent 目录广播、状态同步和离线投递 |
+| 跨设备协作边界不清 | 配对后自动交换 Agent 目录，联系人关系被误当成 Agent 使用授权 | 配对只建立联系人；先建 Room，再由每位所有者加入自己的 Agent |
 | 单 CLI 长期使用体验弱 | 历史难管理、状态与错误不直观 | 即使只有一个 Agent，也有完整的会话与配置工作台 |
 | 首次使用认知负担高 | PATH、登录、参数、模型、配置都要用户理解 | 打开即检测，问题可解释，下一步唯一且明确 |
 
@@ -92,18 +93,19 @@ AgentLink 提供可信的本地 Agent 目录，用户可以从 UI 添加已检�
 
 ### 2.6 多用户与跨 Hub 协作 / Multi-user & Cross-hub Collaboration
 
-一个 User 可以拥有多个 Agent；Hub 表示承载和路由这些 Agent 的设备端点，而不是人的身份。用户应始终能看出消息来自“谁的哪个 Agent”，并在远程调用发生前知道信息暴露范围和授权策略。
+一个 User 可以拥有多个 Agent；Hub 表示承载和路由这些 Agent 的设备端点，而不是人的身份。跨用户协作必须依次建立三个相互独立的授权关系：**联系人关系**允许邀请与人类消息，**Room 成员关系**允许接收该房间内容，**Room Agent 成员关系**才允许某个 Agent 被发现和寻址。前一层绝不隐式授予后一层。
 
 用户故事：
 
 - 作为拥有多个 CLI 的用户，我能在“我的 Agent”下统一查看本机 Agent，并按用途选择，而不是把每个 CLI 当成独立的人。
-- 作为团队成员，我能发现已配对用户允许公开的 Agent、能力和在线状态，并邀请其中一个 Agent 进入私聊或跨 Hub 群聊。
-- 作为 Agent 所有者，我能分别控制个人资料可见性、Agent 可发现性和入站调用权限。
+- 作为团队成员，我能添加联系人、创建聊天室和邀请联系人，但配对后不会自动看到对方的 Agent。
+- 作为 Agent 所有者，只有我能把自己的 Agent 加入 Room；其他成员不能替我发现、添加或调用未入房的 Agent。
+- 作为隐私敏感用户，我的 Agent 默认 `private`，并能选择 `room` 或 `public` 可见性；公开范围和实际调用授权是两回事。
 - 作为消息接收者，我看到 `小明 / Gemini CLI`，而不是无法辨认的裸 `gemini-cli` ID。
 
-验收标准：User、Hub、Agent 关系可验证；远程目录可增量同步和撤销；同名 Agent 不会误路由；默认不向未信任 Hub 暴露 Agent 清单或消息正文。
+验收标准：配对成功后远端 Agent 数量仍为 0；Room 邀请需接受；只有 `actorUserId === agent.ownerId` 能加入 Agent；Room Agent 授权可撤销并立即阻止新调用；同名 Agent 不会误路由；Relay 无法读取目录或正文。
 
-**English summary:** One user owns many agents; a Hub is a device/routing identity. Remote discovery is consent-based, owner-aware, revocable, and collision-safe.
+**English:** One user owns many agents; a Hub is a device endpoint. Pairing grants contact capabilities only. Room membership grants access to room content, and an agent becomes addressable only when its owner explicitly adds it to that room. Every grant is scoped, revocable, and collision-safe.
 
 ## 3. 目标用户
 
@@ -197,13 +199,16 @@ AgentLink 提供可信的本地 Agent 目录，用户可以从 UI 添加已检�
 ### 5.5 跨用户协作流程 / Cross-user Journey
 
 ```text
-启用 Hub → 创建/选择本机 User 身份 → 与对方核验指纹或接受邀请
-→ 双方按隐私策略交换 User/Agent 目录 → 按“Owner / Agent”选择目标
-→ 创建远程 DM 或 cross_hub 群聊 → 检查 auto/confirm/deny
-→ 在线实时投递；离线则显示 queued、过期时间和最终投递状态
+配置可外部访问的 Relay → 保存成功并自动连接 → 查看连接状态
+→ 输入 Hub ID → 交换配对码并核验指纹 → 联系人出现（不交换 Agent）
+→ 创建 Room / 打开双人 Room → 邀请联系人并等待接受
+→ 每位成员各自加入自己的 room/public Agent → Room 内出现 Owner / Agent
+→ 人类消息或选择已入房 Agent → 检查 auto/confirm/deny → 投递与回执
 ```
 
-失败必须可解释：未建立信任、目标未公开、目标离线、等待所有者确认、消息过期分别使用不同状态，不统一显示为“发送失败”。
+失败必须可解释：Relay 地址不可达、配对码错误、邀请待接受、Agent 未入房、等待所有者确认、目标离线、消息过期分别使用不同状态，不统一显示为“发送失败”。
+
+**English:** Configure and connect to a reachable Relay, pair into a contact without exchanging agents, create or open a room, invite contacts, and let each participant bring only their own agents. Delivery and authorization states remain separate and explainable.
 
 ## 6. 当前体验审计
 
@@ -214,6 +219,7 @@ AgentLink 提供可信的本地 Agent 目录，用户可以从 UI 添加已检�
 | 多 Agent 群聊 | ❌ | 有技术基础，没有可完成的用户路径 |
 | 单人模式 | ⚠️ | 核心聊天可用，历史与配置管理不完整 |
 | 低认知负担 | ❌ | 无配置会进入 0 Agent 死路，无首启引导 |
+| 跨设备协作 | ⚠️ | 传输基础存在；保存反馈、连接状态、联系人、Room 所有权与 Agent 隐私模型需要重做 |
 
 “服务能启动”“数据库有字段”“API 能调用”均不等于用户需求已完成。
 
@@ -244,7 +250,8 @@ AgentLink 提供可信的本地 Agent 目录，用户可以从 UI 添加已检�
 ### 7.3 P2：规模化与生态
 
 - User 实体、Agent owner 归属和历史身份快照。
-- 桌面 Hub Client 通过加密目录声明发现远程 User/Agent。
+- 联系人和 Room 成为跨用户主入口；不再以远程 Agent 目录作为侧边栏默认入口。
+- 仅对 `public` 联系人范围或已明确加入 Room 的 `room/public` Agent 发送最小加密目录声明。
 - P2P/mDNS、跨设备离线消息、端到端加密和跨 Hub 群聊。
 - 第三方 Catalog、插件签名与发布流程。
 - MCP、Google A2A 等标准协议兼容。
@@ -302,9 +309,11 @@ i18n、主题、动画、埋点供应商、更多 UI 基础组件不是当前发
 
 - 首次启动创建一个本机 User；不要求云账号。User 与 Hub 分离，Hub 是设备/传输身份。
 - 每个 Agent 必须有 `ownerId`。`ownerType=local` 表示用户显式添加，`remote` 表示从可信远程目录同步，`system` 表示本机自动检测；`system` Agent 仍归本机 User 所有。
-- UI 默认分成“我的 Agent”和按远程 User 分组的目录。会话成员、消息气泡、搜索结果至少显示 Owner 名称、Agent 名称和本地/远程标识。
+- UI 的 Agent 区域只默认展示“我的 Agent”；远程人类显示在独立的“联系人”区域。远程 Agent 只在其所有者加入的 Room 成员面板和该 Room 的选择器中出现。
 - Agent 名称只是显示名，不参与唯一寻址。协议路由使用稳定的 `agentId + homeHubId`；UI 在有冲突时显示 `Owner / Agent`，必要时附 Hub 短指纹。
 - 远程用户或 Agent 被撤销后，历史保留不可变的 Owner/Agent 名称与头像快照，但不得继续显示为在线目录项。
+
+**English:** The global agent list contains the local user's agents, while remote people live under Contacts. A remote agent appears only inside rooms where its owner has explicitly added it. Stable IDs route messages; display names never authorize or address them.
 
 ### 8.6 权限、信任与隐私 / Permission, Trust & Privacy
 
@@ -313,16 +322,57 @@ i18n、主题、动画、埋点供应商、更多 UI 基础组件不是当前发
 | 对象 | 默认可见/可调用范围 | 用户可配置项 |
 |------|--------------------|--------------|
 | User | 仅显示名、头像和公钥指纹；仅对已配对 Hub | 名称/头像是否对房间成员公开 |
-| Agent | 未配对不可发现；已配对只公开名称、类型、能力摘要、状态 | `private` / `trusted` / `room` / `public` |
+| Agent | `private`，不进入任何远程目录；配对本身不改变可见性 | `private` / `room` / `public` |
 | A2A 调用 | 自有 Agent 可 `auto`；可信远程调用默认 `confirm`；陌生来源 `deny` | 会话级与 Agent 级 `auto` / `confirm` / `deny` |
 | 内容 | 只发送当前消息和明确构造的 ContextPacket | 是否包含文件、路径、历史摘要和工具结果 |
 
 - 信任建立使用邀请/配对码并核验 User 与 Hub 公钥指纹；Relay 登录成功不等于用户之间互信。
+- 配对完成只创建 Contact，不触发 `directory_request` 或 `directory_announce`。联系人可以互发人类消息和 Room 邀请，不能据此调用 Agent。
+- `room` 表示 Agent 只在**所有者明确将它加入的 Room**中可见；它不会自动出现在所有共同 Room。`public` 表示可向已配对联系人发送最小 Agent Card，但不进入 Relay 全局搜索，也不代表允许调用。
+- 添加 Room Agent 时必须同时验证操作者是所有者、Agent 可见性为 `room|public`、操作者是 Room 成员；任何远程成员都不能替所有者添加 Agent。
 - 权限判断使用签名后的 `fromUserId`、`fromAgentId` 和会话/房间成员关系，不信任可伪造的显示名。
 - Relay 只路由加密信封，但仍能观察 Hub ID、房间、时间、大小和在线状态等元数据；产品必须明确提示这一边界。
 - 目录声明必须带版本、过期时间和撤销机制。隐身、删除 Agent 或取消信任后，不等待缓存自然过期。
 
-**English summary:** Address agents by stable IDs, display them as `Owner / Agent`, default remote calls to confirmation, and disclose only a minimal signed directory to trusted peers.
+**English:** Contacts, room members, and room agents are separate grants. Agents default to `private`. `room` disclosure requires an explicit owner-created room membership; `public` is discoverable only by paired contacts and still grants no invocation right. Remote calls default to confirmation.
+
+### 8.7 跨设备交互与状态 / Cross-device Interaction & State
+
+#### Relay 配置 / Relay configuration
+
+- 输入提示固定为 `wss://your-relay.example.com/ws 或 ws://192.168.x.x:3211/ws`。
+- 除显式开发模式外，前后端都拒绝 `localhost`、`127.0.0.0/8` 和 `::1`；私网 IP 允许用于局域网协作，公网建议并优先展示 `wss://`。
+- 保存是持久化动作：成功 Toast 为“保存成功，正在连接”，失败 Toast 显示验证或存储错误且不清空表单。自动连接是后续异步动作。
+- 状态机为 `disconnected → connecting → connected`，网络中断进入 `reconnecting`，重试耗尽进入 `error`；状态、最近错误和“重试”动作始终可见。
+
+**English:** The form rejects loopback Relay hosts outside explicit development mode, acknowledges persistence with a toast, and then attempts connection. Save success and connection success are distinct. The UI exposes disconnected, connecting, connected, reconnecting, and error states.
+
+#### 侧边栏与 Room / Sidebar and rooms
+
+```text
+我的 Agent / My Agents
+联系人 / Contacts
+  └─ Avatar + name + online state
+聊天室 / Rooms
+  └─ Direct or named room + unread state
+```
+
+- 点击联系人提供“发消息”和“创建聊天室”；前者创建/复用 `kind=direct` 的双人 Room，后者创建 `kind=group` 的命名 Room。
+- Room 创建者可邀请联系人；受邀者接受后加入。退出、移除成员和解除联系人不删除历史，但会撤销后续投递和 Agent 能力。
+- Room 中的人类成员和 Agent 成员必须分栏展示。只有“添加我的 Agent”，不提供浏览或添加他人 Agent 的入口。
+- 会话层新增 `type=room` 并关联 `roomId`；旧 `cross_hub` 只作为迁移期读取兼容，不再用于新建流程。
+
+**English:** Contacts and rooms are first-class sidebar sections. DMs are direct rooms, named chats are group rooms, and invitations require acceptance. Human membership and agent membership are separate; the only add-agent action is “Add my agent.” New cross-user conversations use `type=room`.
+
+#### 成功与权限验收 / Acceptance
+
+1. 保存有效 Relay URL 后 500 ms 内出现成功 Toast，并开始展示连接状态；无论连接成败，已保存值在重启后保留。
+2. 配对完成后，联系人可见，但没有任何远程 Agent 记录因配对自动创建。
+3. 非所有者尝试添加 Agent 返回 `403 AGENT_OWNER_REQUIRED`；未入房 Agent 的消息返回 `403 AGENT_NOT_IN_ROOM`。
+4. 所有者移除 Agent 或改为 `private` 后，目录撤销在在线链路 60 秒内收敛，后续调用被拒绝。
+5. 联系人、Room 和 Agent 撤销分别可审计，且不会误删历史消息。
+
+**English:** Acceptance covers immediate save feedback, persisted connection settings, zero agent disclosure on pairing, owner-only room agent admission, fast revocation, and auditable history-preserving removal.
 
 ## 9. 成功指标
 
@@ -353,8 +403,10 @@ i18n、主题、动画、埋点供应商、更多 UI 基础组件不是当前发
 | 历史搜索成功率 | 搜索后 60 秒内打开目标会话 ≥ 70% |
 | Agent 安装成功率 | 发起安装后通过健康检查 ≥ 90% |
 | 群聊任务完成率 | 创建群任务后至少一个目标 Agent 成功回复 ≥ 85% |
-| 远程目录一致性 | Agent 上线、下线或撤销后 60 秒内在可信对端收敛 ≥ 99% |
+| Room Agent 授权一致性 | 加入、移除或可见性撤销后 60 秒内在 Room 成员端收敛 ≥ 99% |
 | 远程误路由率 | 因重名或陈旧目录投递给错误 Agent | 0 |
+| 配对零泄露率 | 仅完成配对时未自动创建任何远程 Agent 记录 | 100% |
+| Relay 配置反馈 | 保存后 500 ms 内出现成功/失败反馈 | ≥ 99% |
 
 ### 9.4 隐私指标
 
@@ -391,7 +443,7 @@ i18n、主题、动画、埋点供应商、更多 UI 基础组件不是当前发
 | 已完成 | 用户能安装 Agent、管理长期历史、创建本地群聊 | 已实现 |
 | 已完成 | 多 Agent 协作可控、可取消、可审计 | 已实现 |
 | 已完成 | 团队可跨设备安全协作 | Hub Client、Relay、加密和运维方案完成 |
-| 下一阶段 | 用户能识别并控制“谁的哪个 Agent” | User/owner 迁移、目录发现、权限默认值、身份化 UI 和外部 Agent 协议通过验收 |
+| 下一阶段 | 用户通过联系人和 Room 安全协作 | Relay 配置反馈、Contacts、Room API/UI、owner-only Agent 加入、默认 private 与撤销通过验收 |
 
 ## 13. 开放决策
 
@@ -403,4 +455,13 @@ i18n、主题、动画、埋点供应商、更多 UI 基础组件不是当前发
 4. UI 配置、数据库记录与 `agentlink.config.ts` 冲突时的精确合并规则。
 5. 系统钥匙串落地前，API Agent 是否允许通过 UI 保存密钥；建议默认不开放。
 6. 一个 User 多设备时采用独立 User 签名密钥同步，还是先限制 v1 为一个主 Hub；当前设计按“User 密钥稳定、Hub 密钥可多设备扩展”预留。
-7. `public` Agent 是否允许被 Relay 全局搜索；v1 建议不提供全局目录，只在已配对 Hub 或共同房间内发现。
+7. `public` Agent 是否允许被 Relay 全局搜索；已决策：v1 不提供全局目录，`public` 仅表示已配对联系人可发现。
+8. Room 管理员是否能移除他人加入的 Agent；建议允许管理员从 Room 移除，但不允许再次添加，且必须通知所有者并写入审计事件。
+
+## 14. 设计参考 / Design References
+
+- [Google A2A Agent Cards](https://google.github.io/A2A/latest/specification/)：Agent Card 是由所有者选择发布的能力名片；AgentLink 采用最小、分范围、可撤销的声明，而不是配对后全量抓取。
+- [Discord Bots](https://discord.com/developers/docs/topics/oauth2) 与 [Slack app installation](https://api.slack.com/authentication/oauth-v2)：先建立服务器/工作区或频道，再由有权限的所有者安装 bot/app。AgentLink 对应为先建 Room，再由每位所有者带自己的 Agent 入房。
+- [Agent Client Protocol (ACP)](https://agentclientprotocol.com/)：借鉴客户端—Agent 的明确控制边界；跨用户调用额外要求双方信任、Room 范围和所有者授权。
+
+**English:** The design combines opt-in A2A-style capability cards, Discord/Slack-style room-first bot admission, and ACP-style explicit ownership boundaries. These references inform the interaction model; AgentLink's E2E transport and local-first identity remain architecture-specific.
