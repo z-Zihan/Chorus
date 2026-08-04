@@ -16,3 +16,4 @@ src-tauri/gen/
 packages/server/build/
 src-tauri/Cargo.lock
 packages/relay/data/
+data/hub-keypair.json
