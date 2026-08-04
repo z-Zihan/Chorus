@@ -4,6 +4,7 @@ import { z } from "zod";
 import type { AgentRegistry } from "../agent/registry.js";
 import { setCredential } from "../credential-store.js";
 import type { Repository } from "../db/repository.js";
+import { logger } from "../utils/logger.js";
 
 const agentTypeSchema = z.enum(["openai", "openclaw", "dify", "cli", "mock", "custom", "langchain"]);
 const createAgentSchema = z.object({
@@ -51,6 +52,7 @@ export function registerAgentRoutes(
   app.get("/api/agents", async (request, reply) => {
     const parsed = agentQuerySchema.safeParse(request.query);
     if (!parsed.success) {
+      logger.warn({ issues: parsed.error.flatten() }, "Invalid agent query");
       return reply.code(400).send({ error: "Invalid query", issues: parsed.error.flatten() });
     }
     return repository.listAgents(parsed.data).map(stripApiKey);
@@ -68,6 +70,7 @@ export function registerAgentRoutes(
   app.get("/api/users", async (request, reply) => {
     const parsed = userQuerySchema.safeParse(request.query);
     if (!parsed.success) {
+      logger.warn({ issues: parsed.error.flatten() }, "Invalid agent query");
       return reply.code(400).send({ error: "Invalid query", issues: parsed.error.flatten() });
     }
     return repository.listUsers({ kind: parsed.data.kind }).map((user) => {
@@ -127,8 +130,14 @@ export function registerAgentRoutes(
 
   app.post("/api/agents", async (req, reply) => {
     const parsed = createAgentSchema.safeParse(req.body);
-    if (!parsed.success) return reply.code(400).send({ error: "Invalid Agent", issues: parsed.error.flatten() });
-    if (registry.get(parsed.data.id)) return reply.code(409).send({ error: "Agent already exists" });
+    if (!parsed.success) if (!parsed.success) {
+      logger.warn({ issues: parsed.error.flatten() }, "Invalid agent creation request");
+      return reply.code(400).send({ error: "Invalid Agent", issues: parsed.error.flatten() });
+    }
+    if (registry.get(parsed.data.id)) {
+      logger.warn({ agentId: parsed.data.id }, "Agent already exists");
+      return reply.code(409).send({ error: "Agent already exists" });
+    }
     const agent = await registry.registerAndPersist(parsed.data as AgentConfig);
     return reply.code(201).send(stripApiKey(agent));
   });

@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { CatalogService } from "../catalog/index.js";
 import type { InstallExecutor } from "../catalog/installer.js";
+import { logger } from "../utils/logger.js";
 
 const installOptionsSchema = z.object({
   recipeMethod: z.enum(["brew", "npm", "winget", "download"]).optional(),

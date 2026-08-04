@@ -21,6 +21,7 @@ import { registerSchedulerRoutes } from "./scheduler.js";
 import { registerMetricsRoutes } from "./metrics.js";
 import { registerHubRoutes, type HubRouteDependencies } from "./hub.js";
 import { registerSkillRoutes } from "./skill.js";
+import { logger } from "../utils/logger.js";
 import type { TrustStore } from "../hub/trust-store.js";
 import { registerTrustRoutes } from "./trust.js";
 import type { TokenStore } from "../auth/token-store.js";
@@ -47,6 +48,17 @@ export function registerRoutes(
   registerHealthRoutes(app);
   registerSkillRoutes(app);
   registerLogRoutes(app);
+
+  // Global error handler — log all unhandled errors
+  app.setErrorHandler((error, request, reply) => {
+    const statusCode = error instanceof Error && "statusCode" in error ? (error as { statusCode: number }).statusCode : 500;
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error(
+      { method: request.method, url: request.url, statusCode, error: message },
+      "Unhandled request error",
+    );
+    reply.code(statusCode).send({ error: message });
+  });
   registerAgentRoutes(app, registry, repository);
   registerStandardRoutes(app, registry);
   registerMetricsRoutes(app, registry, runtime);

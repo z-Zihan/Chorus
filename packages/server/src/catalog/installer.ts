@@ -1,3 +1,4 @@
+import { logger } from "../utils/logger.js";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { chmod, unlink, writeFile } from "node:fs/promises";
@@ -115,14 +116,19 @@ export class InstallExecutor extends EventEmitter {
     const platform = process.platform === "darwin" || process.platform === "win32"
       ? process.platform
       : "linux";
-    if (!entry.platforms.includes(platform)) throw new Error("PLATFORM_NOT_SUPPORTED");
+    if (!entry.platforms.includes(platform)) {
+      logger.error({ entryId: entry.id, platform }, "Platform not supported");
+      throw new Error("PLATFORM_NOT_SUPPORTED");
+    }
     if (entry.permissions.length > 0 && options.acceptPermissions !== true) {
+      logger.error({ entryId: entry.id }, "Permissions not accepted");
       throw new Error("PERMISSIONS_NOT_ACCEPTED");
     }
     if (entry.kind === "api-connector" && !options.apiKey?.trim()) {
       throw new Error("API_KEY_REQUIRED");
     }
     if (entry.kind !== "api-connector" && entry.installRecipes.length === 0) {
+      logger.error({ entryId: entry.id, kind: entry.kind }, "No install recipe found");
       throw new Error("INSTALL_RECIPE_NOT_FOUND");
     }
   }
