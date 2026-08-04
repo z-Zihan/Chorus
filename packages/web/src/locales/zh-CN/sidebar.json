@@ -32,5 +32,6 @@
   "selectAll": "全选",
   "deleteSelected": "删除选中（{{count}}）",
   "batchDeleteTitle": "删除选中的会话？",
-  "batchDeleteMessage": "确定删除 {{count}} 个会话？此操作不可逆"
+  "batchDeleteMessage": "确定删除 {{count}} 个会话？此操作不可逆",
+  "myAgents": "我的 Agent"
 }

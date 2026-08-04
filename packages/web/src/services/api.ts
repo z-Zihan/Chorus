@@ -1,4 +1,4 @@
-import type { Agent, AgentConfig, CliDetection, Conversation, ConversationType, CreateConversationInput, HubConnectionState, Message, OnboardingStatus } from "@agentlink/shared";
+import type { Agent, AgentConfig, CliDetection, Conversation, ConversationType, CreateConversationInput, HubConnectionState, Message, OnboardingStatus, UserWithAgents } from "@agentlink/shared";
 import { useUIStore } from "@/store/uiStore";
 import { getApiBaseUrl } from "./env";
 import i18n from "@/i18n";
@@ -126,6 +126,8 @@ export const api = {
   getAgents: (includeDisabled = false) =>
     request<Agent[]>(`/agents${includeDisabled ? "?includeDisabled=true" : ""}`),
   getAgent: (id: string) => request<Agent>(`/agents/${id}`),
+  getUsersWithAgents: () =>
+    request<UserWithAgents[]>("/users?includeAgents=true"),
   getAgentMetrics: (id: string) => request<AgentMetrics>(`/agents/${id}/metrics`, undefined, true),
   createAgent: (data: AgentConfig) =>
     request<Agent>("/agents", {

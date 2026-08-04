@@ -8,6 +8,11 @@ export type { Agent, AgentStatus } from "@agentlink/shared";
 
 export type AgentHealthState = "healthy" | "checking" | "unhealthy";
 
+export interface AgentGroup {
+  user: { id: string; name: string; kind: "local" | "remote" };
+  agents: Agent[];
+}
+
 export interface AgentHealthStatus {
   status: AgentHealthState;
   lastCheck: number | null;
@@ -35,6 +40,7 @@ interface AgentState {
   selectAgent: (agentId: string) => void;
   clearSelectedAgent: () => void;
   filterByAgent: (agentId: string | null) => void;
+  fetchGroupedAgents: () => Promise<AgentGroup[]>;
 }
 
 export const useAgentStore = create<AgentState>((set, get) => ({
@@ -164,5 +170,24 @@ export const useAgentStore = create<AgentState>((set, get) => ({
 
   selectAgent: (agentId) => set({ selectedAgentId: agentId }),
   clearSelectedAgent: () => set({ selectedAgentId: null }),
-  filterByAgent: (agentId) => set({ conversationAgentFilter: agentId }),
+  filterByAgent: (agentId) =>
+    set((state) => ({
+      conversationAgentFilter: agentId,
+      selectedAgentId: agentId ?? state.selectedAgentId,
+    })),
+
+  fetchGroupedAgents: async () => {
+    const users = await api.getUsersWithAgents();
+    const groups: AgentGroup[] = users
+      .map((user) => ({
+        user: { id: user.id, name: user.name, kind: user.kind },
+        agents: user.agents ?? [],
+      }))
+      .sort((a, b) => {
+        if (a.user.kind === "local" && b.user.kind !== "local") return -1;
+        if (a.user.kind !== "local" && b.user.kind === "local") return 1;
+        return a.user.name.localeCompare(b.user.name);
+      });
+    return groups;
+  },
 }));

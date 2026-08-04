@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Archive,
   ArchiveRestore,
@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import { useChatStore, type Conversation } from "@/store/chatStore";
-import { useAgentStore } from "@/store/agentStore";
+import { useAgentStore, type AgentGroup } from "@/store/agentStore";
 import { useUIStore } from "@/store/uiStore";
 import { AgentAvatar } from "@/components/agent/AgentAvatar";
 import { AgentHealthBadge } from "@/components/agent/AgentHealthBadge";
@@ -71,6 +71,8 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
   const [isArchivedOpen, setIsArchivedOpen] = useState(false);
   const [isGroupsOpen, setIsGroupsOpen] = useState(true);
   const [collapsedAgentIds, setCollapsedAgentIds] = useState<Set<string>>(new Set());
+  const [collapsedOwnerIds, setCollapsedOwnerIds] = useState<Set<string>>(new Set());
+  const [agentGroups, setAgentGroups] = useState<AgentGroup[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
@@ -94,29 +96,19 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
   const deleteConversation = useChatStore((s) => s.deleteConversation);
   const deleteConversations = useChatStore((s) => s.deleteConversations);
   const agents = useAgentStore((s) => s.agents);
+  const fetchGroupedAgents = useAgentStore((s) => s.fetchGroupedAgents);
   const isSidebarOpen = useUIStore((s) => s.isSidebarOpen);
   const closeSidebar = useUIStore((s) => s.closeSidebar);
   const allConversations = [...conversations, ...groupConversations, ...archivedConversations];
+  useEffect(() => {
+    void fetchGroupedAgents().then(setAgentGroups).catch(() => {});
+  }, [agents, fetchGroupedAgents]);
+
   const normalizedSearch = searchQuery.trim().toLocaleLowerCase();
   const matchesSearch = (conversation: Conversation) =>
     !normalizedSearch || conversation.title.toLocaleLowerCase().includes(normalizedSearch);
   const visibleGroupConversations = groupConversations.filter(matchesSearch);
   const visibleArchivedConversations = archivedConversations.filter(matchesSearch);
-  const agentSections = agents
-    .map((agent) => {
-      const agentMatchesSearch = agent.name.toLocaleLowerCase().includes(normalizedSearch);
-      const agentConversations = conversations.filter(
-        (conversation) =>
-          conversation.agentIds.includes(agent.id) &&
-          (agentMatchesSearch || matchesSearch(conversation)),
-      );
-      return { agent, conversations: agentConversations, agentMatchesSearch };
-    })
-    .filter(
-      ({ conversations: matchingConversations, agentMatchesSearch }) =>
-        !normalizedSearch || agentMatchesSearch || matchingConversations.length > 0,
-    );
-
   const handleSelectConversation = (id: string) => {
     if (isSelectMode) {
       setSelectedIds((current) => {
@@ -458,57 +450,131 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
                 </Button>
               </div>
             )}
-            {agentSections.map(({ agent, conversations: agentConversations }) => {
-              const isOpen = !collapsedAgentIds.has(agent.id);
-              return (
-                <section key={agent.id}>
-                  <div className="flex items-center gap-1">
+            {(() => {
+              const allAgentIds = new Set(agents.map((a) => a.id));
+              const groupsWithConversations = agentGroups
+                .map((group) => ({
+                  ...group,
+                  agents: group.agents
+                    .filter((a) => allAgentIds.has(a.id))
+                    .map((a) => ({
+                      agent: a,
+                      conversations: conversations.filter(
+                        (c) => c.agentIds.includes(a.id) &&
+                          (!normalizedSearch || a.name.toLocaleLowerCase().includes(normalizedSearch) ||
+                           c.title.toLocaleLowerCase().includes(normalizedSearch)),
+                      ),
+                      agentMatchesSearch: a.name.toLocaleLowerCase().includes(normalizedSearch),
+                    }))
+                    .filter(({ conversations: cs, agentMatchesSearch: ams }) =>
+                      !normalizedSearch || ams || cs.length > 0,
+                    ),
+                }))
+                .filter((group) => group.agents.length > 0);
+
+              if (agents.length === 0) return null;
+
+              return groupsWithConversations.map((group) => {
+                const isOwnerOpen = !collapsedOwnerIds.has(group.user.id);
+                const isLocal = group.user.kind === "local";
+                const ownerLabel = isLocal ? t("sidebar:myAgents") : group.user.name;
+                const hasNameConflict = groupsWithConversations
+                  .flatMap((g) => g.agents)
+                  .some((a) => a.agent.name !== group.agents[0]?.agent.name &&
+                    group.agents.some((ga) => ga.agent.name === a.agent.name && ga.agent.ownerId !== group.user.id));
+
+                return (
+                  <section key={group.user.id}>
                     <button
                       type="button"
-                      onClick={() => toggleAgent(agent.id)}
-                      aria-expanded={isOpen}
-                      className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-2 text-left text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-hover)]"
+                      onClick={() =>
+                        setCollapsedOwnerIds((current) => {
+                          const next = new Set(current);
+                          if (next.has(group.user.id)) next.delete(group.user.id);
+                          else next.add(group.user.id);
+                          return next;
+                        })
+                      }
+                      aria-expanded={isOwnerOpen}
+                      className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium text-[var(--text-tertiary)] hover:bg-[var(--bg-hover)]"
                     >
                       <ChevronDown
                         aria-hidden="true"
-                        className={`h-3.5 w-3.5 shrink-0 transition-transform ${isOpen ? "" : "-rotate-90"}`}
+                        className={`h-3 w-3 shrink-0 transition-transform ${isOwnerOpen ? "" : "-rotate-90"}`}
                       />
-                      <span className="relative shrink-0">
-                        <AgentAvatar name={agent.name} src={agent.avatar} size="xs" />
-                        <span
-                          aria-label={t(`common:status.${agent.status}`)}
-                          className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-[var(--bg-surface)] ${STATUS_COLORS[agent.status]}`}
-                        />
-                      </span>
-                      <span className="min-w-0 flex-1 truncate text-sm font-semibold">
-                        {agent.name}
-                      </span>
-                      <AgentHealthBadge agentId={agent.id} />
-                      <span className="min-w-5 rounded-full bg-[var(--bg-elevated)] px-1.5 py-0.5 text-center text-[10px] text-[var(--text-tertiary)]">
-                        {agentConversations.length}
-                      </span>
-                    </button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 shrink-0"
-                      onClick={() => void handleCreateConversation(agent.id)}
-                      aria-label={t("sidebar:newChatWithAgent", { name: agent.name })}
-                      title={t("sidebar:newChatWithAgent", { name: agent.name })}
-                    >
-                      <Plus aria-hidden="true" className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                  {isOpen && (
-                    <div className="mt-0.5 space-y-0.5">
-                      {agentConversations.map((conversation) =>
-                        renderConversation(conversation, true),
+                      <span className="flex-1 text-left truncate">{ownerLabel}</span>
+                      {!isLocal && (
+                        <span className="rounded bg-[var(--bg-elevated)] px-1 py-0.5 text-[10px] text-[var(--text-tertiary)]">
+                          {t("common:hub.remote")}
+                        </span>
                       )}
-                    </div>
-                  )}
-                </section>
-              );
-            })}
+                      <span className="text-[10px]">{group.agents.length}</span>
+                    </button>
+                    {isOwnerOpen && (
+                      <div className="mt-0.5 space-y-3">
+                        {group.agents.map(({ agent, conversations: agentConversations }) => {
+                          const isOpen = !collapsedAgentIds.has(agent.id);
+                          const showOwner = !isLocal && hasNameConflict;
+                          return (
+                            <div key={agent.id} className="pl-2">
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => toggleAgent(agent.id)}
+                                  aria-expanded={isOpen}
+                                  className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-2 text-left text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-hover)]"
+                                >
+                                  <ChevronDown
+                                    aria-hidden="true"
+                                    className={`h-3.5 w-3.5 shrink-0 transition-transform ${isOpen ? "" : "-rotate-90"}`}
+                                  />
+                                  <span className="relative shrink-0">
+                                    <AgentAvatar name={agent.name} src={agent.avatar} size="xs" />
+                                    <span
+                                      aria-label={t(`common:status.${agent.status}`)}
+                                      className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-[var(--bg-surface)] ${agent.stale ? "bg-gray-400" : STATUS_COLORS[agent.status]}`}
+                                    />
+                                  </span>
+                                  <span className="min-w-0 flex-1 truncate text-sm font-semibold">
+                                    {showOwner ? `${group.user.name} / ${agent.name}` : agent.name}
+                                    {agent.stale && (
+                                      <span className="ml-1 text-[10px] text-[var(--text-tertiary)] line-through">
+                                        {t("common:status.offline")}
+                                      </span>
+                                    )}
+                                  </span>
+                                  <AgentHealthBadge agentId={agent.id} />
+                                  <span className="min-w-5 rounded-full bg-[var(--bg-elevated)] px-1.5 py-0.5 text-center text-[10px] text-[var(--text-tertiary)]">
+                                    {agentConversations.length}
+                                  </span>
+                                </button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7 shrink-0"
+                                  onClick={() => void handleCreateConversation(agent.id)}
+                                  aria-label={t("sidebar:newChatWithAgent", { name: agent.name })}
+                                  title={t("sidebar:newChatWithAgent", { name: agent.name })}
+                                >
+                                  <Plus aria-hidden="true" className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                              {isOpen && (
+                                <div className="mt-0.5 space-y-0.5">
+                                  {agentConversations.map((conversation) =>
+                                    renderConversation(conversation, true),
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </section>
+                );
+              });
+            })()}
           </div>
 
           <div className="mt-4 border-t border-[var(--border-color)] pt-2">
