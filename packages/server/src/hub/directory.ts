@@ -82,14 +82,14 @@ export class DirectoryService {
   /** Sign a manifest with the User private key. */
   signManifest(manifest: DirectoryManifest, privateKey: string): DirectoryManifest {
     const { signature: _signature, ...unsigned } = manifest;
-    return { ...unsigned, signature: signData(privateKey, JSON.stringify(unsigned)) };
+    return { ...unsigned, signature: signData(privateKey, unsigned) };
   }
 
   /** Verify a received manifest's User signature. */
   verifyManifest(manifest: DirectoryManifest): boolean {
     const { signature, ...unsigned } = manifest;
     if (!manifest.user.publicKey || !signature) return false;
-    return verifySignature(manifest.user.publicKey, JSON.stringify(unsigned), signature);
+    return verifySignature(manifest.user.publicKey, unsigned, signature);
   }
 
   isExpired(manifest: DirectoryManifest): boolean {

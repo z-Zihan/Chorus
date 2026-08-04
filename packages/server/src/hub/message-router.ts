@@ -460,8 +460,8 @@ export class HubMessageRouter {
   }
 }
 
-function signingData(envelope: Omit<HubEnvelope, "signature"> | HubEnvelope): string {
-  return JSON.stringify({
+function signingData(envelope: Omit<HubEnvelope, "signature"> | HubEnvelope): Omit<HubEnvelope, "signature" | "relayTimestamp"> {
+  return {
     id: envelope.id,
     from: envelope.from,
     to: envelope.to,
@@ -469,7 +469,7 @@ function signingData(envelope: Omit<HubEnvelope, "signature"> | HubEnvelope): st
     timestamp: envelope.timestamp,
     nonce: envelope.nonce,
     ciphertext: envelope.ciphertext,
-  });
+  };
 }
 
 function stringMetadata(metadata: Record<string, unknown> | undefined, key: string): string | undefined {

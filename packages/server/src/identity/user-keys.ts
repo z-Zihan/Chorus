@@ -6,6 +6,7 @@ import {
   sign,
   verify,
 } from "node:crypto";
+import { canonicalize } from "@agentlink/shared";
 
 export interface UserKeyPair {
   publicKey: string;
@@ -30,16 +31,16 @@ export function deriveUserId(publicKey: string): string {
   return `usr_${createHash("sha256").update(publicKeyBytes).digest("hex").slice(0, 32)}`;
 }
 
-export function signData(privateKey: string, data: string): string {
+export function signData(privateKey: string, data: unknown): string {
   const key = createPrivateKey({
     key: Buffer.from(privateKey, "base64"),
     format: "der",
     type: "pkcs8",
   });
-  return sign(null, Buffer.from(data, "utf8"), key).toString("base64");
+  return sign(null, Buffer.from(canonicalize(data), "utf8"), key).toString("base64");
 }
 
-export function verifySignature(publicKey: string, data: string, signature: string): boolean {
+export function verifySignature(publicKey: string, data: unknown, signature: string): boolean {
   try {
     const publicKeyBytes = decodePublicKey(publicKey);
     const key = createPublicKey({
@@ -52,7 +53,7 @@ export function verifySignature(publicKey: string, data: string, signature: stri
     });
     return verify(
       null,
-      Buffer.from(data, "utf8"),
+      Buffer.from(canonicalize(data), "utf8"),
       key,
       Buffer.from(signature, "base64"),
     );

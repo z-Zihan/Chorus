@@ -1,4 +1,5 @@
 import _sodium from "libsodium-wrappers";
+import { canonicalize } from "@agentlink/shared";
 
 let initialized = false;
 
@@ -103,12 +104,12 @@ export async function decryptPayload<T = unknown>(
  * Sign data with Ed25519 private key.
  */
 export async function signEnvelope(
-  data: string,
+  data: unknown,
   ed25519SecHex: string,
 ): Promise<string> {
   const sodium = await ensureInit();
   const sig = sodium.crypto_sign_detached(
-    new TextEncoder().encode(data),
+    new TextEncoder().encode(canonicalize(data)),
     sodium.from_hex(ed25519SecHex),
   );
   return sodium.to_base64(sig);
@@ -118,14 +119,14 @@ export async function signEnvelope(
  * Verify an Ed25519 signature.
  */
 export async function verifySignature(
-  data: string,
+  data: unknown,
   signature: string,
   ed25519PubHex: string,
 ): Promise<boolean> {
   const sodium = await ensureInit();
   return sodium.crypto_sign_verify_detached(
     sodium.from_base64(signature),
-    new TextEncoder().encode(data),
+    new TextEncoder().encode(canonicalize(data)),
     sodium.from_hex(ed25519PubHex),
   );
 }
