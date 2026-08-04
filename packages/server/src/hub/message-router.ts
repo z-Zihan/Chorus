@@ -10,6 +10,7 @@ import type { P2PListener } from "./p2p-listener.js";
 import { normalizeHubPayload, rejectIncompatibleVersion } from "./payload-compat.js";
 import type { RelayClient } from "./relay-client.js";
 import type { DirectoryService } from "./directory.js";
+import type { TrustStore } from "./trust-store.js";
 
 const REMOTE_CALL_TIMEOUT_MS = 120_000;
 const MAX_SEEN_MESSAGES = 1_000;
@@ -47,6 +48,7 @@ export class HubMessageRouter {
     private readonly connectionManager: ConnectionManager,
     private readonly localUser: LocalUserIdentity,
     private readonly directoryService: DirectoryService,
+    private readonly trustStore: TrustStore,
   ) {
     relayClient.onMessage((envelope) => {
       void this.onEnvelope(envelope, relayClient).catch((error: unknown) => {
@@ -80,6 +82,15 @@ export class HubMessageRouter {
     if (this.seenMessageIds.has(envelope.id)) return;
     this.rememberMessage(envelope.id);
 
+    const trustedHub = this.trustStore.get(envelope.from);
+    if (!trustedHub || trustedHub.trustLevel === "blocked") {
+      logger.warn(
+        { fromHubId: envelope.from, trustLevel: trustedHub?.trustLevel ?? "unknown" },
+        "Dropping message from an untrusted Hub",
+      );
+      return;
+    }
+
     const senderPublicKey = this.registry.getHubPublicKey(envelope.from) ?? envelope.from;
     this.registry.setHubPublicKey(envelope.from, senderPublicKey);
     const validSignature = await verifySignature(
@@ -101,6 +112,14 @@ export class HubMessageRouter {
       );
     }
     const payload = normalizeHubPayload(rawPayload);
+
+    if (trustedHub.trustLevel === "pending" && payload.messageType !== "directory_request") {
+      logger.info(
+        { fromHubId: envelope.from, messageType: payload.messageType },
+        "Ignoring message from a pending Hub",
+      );
+      return;
+    }
 
     const correlationId = stringMetadata(payload.metadata, "correlationId")
       ?? stringMetadata(payload.metadata, "replyTo");

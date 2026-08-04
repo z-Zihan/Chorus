@@ -29,6 +29,7 @@ import { P2PListener } from "./hub/p2p-listener.js";
 import { ConnectionManager } from "./hub/connection-manager.js";
 import { deriveUserId } from "./identity/user-keys.js";
 import { DirectoryService } from "./hub/directory.js";
+import { TrustStore } from "./hub/trust-store.js";
 
 process.on("uncaughtException", (error) => {
   logger.fatal({ err: error }, "Uncaught exception");
@@ -48,6 +49,7 @@ async function main(): Promise<void> {
 
   const { sqlite, db } = createDatabase(dbPath);
   const repository = new Repository({ sqlite, db });
+  const trustStore = new TrustStore(repository);
   const localUser = await repository.getOrCreateLocalUser("本机用户");
   if (!localUser.publicKey) throw new Error("Local User public key is unavailable");
   const localProtocolUser = {
@@ -84,7 +86,7 @@ async function main(): Promise<void> {
     const listener = new P2PListener(client);
     const manager = new ConnectionManager(listener, client);
     connectionManager = manager;
-    const directoryService = new DirectoryService(repository, registry, identity.hubId);
+    const directoryService = new DirectoryService(repository, registry, identity.hubId, trustStore);
     const messageRouter = new HubMessageRouter(
       identity,
       registry,
@@ -93,6 +95,7 @@ async function main(): Promise<void> {
       manager,
       localProtocolUser,
       directoryService,
+      trustStore,
     );
     runtime.setHubMessageRouter(messageRouter);
     if (hubConfig.p2p?.enabled) {
@@ -168,6 +171,7 @@ async function main(): Promise<void> {
           connect: connectHub,
         }
       : undefined,
+    trustStore,
   );
   registerWebSocket(app, events, runtime, registry, config.auth);
 

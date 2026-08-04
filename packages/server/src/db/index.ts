@@ -33,8 +33,25 @@ export function createDatabase(dbPath: string) {
   ensureCredentialRefColumn(sqlite);
   ensureConversationColumns(sqlite);
   ensureUserColumns(sqlite);
+  ensureTrustedHubsTable(sqlite);
   initializeMessageSearch(sqlite);
   return { sqlite, db };
+}
+
+function ensureTrustedHubsTable(sqlite: Database.Database): void {
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS trusted_hubs (
+    hub_id TEXT PRIMARY KEY,
+    hub_fingerprint TEXT NOT NULL,
+    user_id TEXT,
+    user_name TEXT,
+    user_public_key TEXT,
+    trust_level TEXT NOT NULL DEFAULT 'pending',
+    paired_at INTEGER,
+    last_seen_at INTEGER,
+    notes TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  )`);
 }
 
 function ensureUserColumns(sqlite: Database.Database): void {

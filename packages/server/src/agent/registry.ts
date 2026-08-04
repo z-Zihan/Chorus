@@ -221,6 +221,7 @@ export class AgentRegistry {
     );
     for (const persisted of orderedPersistedAgents) {
       if (persisted.disabled || this.entries.has(persisted.id)) continue;
+      if (this.repository.getAgentRow(persisted.id)?.ownerType === "remote") continue;
       if (persisted.source === "auto_detected") {
         const command = commandFromConfig(persisted);
         const duplicate = command ? await this.findByResolvedCommandPath(command) : undefined;

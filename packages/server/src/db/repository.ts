@@ -14,6 +14,7 @@ import type {
 import { and, asc, desc, eq, inArray, isNull, lt } from "drizzle-orm";
 import { getUserKey, setUserKey } from "../credential-store.js";
 import { deriveUserId, generateUserKeyPair } from "../identity/user-keys.js";
+import type { TrustedHub, TrustLevel } from "../hub/trust-store.js";
 import type { DatabaseContext } from "./index";
 import {
   agentFriends,
@@ -23,6 +24,7 @@ import {
   conversations,
   messages,
   scheduledTasks,
+  trustedHubs,
   users,
 } from "./schema";
 
@@ -176,6 +178,78 @@ export class Repository {
           lastSeenAt: user.lastSeenAt,
         },
       })
+      .run();
+  }
+
+  getTrustedHub(hubId: string): TrustedHub | undefined {
+    const row = this.context.db.select().from(trustedHubs).where(eq(trustedHubs.hubId, hubId)).get();
+    return row ? toTrustedHub(row) : undefined;
+  }
+
+  upsertTrustedHub(hub: Partial<TrustedHub>): void {
+    if (!hub.hubId) throw new Error("hubId is required to persist a trusted Hub");
+    const current = this.getTrustedHub(hub.hubId);
+    const now = Date.now();
+    const merged: TrustedHub = {
+      hubId: hub.hubId,
+      hubFingerprint: hub.hubFingerprint ?? current?.hubFingerprint ?? "",
+      trustLevel: hub.trustLevel ?? current?.trustLevel ?? "pending",
+      userId: hub.userId ?? current?.userId,
+      userName: hub.userName ?? current?.userName,
+      userPublicKey: hub.userPublicKey ?? current?.userPublicKey,
+      pairedAt: hub.pairedAt ?? current?.pairedAt,
+      lastSeenAt: hub.lastSeenAt ?? current?.lastSeenAt,
+      notes: hub.notes ?? current?.notes,
+    };
+    if (!merged.hubFingerprint) throw new Error("hubFingerprint is required for a new trusted Hub");
+    this.context.db
+      .insert(trustedHubs)
+      .values({
+        ...merged,
+        userId: merged.userId ?? null,
+        userName: merged.userName ?? null,
+        userPublicKey: merged.userPublicKey ?? null,
+        pairedAt: merged.pairedAt ?? null,
+        lastSeenAt: merged.lastSeenAt ?? null,
+        notes: merged.notes ?? null,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: trustedHubs.hubId,
+        set: {
+          hubFingerprint: merged.hubFingerprint,
+          userId: merged.userId ?? null,
+          userName: merged.userName ?? null,
+          userPublicKey: merged.userPublicKey ?? null,
+          trustLevel: merged.trustLevel,
+          pairedAt: merged.pairedAt ?? null,
+          lastSeenAt: merged.lastSeenAt ?? null,
+          notes: merged.notes ?? null,
+          updatedAt: now,
+        },
+      })
+      .run();
+  }
+
+  listTrustedHubs(): TrustedHub[] {
+    return this.context.db
+      .select()
+      .from(trustedHubs)
+      .orderBy(asc(trustedHubs.createdAt))
+      .all()
+      .map(toTrustedHub);
+  }
+
+  removeTrustedHub(hubId: string): void {
+    this.context.db.delete(trustedHubs).where(eq(trustedHubs.hubId, hubId)).run();
+  }
+
+  setHubTrustLevel(hubId: string, level: TrustLevel): void {
+    this.context.db
+      .update(trustedHubs)
+      .set({ trustLevel: level, updatedAt: Date.now() })
+      .where(eq(trustedHubs.hubId, hubId))
       .run();
   }
 
@@ -746,5 +820,19 @@ function toUser(row: typeof users.$inferSelect): User {
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     lastSeenAt: row.lastSeenAt ?? undefined,
+  };
+}
+
+function toTrustedHub(row: typeof trustedHubs.$inferSelect): TrustedHub {
+  return {
+    hubId: row.hubId,
+    hubFingerprint: row.hubFingerprint,
+    userId: row.userId ?? undefined,
+    userName: row.userName ?? undefined,
+    userPublicKey: row.userPublicKey ?? undefined,
+    trustLevel: row.trustLevel as TrustLevel,
+    pairedAt: row.pairedAt ?? undefined,
+    lastSeenAt: row.lastSeenAt ?? undefined,
+    notes: row.notes ?? undefined,
   };
 }

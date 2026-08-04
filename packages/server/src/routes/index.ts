@@ -21,6 +21,8 @@ import { registerSchedulerRoutes } from "./scheduler.js";
 import { registerMetricsRoutes } from "./metrics.js";
 import { registerHubRoutes, type HubRouteDependencies } from "./hub.js";
 import { registerSkillRoutes } from "./skill.js";
+import type { TrustStore } from "../hub/trust-store.js";
+import { registerTrustRoutes } from "./trust.js";
 
 export function registerRoutes(
   app: FastifyInstance,
@@ -34,6 +36,7 @@ export function registerRoutes(
   installer = new InstallExecutor(catalog, registry, detector),
   loader?: import("../plugins/loader.js").PluginLoader,
   hub?: HubRouteDependencies,
+  trustStore?: TrustStore,
 ): void {
   registerHealthRoutes(app);
   registerSkillRoutes(app);
@@ -50,4 +53,5 @@ export function registerRoutes(
   registerCatalogRoutes(app, catalog, installer);
   if (loader) registerPluginRoutes(app, loader);
   if (hub) registerHubRoutes(app, hub);
+  if (trustStore) registerTrustRoutes(app, trustStore);
 }

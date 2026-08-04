@@ -5,8 +5,10 @@ import { createDatabase, type DatabaseContext } from "../db/index.js";
 import { Repository } from "../db/repository.js";
 import { generateUserKeyPair } from "../identity/user-keys.js";
 import { DirectoryService } from "./directory.js";
+import { TrustStore } from "./trust-store.js";
 
 const databases: DatabaseContext[] = [];
+const defaultRemoteUserPublicKey = generateUserKeyPair().publicKey;
 
 afterEach(() => {
   vi.useRealTimers();
@@ -117,12 +119,15 @@ describe("DirectoryService", () => {
     });
   });
 
-  it("persists same-name Agents from different Hubs without collisions", () => {
+  it("persists same-name Agents from different Hubs without collisions", async () => {
     const database = createDatabase(":memory:");
     databases.push(database);
     const repository = new Repository(database);
     const registry = new AgentRegistry(repository);
-    const service = new DirectoryService(repository, registry);
+    const trustStore = new TrustStore(repository);
+    trustHub(trustStore, "hub-a");
+    trustHub(trustStore, "hub-b");
+    const service = new DirectoryService(repository, registry, "", trustStore);
     const hubA = manifestFixture({
       user: remoteUser("usr-a", "hub-a", "Alice"),
       agents: [{ ...directoryAgent("claude"), name: "Claude Code" }],
@@ -155,6 +160,10 @@ describe("DirectoryService", () => {
         disabled: false,
       });
     }
+
+    const restartedRegistry = new AgentRegistry(repository);
+    await restartedRegistry.initialize([]);
+    expect(restartedRegistry.list()).toEqual([]);
   });
 
   it("marks old remote Agents stale before refreshing the current directory", () => {
@@ -162,7 +171,9 @@ describe("DirectoryService", () => {
     databases.push(database);
     const repository = new Repository(database);
     const registry = new AgentRegistry(repository);
-    const service = new DirectoryService(repository, registry);
+    const trustStore = new TrustStore(repository);
+    trustHub(trustStore, "hub-remote");
+    const service = new DirectoryService(repository, registry, "", trustStore);
     service.applyRemoteDirectory(
       manifestFixture({
         directoryVersion: 1,
@@ -198,7 +209,9 @@ describe("DirectoryService", () => {
     databases.push(database);
     const repository = new Repository(database);
     const registry = new AgentRegistry(repository);
-    const service = new DirectoryService(repository, registry);
+    const trustStore = new TrustStore(repository);
+    trustHub(trustStore, "hub-remote");
+    const service = new DirectoryService(repository, registry, "", trustStore);
     const initial = manifestFixture({
       directoryVersion: 1,
       agents: [directoryAgent("agent-a"), directoryAgent("agent-b")],
@@ -304,11 +317,16 @@ function manifestFixture(overrides: Partial<DirectoryManifest> = {}): DirectoryM
       id: "usr_remote",
       name: "Remote User",
       hubId: "hub-remote",
-      publicKey: generateUserKeyPair().publicKey,
+      publicKey: defaultRemoteUserPublicKey,
     },
     agents: [],
     revokedAgentIds: [],
     signature: "signature",
     ...overrides,
   };
+}
+
+function trustHub(store: TrustStore, hubId: string): void {
+  const code = store.generatePairingCode(hubId);
+  if (!store.confirmPairing(hubId, code)) throw new Error(`Unable to trust ${hubId}`);
 }

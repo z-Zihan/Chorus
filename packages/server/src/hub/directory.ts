@@ -4,6 +4,7 @@ import { getUserKey } from "../credential-store.js";
 import type { Repository } from "../db/repository.js";
 import { signData, verifySignature } from "../identity/user-keys.js";
 import { logger } from "../utils/logger.js";
+import { TrustStore } from "./trust-store.js";
 
 const DIRECTORY_TTL_MS = 10 * 60 * 1000;
 
@@ -22,6 +23,7 @@ export class DirectoryService {
     private readonly repository: Repository,
     private readonly registry: AgentRegistry,
     private readonly localHubId = "",
+    private readonly trustStore = new TrustStore(),
   ) {}
 
   /** Build an unsigned directory manifest containing only agents visible to the audience. */
@@ -110,6 +112,16 @@ export class DirectoryService {
 
   /** Upsert a remote User and register its visible agents as one directory update. */
   applyRemoteDirectory(manifest: DirectoryManifest): void {
+    const hubId = manifest.user.hubId;
+    if (!this.trustStore.isTrusted(hubId)) {
+      logger.warn({ hubId }, "Ignoring directory from an untrusted Hub");
+      return;
+    }
+    if (this.trustStore.detectKeyChange(hubId, manifest.user.publicKey)) {
+      logger.warn({ hubId }, "Remote User public key changed; Hub must be paired again");
+      return;
+    }
+
     const transaction = this.repository.context.sqlite.transaction(() => {
       this.repository.upsertRemoteUser({
         id: manifest.user.id,
@@ -151,7 +163,12 @@ export class DirectoryService {
       }
     });
     transaction();
-    this.remoteDirectories.set(manifest.user.hubId, manifest);
+    this.trustStore.recordSeen(hubId, {
+      userId: manifest.user.id,
+      userName: manifest.user.name,
+      userPublicKey: manifest.user.publicKey,
+    });
+    this.remoteDirectories.set(hubId, manifest);
   }
 }
 

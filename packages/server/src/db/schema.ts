@@ -12,6 +12,20 @@ export const users = sqliteTable("users", {
   lastSeenAt: integer("last_seen_at"),
 });
 
+export const trustedHubs = sqliteTable("trusted_hubs", {
+  hubId: text("hub_id").primaryKey(),
+  hubFingerprint: text("hub_fingerprint").notNull(),
+  userId: text("user_id"),
+  userName: text("user_name"),
+  userPublicKey: text("user_public_key"),
+  trustLevel: text("trust_level").notNull().default("pending"),
+  pairedAt: integer("paired_at"),
+  lastSeenAt: integer("last_seen_at"),
+  notes: text("notes"),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+});
+
 export const agents = sqliteTable("agents", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
