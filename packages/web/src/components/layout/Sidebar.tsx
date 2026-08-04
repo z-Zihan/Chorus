@@ -64,7 +64,7 @@ function writeLastGroupAgentIds(agentIds: string[]): void {
 }
 
 export function Sidebar({ onOpenSettings }: SidebarProps) {
-  const { t } = useTranslation(["common", "sidebar"]);
+  const { t } = useTranslation(["common", "sidebar", "chat"]);
   const [conversationToDelete, setConversationToDelete] = useState<Conversation | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isCatalogOpen, setIsCatalogOpen] = useState(false);
@@ -100,6 +100,9 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
   const isSidebarOpen = useUIStore((s) => s.isSidebarOpen);
   const closeSidebar = useUIStore((s) => s.closeSidebar);
   const allConversations = [...conversations, ...groupConversations, ...archivedConversations];
+  const selectedGroupContainsRemote = agents.some(
+    (agent) => selectedGroupAgentIds.has(agent.id) && agent.ownerType === "remote",
+  );
   useEffect(() => {
     void fetchGroupedAgents().then(setAgentGroups).catch(() => {});
   }, [agents, fetchGroupedAgents]);
@@ -147,11 +150,16 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
   };
 
   const openCreateGroupDialog = () => {
-    const onlineAgentIds = new Set(
-      agents.filter((agent) => agent.status === "online").map((agent) => agent.id),
+    const selectableAgentIds = new Set(
+      agents
+        .filter(
+          (agent) =>
+            !agent.stale && (agent.status === "online" || agent.ownerType === "remote"),
+        )
+        .map((agent) => agent.id),
     );
     setSelectedGroupAgentIds(
-      new Set([...readLastGroupAgentIds()].filter((agentId) => onlineAgentIds.has(agentId))),
+      new Set([...readLastGroupAgentIds()].filter((agentId) => selectableAgentIds.has(agentId))),
     );
     setIsCreateGroupOpen(true);
   };
@@ -264,6 +272,11 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
               >
                 {conv.title || t("sidebar:untitledConversation")}
               </div>
+              {conv.type === "cross_hub" && (
+                <span className="shrink-0 rounded bg-blue-500/15 px-1.5 py-0.5 text-[10px] font-medium text-blue-600 dark:text-blue-300">
+                  {t("chat:crossHub")}
+                </span>
+              )}
               {isAgentOffline && (
                 <span className="shrink-0 rounded bg-[var(--bg-elevated)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--text-secondary)] ring-1 ring-[var(--border-color)]">
                   {t("common:status.offline")}
@@ -680,21 +693,38 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
         }}
       >
         <DialogContent>
-          <DialogTitle>{t("common:group.createGroupTitle")}</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            {t("common:group.createGroupTitle")}
+            {selectedGroupContainsRemote && (
+              <span
+                title={t("sidebar:crossHubGroup")}
+                className="rounded bg-blue-500/15 px-1.5 py-0.5 text-xs font-medium text-blue-600 dark:text-blue-300"
+              >
+                [{t("chat:crossHub")}]
+              </span>
+            )}
+          </DialogTitle>
           <DialogDescription className="mt-1">{t("common:group.selectAgents")}</DialogDescription>
           <div className="mt-4 max-h-72 space-y-1 overflow-y-auto">
             {agents
-              .filter((agent) => agent.status === "online")
+              .filter((agent) => agent.status === "online" || agent.ownerType === "remote")
               .map((agent) => {
                 const selected = selectedGroupAgentIds.has(agent.id);
+                const isRemote = agent.ownerType === "remote";
+                const ownerName = agent.owner?.name ?? agent.ownerId;
                 return (
                   <label
                     key={agent.id}
-                    className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2 hover:bg-[var(--bg-hover)]"
+                    className={`flex items-center gap-3 rounded-lg px-3 py-2 ${
+                      agent.stale
+                        ? "cursor-not-allowed bg-gray-500/5 opacity-50 grayscale"
+                        : "cursor-pointer hover:bg-[var(--bg-hover)]"
+                    }`}
                   >
                     <input
                       type="checkbox"
                       checked={selected}
+                      disabled={agent.stale}
                       onChange={() =>
                         setSelectedGroupAgentIds((current) => {
                           const next = new Set(current);
@@ -706,8 +736,24 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
                       className="h-4 w-4 accent-[var(--accent-color)]"
                     />
                     <AgentAvatar name={agent.name} src={agent.avatar} size="sm" />
-                    <span className="min-w-0 flex-1 truncate text-sm">{agent.name}</span>
-                    <span className={`h-2 w-2 rounded-full ${STATUS_COLORS[agent.status]}`} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm">{agent.name}</span>
+                      {isRemote && (
+                        <span className="block truncate text-[11px] text-[var(--text-tertiary)]">
+                          {t("chat:owner")}: {ownerName ?? "—"}
+                        </span>
+                      )}
+                    </span>
+                    {isRemote && (
+                      <span className="shrink-0 rounded bg-blue-500/15 px-1.5 py-0.5 text-[10px] text-blue-600 dark:text-blue-300">
+                        {t("chat:remoteAgent")}
+                      </span>
+                    )}
+                    <span
+                      className={`h-2 w-2 shrink-0 rounded-full ${
+                        agent.stale ? "bg-gray-400" : STATUS_COLORS[agent.status]
+                      }`}
+                    />
                   </label>
                 );
               })}

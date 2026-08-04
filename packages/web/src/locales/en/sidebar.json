@@ -33,5 +33,6 @@
   "deleteSelected": "Delete selected ({{count}})",
   "batchDeleteTitle": "Delete selected conversations?",
   "batchDeleteMessage": "Delete {{count}} conversations? This action cannot be undone.",
-  "myAgents": "My Agents"
+  "myAgents": "My Agents",
+  "crossHubGroup": "Cross Hub Group"
 }

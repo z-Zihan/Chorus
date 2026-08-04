@@ -47,5 +47,8 @@
   "taskCompleted": "Completed",
   "taskFailed": "Failed",
   "taskDuration": "Duration: {{duration}}",
-  "jumpToSource": "Jump to group chat"
+  "jumpToSource": "Jump to group chat",
+  "remoteAgent": "Remote Agent",
+  "crossHub": "Cross Hub",
+  "owner": "Owner"
 }

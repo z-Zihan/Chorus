@@ -47,5 +47,8 @@
   "taskCompleted": "已完成",
   "taskFailed": "失败",
   "taskDuration": "耗时：{{duration}}",
-  "jumpToSource": "跳转到群聊"
+  "jumpToSource": "跳转到群聊",
+  "remoteAgent": "远程 Agent",
+  "crossHub": "跨 Hub",
+  "owner": "拥有者"
 }

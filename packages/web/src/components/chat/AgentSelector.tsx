@@ -35,15 +35,18 @@ export function AgentSelector({
   const itemRefs = useRef<Array<HTMLDivElement | null>>([]);
   const agents = useAgentStore((state) => state.agents);
   const eligibleAgentIds = new Set(agentIds);
-  const onlineAgents = agents.filter(
+  const selectableAgents = agents.filter(
     (agent) =>
-      eligibleAgentIds.has(agent.id) && (agent.status === "online" || agent.status === "busy"),
+      eligibleAgentIds.has(agent.id) &&
+      (agent.ownerType === "remote" || agent.status === "online" || agent.status === "busy"),
   );
   const normalizedQuery = query.trim().toLocaleLowerCase();
-  const filteredAgents = onlineAgents.filter(
+  const filteredAgents = selectableAgents.filter(
     (agent) =>
       agent.name.toLocaleLowerCase().includes(normalizedQuery) ||
-      agent.id.toLocaleLowerCase().includes(normalizedQuery),
+      agent.id.toLocaleLowerCase().includes(normalizedQuery) ||
+      agent.owner?.name.toLocaleLowerCase().includes(normalizedQuery) ||
+      agent.homeHubId?.toLocaleLowerCase().includes(normalizedQuery),
   );
   const selectedAgents = agents.filter(
     (agent) => eligibleAgentIds.has(agent.id) && value.includes(agent.id),
@@ -52,6 +55,7 @@ export function AgentSelector({
   const hiddenSelectedCount = Math.max(0, selectedAgents.length - visibleSelectedAgents.length);
 
   const toggleAgent = (agentId: string) => {
+    if (agents.find((agent) => agent.id === agentId)?.stale) return;
     onValueChange(
       value.includes(agentId)
         ? value.filter((selectedId) => selectedId !== agentId)
@@ -135,6 +139,7 @@ export function AgentSelector({
         {filteredAgents.map((agent, index) => (
           <DropdownMenuItem
             key={agent.id}
+            disabled={agent.stale}
             ref={(element) => {
               itemRefs.current[index] = element;
             }}
@@ -144,6 +149,7 @@ export function AgentSelector({
             }}
             aria-checked={value.includes(agent.id)}
             role="menuitemcheckbox"
+            className={agent.stale ? "opacity-50 grayscale" : undefined}
           >
             <span
               className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
@@ -157,10 +163,22 @@ export function AgentSelector({
             <span className="relative shrink-0">
               <AgentAvatar name={agent.name} src={agent.avatar} size="xs" />
               <span
-                className={`absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-[var(--bg-surface)] ${STATUS_COLORS[agent.status]}`}
+                className={`absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-[var(--bg-surface)] ${agent.stale ? "bg-gray-400" : STATUS_COLORS[agent.status]}`}
               />
             </span>
-            <span className="min-w-0 flex-1 truncate">{agent.name}</span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate">{agent.name}</span>
+              {agent.ownerType === "remote" && (
+                <span className="block truncate text-[10px] text-[var(--text-tertiary)]">
+                  {t("owner")}: {agent.owner?.name ?? agent.ownerId ?? "—"} · {agent.homeHubId ?? "—"}
+                </span>
+              )}
+            </span>
+            {agent.ownerType === "remote" && (
+              <span className="shrink-0 rounded bg-blue-500/15 px-1 py-0.5 text-[9px] text-blue-600 dark:text-blue-300">
+                {t("remoteAgent")}
+              </span>
+            )}
           </DropdownMenuItem>
         ))}
         {filteredAgents.length === 0 && (

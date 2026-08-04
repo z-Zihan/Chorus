@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { ClientEvent, Conversation, Message } from "@agentlink/shared";
+import type { ClientEvent, Conversation, ConversationType, Message } from "@agentlink/shared";
 import { api } from "@/services/api";
 import { useAgentStore } from "@/store/agentStore";
 import { StreamManager } from "@/store/streamManager";
@@ -71,7 +71,11 @@ interface ChatState {
   requestA2AConfirmation: (confirmation: A2AConfirmation) => void;
   dismissA2AConfirmation: (threadId: string) => void;
   setWebSocketSend: (send: WebSocketSend | null) => void;
-  createConversation: (title?: string, agentId?: string) => Promise<void>;
+  createConversation: (
+    title?: string,
+    agentId?: string,
+    type?: ConversationType,
+  ) => Promise<void>;
   createGroupConversation: (title: string, agentIds: string[]) => Promise<void>;
   syncConversation: (conversation: Conversation) => void;
   renameConversation: (id: string, title: string) => Promise<boolean>;
@@ -107,18 +111,20 @@ export const useChatStore = create<ChatState>((set, get) => {
 
     fetchConversations: async (includeArchived = true) => {
       try {
-        const [data, groups, archived] = await Promise.all([
+        const [data, groups, crossHubGroups, archived] = await Promise.all([
           api.getConversations(false, "dm"),
           api.getConversations(false, "group"),
+          api.getConversations(false, "cross_hub"),
           includeArchived ? api.getConversations(true) : Promise.resolve([]),
         ]);
+        const allGroups = [...groups, ...crossHubGroups];
         set({
           conversations: sortConversations(data),
-          groupConversations: sortConversations(groups),
+          groupConversations: sortConversations(allGroups),
           archivedConversations: sortConversations(archived),
         });
         // Auto-select first conversation if none selected
-        const firstConversation = data[0] ?? groups[0];
+        const firstConversation = data[0] ?? allGroups[0];
         if (!get().currentConversationId && firstConversation) {
           get().setCurrentConversation(firstConversation.id);
         }
@@ -184,7 +190,7 @@ export const useChatStore = create<ChatState>((set, get) => {
         ...get().groupConversations,
         ...get().archivedConversations,
       ].find((item) => item.id === convId);
-      const isGroup = conversation?.type === "group";
+      const isGroup = conversation?.type === "group" || conversation?.type === "cross_hub";
       // mentionedAgentIds = @mentions in text (A2A hints, NOT routing targets)
       // routedAgentIds = manually selected agents via AgentSelector (routing targets)
       const mentionIds = [...new Set(mentionedAgentIds)].filter((id) =>
@@ -194,11 +200,16 @@ export const useChatStore = create<ChatState>((set, get) => {
         conversation?.agentIds.includes(id),
       );
       const availableAgents = useAgentStore.getState().agents;
-      const isOnline = (agentId: string) =>
+      const isRoutable = (agentId: string) =>
         availableAgents.some(
-          (agent) => agent.id === agentId && (agent.status === "online" || agent.status === "busy"),
+          (agent) =>
+            agent.id === agentId &&
+            !agent.stale &&
+            (agent.ownerType === "remote" ||
+              agent.status === "online" ||
+              agent.status === "busy"),
         );
-      const firstOnlineAgentId = conversation?.agentIds.find(isOnline);
+      const firstOnlineAgentId = conversation?.agentIds.find(isRoutable);
       // For DM: route to the conversation's agent (or first selected)
       // For group: route to manually selected agents, or first online agent (NOT @mentioned)
       const activeAgentId = isGroup
@@ -208,9 +219,9 @@ export const useChatStore = create<ChatState>((set, get) => {
         : (routeIds[0] ?? conversation?.agentIds[0]);
       const routableAgentIds =
         isGroup && routeIds.length > 0
-          ? routeIds.filter(isOnline)
+          ? routeIds.filter(isRoutable)
           : activeAgentId
-            ? [activeAgentId].filter(isOnline)
+            ? [activeAgentId].filter(isRoutable)
             : [];
       if (routableAgentIds.length === 0) {
         useUIStore.getState().addToast(i18n.t("errors:agentUnavailable"), "error");
@@ -351,7 +362,7 @@ export const useChatStore = create<ChatState>((set, get) => {
 
     setWebSocketSend: (webSocketSend) => set({ webSocketSend }),
 
-    createConversation: async (title, agentId) => {
+    createConversation: async (title, agentId, type = "dm") => {
       const targetAgentId = agentId ?? useAgentStore.getState().selectedAgentId ?? undefined;
       const current = get();
       // Block only if: current is empty AND same agent (avoid duplicate empty convos)
@@ -366,14 +377,21 @@ export const useChatStore = create<ChatState>((set, get) => {
       }
 
       try {
-        const conv = await api.createConversation(title, targetAgentId);
+        const conv = await api.createConversation(title, targetAgentId, type);
         set((state) => ({
-          conversations: sortConversations([conv, ...state.conversations]),
+          conversations:
+            conv.type === "dm"
+              ? sortConversations([conv, ...state.conversations])
+              : state.conversations,
+          groupConversations:
+            conv.type === "dm"
+              ? state.groupConversations
+              : sortConversations([conv, ...state.groupConversations]),
           currentConversationId: conv.id,
           messages: [],
           isLoadingMessages: false,
         }));
-        track("conversation_created", { conversationId: conv.id });
+        track("conversation_created", { conversationId: conv.id, type: conv.type });
       } catch (e) {
         logger.error("Failed to create conversation", e);
       }
@@ -381,14 +399,18 @@ export const useChatStore = create<ChatState>((set, get) => {
 
     createGroupConversation: async (title, agentIds) => {
       try {
-        const conv = await api.createConversation(title, agentIds, "group");
+        const containsRemoteAgent = useAgentStore
+          .getState()
+          .agents.some((agent) => agentIds.includes(agent.id) && agent.ownerType === "remote");
+        const type: ConversationType = containsRemoteAgent ? "cross_hub" : "group";
+        const conv = await api.createConversation(title, agentIds, type);
         set((state) => ({
           groupConversations: sortConversations([conv, ...state.groupConversations]),
           currentConversationId: conv.id,
           messages: [],
           isLoadingMessages: false,
         }));
-        track("conversation_created", { conversationId: conv.id, type: "group" });
+        track("conversation_created", { conversationId: conv.id, type });
       } catch (error) {
         logger.error("Failed to create group conversation", error);
       }
@@ -471,7 +493,7 @@ export const useChatStore = create<ChatState>((set, get) => {
         ]);
         const groupConversations = sortConversations([
           ...current.groupConversations.filter((item) => item.id !== id),
-          ...(!updated.archived && updated.type === "group" ? [updated] : []),
+          ...(!updated.archived && updated.type !== "dm" ? [updated] : []),
         ]);
         const archivedConversations = sortConversations([
           ...current.archivedConversations.filter((item) => item.id !== id),
