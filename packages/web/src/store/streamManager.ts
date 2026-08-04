@@ -4,7 +4,7 @@ import { useUIStore } from "@/store/uiStore";
 import { track } from "@/utils/analytics";
 import { logger } from "@/utils/logger";
 
-export const STREAM_TIMEOUT_MS = 60_000;
+export const STREAM_TIMEOUT_MS = 180_000;
 
 type WebSocketSend = (event: ClientEvent) => boolean;
 
@@ -87,14 +87,16 @@ export class StreamManager<T extends StreamState> {
   addMessage(message: Message): void {
     this.updateState((state) => {
       const existingIndex = state.messages.findIndex((item) => item.id === message.id);
-      const optimisticIndex = message.fromType === "user"
-        ? state.messages.findIndex((item) =>
-            item.fromType === "user" &&
-            item.status === "sending" &&
-            item.conversationId === message.conversationId &&
-            item.content === message.content,
-          )
-        : -1;
+      const optimisticIndex =
+        message.fromType === "user"
+          ? state.messages.findIndex(
+              (item) =>
+                item.fromType === "user" &&
+                item.status === "sending" &&
+                item.conversationId === message.conversationId &&
+                item.content === message.content,
+            )
+          : -1;
       const replaceIndex = existingIndex >= 0 ? existingIndex : optimisticIndex;
       const messages = [...state.messages];
       if (replaceIndex >= 0) messages[replaceIndex] = message;
@@ -102,6 +104,9 @@ export class StreamManager<T extends StreamState> {
 
       if (message.fromType !== "agent" || message.threadId) return { messages };
       if (message.status === "thinking" || message.status === "streaming") {
+        // Re-arm the stream timer when thinking starts, so slow agents
+        // (e.g. Codex ~70s) are not cancelled before the first chunk.
+        if (message.status === "thinking") this.armStreamTimer(message.id);
         return { messages, isStreaming: true, streamingMessageId: message.id };
       }
       if (
@@ -124,9 +129,7 @@ export class StreamManager<T extends StreamState> {
             ? { ...message, content: message.content + chunk, status: "streaming" as const }
             : message,
         ),
-        ...(target && !target.threadId
-          ? { isStreaming: true, streamingMessageId: messageId }
-          : {}),
+        ...(target && !target.threadId ? { isStreaming: true, streamingMessageId: messageId } : {}),
       };
     });
   }
@@ -148,7 +151,9 @@ export class StreamManager<T extends StreamState> {
         ),
         isStreaming: isPrimaryStream ? !isTerminal : state.isStreaming,
         streamingMessageId: isPrimaryStream
-          ? (isTerminal ? null : messageId)
+          ? isTerminal
+            ? null
+            : messageId
           : state.streamingMessageId,
       };
     });

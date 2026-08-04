@@ -48,9 +48,10 @@ export function MessageList() {
   const isAtBottomRef = useRef(true);
   const isFirstRenderForConversationRef = useRef(true);
   const [showNewMessages, setShowNewMessages] = useState(false);
-  const isGroupConversation = [...conversations, ...groupConversations, ...archivedConversations].find(
-    (conversation) => conversation.id === currentConversationId,
-  )?.type === "group";
+  const isGroupConversation =
+    [...conversations, ...groupConversations, ...archivedConversations].find(
+      (conversation) => conversation.id === currentConversationId,
+    )?.type === "group";
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
     const container = scrollRef.current;
@@ -91,14 +92,7 @@ export function MessageList() {
     } else {
       setShowNewMessages(true);
     }
-  }, [
-    messages,
-    a2aThreads,
-    isStreaming,
-    isLoadingMessages,
-    currentConversationId,
-    scrollToBottom,
-  ]);
+  }, [messages, a2aThreads, isStreaming, isLoadingMessages, currentConversationId, scrollToBottom]);
 
   useEffect(() => {
     if (!targetMessageId || isLoadingMessages) return;
@@ -125,6 +119,9 @@ export function MessageList() {
       continue;
     }
 
+    // Skip agent-to-agent forwarded messages — they're already shown as part of the parent message.
+    if (msg.parentId) continue;
+
     // Keep the legacy grouped display for persisted A2A messages without live state.
     if (msg.threadId && !seenThreads.has(msg.threadId)) {
       seenThreads.add(msg.threadId);
@@ -144,12 +141,13 @@ export function MessageList() {
 
     const agent = agents.find((a) => a.id === msg.fromId);
     const prevMsg = i > 0 ? messages[i - 1] : null;
-    const isFirstFromAgent = !prevMsg || prevMsg.fromId !== msg.fromId || prevMsg.fromType !== msg.fromType;
+    const isFirstFromAgent =
+      !prevMsg || prevMsg.fromId !== msg.fromId || prevMsg.fromType !== msg.fromType;
     rendered.push(
       <MessageBubble
         key={msg.id}
         message={msg}
-        agentName={isGroupConversation ? agent?.name ?? msg.fromId : agent?.name}
+        agentName={isGroupConversation ? (agent?.name ?? msg.fromId) : agent?.name}
         agentAvatar={agent?.avatar}
         isGroup={isGroupConversation}
         showHeader={isFirstFromAgent}
@@ -179,7 +177,7 @@ export function MessageList() {
     const lastUserMsg = messages[messages.length - 1];
     const targetAgentId = lastUserMsg?.metadata?.agentId as string | undefined;
     const agent = agents.find((a) => a.id === targetAgentId) ?? agents[0];
-    rendered.push(<TypingIndicator key="typing" agentName={agent?.name}  />);
+    rendered.push(<TypingIndicator key="typing" agentName={agent?.name} />);
   }
 
   return (

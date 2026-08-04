@@ -54,7 +54,11 @@ interface ChatState {
   navigateToMessage: (conversationId: string, messageId: string) => void;
   clearTargetMessage: () => void;
   fetchMessages: (conversationId: string) => Promise<void>;
-  sendMessage: (content: string, mentionedAgentIds?: string[]) => Promise<void>;
+  sendMessage: (
+    content: string,
+    mentionedAgentIds?: string[],
+    routedAgentIds?: string[],
+  ) => Promise<void>;
   appendStreamChunk: (messageId: string, chunk: string) => void;
   noteStreamActivity: (messageId: string) => void;
   setMessageStatus: (messageId: string, status: Message["status"]) => void;
@@ -157,7 +161,7 @@ export const useChatStore = create<ChatState>((set, get) => {
       try {
         const data = await api.getMessages(conversationId);
         if (requestId === messagesRequestId && get().currentConversationId === conversationId) {
-          set({ messages: data });
+          set({ messages: data, a2aThreads: {} });
         }
       } catch (e) {
         logger.error("Failed to fetch messages", e);
@@ -168,7 +172,7 @@ export const useChatStore = create<ChatState>((set, get) => {
       }
     },
 
-    sendMessage: async (content, mentionedAgentIds = []) => {
+    sendMessage: async (content, mentionedAgentIds = [], routedAgentIds = []) => {
       const convId = get().currentConversationId;
       if (!convId) return;
 
@@ -181,25 +185,30 @@ export const useChatStore = create<ChatState>((set, get) => {
         ...get().archivedConversations,
       ].find((item) => item.id === convId);
       const isGroup = conversation?.type === "group";
-      const selectedAgentIds = [...new Set(mentionedAgentIds)];
-      if (selectedAgentIds.some((agentId) => !conversation?.agentIds.includes(agentId))) {
-        useUIStore.getState().addToast(i18n.t("errors:agentUnavailable"), "error");
-        return;
-      }
+      // mentionedAgentIds = @mentions in text (A2A hints, NOT routing targets)
+      // routedAgentIds = manually selected agents via AgentSelector (routing targets)
+      const mentionIds = [...new Set(mentionedAgentIds)].filter((id) =>
+        conversation?.agentIds.includes(id),
+      );
+      const routeIds = [...new Set(routedAgentIds)].filter((id) =>
+        conversation?.agentIds.includes(id),
+      );
       const availableAgents = useAgentStore.getState().agents;
       const isOnline = (agentId: string) =>
         availableAgents.some(
           (agent) => agent.id === agentId && (agent.status === "online" || agent.status === "busy"),
         );
       const firstOnlineAgentId = conversation?.agentIds.find(isOnline);
+      // For DM: route to the conversation's agent (or first selected)
+      // For group: route to manually selected agents, or first online agent (NOT @mentioned)
       const activeAgentId = isGroup
-        ? selectedAgentIds.length === 1
-          ? selectedAgentIds[0]
+        ? routeIds.length > 0
+          ? routeIds[0]
           : firstOnlineAgentId
-        : (selectedAgentIds[0] ?? conversation?.agentIds[0]);
+        : (routeIds[0] ?? conversation?.agentIds[0]);
       const routableAgentIds =
-        isGroup && selectedAgentIds.length > 0
-          ? selectedAgentIds.filter(isOnline)
+        isGroup && routeIds.length > 0
+          ? routeIds.filter(isOnline)
           : activeAgentId
             ? [activeAgentId].filter(isOnline)
             : [];
@@ -230,12 +239,13 @@ export const useChatStore = create<ChatState>((set, get) => {
       });
       streamManager.armStreamTimer(userMsg.id);
 
-      const mentionedAgents = isGroup && selectedAgentIds.length > 0 ? selectedAgentIds : undefined;
+      // @mentions are A2A hints only, not routing targets
+      const mentionedAgents = isGroup && mentionIds.length > 0 ? mentionIds : undefined;
       const sent = get().webSocketSend?.({
         type: "message",
         conversationId: convId,
         content: trimmedContent,
-        agentId: isGroup ? undefined : activeAgentId,
+        agentId: activeAgentId,
         mentionedAgents,
       });
       if (sent) return;
@@ -248,7 +258,7 @@ export const useChatStore = create<ChatState>((set, get) => {
           convId,
           trimmedContent,
           controller.signal,
-          isGroup ? undefined : activeAgentId,
+          activeAgentId,
           mentionedAgents,
         );
         streamManager.clearStreamTimer();

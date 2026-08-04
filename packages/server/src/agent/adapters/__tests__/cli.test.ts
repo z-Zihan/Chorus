@@ -16,55 +16,42 @@ async function collect(stream: AsyncGenerator<StreamChunk>): Promise<StreamChunk
   return chunks;
 }
 
-describe("CliAdapter prompt-based A2A", () => {
-  it("calls an available agent and feeds its response back to the CLI", async () => {
-    const script = [
-      "const prompt = process.argv[1] ?? '';",
-      "const hasDirectory = prompt.includes('Other available agents: [reviewer]');",
-      "const hasResponse = prompt.includes('Responses from the agents you called:') && prompt.includes('No blockers');",
-      "process.stdout.write(hasResponse ? 'Review complete' : hasDirectory ? '[A2A_CALL: reviewer: Review this]' : 'Missing A2A prompt');",
-    ].join("");
+describe("CliAdapter", () => {
+  it("processes a group message once without interpreting A2A_CALL output", async () => {
     const call = vi.fn();
     const a2aBus: A2ABusLike = {
       async *call(fromAgentId, toAgentId, message, callContext) {
         call(fromAgentId, toAgentId, message, callContext);
-        yield { type: "text", content: "No blockers" };
-        yield { type: "done", content: "" };
+        yield { type: "done" as const, content: "" };
       },
     };
     const adapter = new CliAdapter("writer", "Writer");
     await adapter.init({
       command: process.execPath,
-      args: ["-e", script],
+      args: ["-e", "process.stdout.write('[A2A_CALL: reviewer: Review this]')"],
       input: "argument",
       output: "plain",
     });
 
-    const chunks = await collect(adapter.handleMessage("Please review", context({
-      availableAgentIds: ["writer", "reviewer"],
-      a2aBus,
-      callStack: ["writer"],
-    })));
+    const chunks = await collect(
+      adapter.handleMessage(
+        "Please review",
+        context({
+          availableAgentIds: ["writer", "reviewer"],
+          a2aBus,
+          callStack: ["writer"],
+        }),
+      ),
+    );
 
-    expect(call).toHaveBeenCalledTimes(1);
-    expect(call.mock.calls[0]?.slice(0, 3)).toEqual(["writer", "reviewer", "Review this"]);
-    expect(call.mock.calls[0]?.[3]).toMatchObject({ a2aThreadId: expect.any(String) });
-    expect(chunks).toContainEqual(expect.objectContaining({
-      type: "tool_call",
-      content: "Review this",
-      metadata: { to: "reviewer", request: "Review this" },
-    }));
-    expect(chunks).toContainEqual(expect.objectContaining({
-      type: "a2a_response",
-      content: "No blockers",
-      sourceAgentId: "reviewer",
-    }));
-    expect(chunks.filter((chunk) => chunk.type === "text").map((chunk) => chunk.content).join(""))
-      .toBe("Review complete\n");
-    expect(chunks.at(-1)).toEqual({ type: "done", content: "" });
+    expect(call).not.toHaveBeenCalled();
+    expect(chunks).toEqual([
+      { type: "text", content: "[A2A_CALL: reviewer: Review this]\n" },
+      { type: "done", content: "" },
+    ]);
   });
 
-  it("does not inject A2A instructions when prompt-based A2A is disabled", async () => {
+  it("passes the message through unchanged when A2A is disabled", async () => {
     const adapter = new CliAdapter("writer", "Writer");
     await adapter.init({
       command: process.execPath,
@@ -74,9 +61,14 @@ describe("CliAdapter prompt-based A2A", () => {
       a2aEnabled: false,
     });
 
-    const chunks = await collect(adapter.handleMessage("Original prompt", context({
-      availableAgentIds: ["writer", "reviewer"],
-    })));
+    const chunks = await collect(
+      adapter.handleMessage(
+        "Original prompt",
+        context({
+          availableAgentIds: ["writer", "reviewer"],
+        }),
+      ),
+    );
 
     expect(chunks).toEqual([
       { type: "text", content: "Original prompt\n" },
@@ -93,9 +85,14 @@ describe("CliAdapter prompt-based A2A", () => {
       output: "plain",
     });
 
-    const chunks = await collect(adapter.handleMessage("Original prompt", context({
-      availableAgentIds: ["writer"],
-    })));
+    const chunks = await collect(
+      adapter.handleMessage(
+        "Original prompt",
+        context({
+          availableAgentIds: ["writer"],
+        }),
+      ),
+    );
 
     expect(chunks).toEqual([
       { type: "text", content: "Original prompt\n" },

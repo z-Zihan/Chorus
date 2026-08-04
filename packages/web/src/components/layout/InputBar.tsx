@@ -101,11 +101,8 @@ export function InputBar() {
         : [];
     sendMessage(
       trimmed,
-      mentionedIds.length > 0
-        ? mentionedIds
-        : selectedAgentIds.length > 0
-          ? selectedAgentIds
-          : undefined,
+      mentionedIds.length > 0 ? mentionedIds : undefined,
+      selectedAgentIds.length > 0 ? selectedAgentIds : undefined,
     );
     setInput("");
     setMentionQuery(null);

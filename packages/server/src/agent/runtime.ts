@@ -120,25 +120,39 @@ export class AgentRuntime {
     if (explicitAgentId && !conversation.agentIds.includes(explicitAgentId)) {
       throw new Error("Agent is not assigned to this conversation");
     }
-    const routingMentions = [
-      ...new Set([...mentions, ...(explicitAgentId ? [explicitAgentId] : [])]),
-    ];
+    // @mentions are A2A hints only — they do NOT determine routing.
+    // Routing: explicitAgentId (from request) > first online agent (group) > first agent (DM)
+    const routingAgentIds = explicitAgentId ? [explicitAgentId] : [];
     const firstOnlineAgentId = conversation.agentIds.find(
       (agentId) => this.registry.getStatus(agentId) === "online",
     );
     const targetAgentIds =
       conversation.type === "group"
-        ? routingMentions.length > 0
-          ? routingMentions.filter((agentId) => this.registry.getStatus(agentId) === "online")
+        ? routingAgentIds.length > 0
+          ? routingAgentIds.filter((agentId) => this.registry.getStatus(agentId) === "online")
           : firstOnlineAgentId
             ? [firstOnlineAgentId]
             : []
-        : [explicitAgentId ?? routingMentions[0] ?? conversation.agentIds[0]].filter(
-            (agentId): agentId is string => Boolean(agentId),
+        : [explicitAgentId ?? conversation.agentIds[0]].filter((agentId): agentId is string =>
+            Boolean(agentId),
           );
     if (conversation.type !== "group" && targetAgentIds.length === 0) {
       throw new Error("No Agent is assigned to this conversation");
     }
+    logger.info(
+      {
+        conversationId,
+        conversationType: conversation.type,
+        explicitAgentId,
+        mentions,
+        targetAgentIds,
+        agentStatuses: conversation.agentIds.map((id) => ({
+          id,
+          status: this.registry.getStatus(id),
+        })),
+      },
+      "Message routing decision",
+    );
 
     const userMessage = createMessage({
       conversationId,
@@ -200,6 +214,44 @@ export class AgentRuntime {
     await this.streamReply(reply, content, mentionedAgents, adapter);
   }
 
+  private async routeAgentMessage(
+    conversationId: string,
+    fromAgentId: string,
+    toAgentId: string,
+    content: string,
+    parentMessageId?: string,
+  ): Promise<void> {
+    const conversation = this.repository.getConversation(conversationId);
+    if (
+      !conversation ||
+      fromAgentId === toAgentId ||
+      !conversation.agentIds.includes(fromAgentId) ||
+      !conversation.agentIds.includes(toAgentId)
+    ) {
+      logger.warn(
+        { conversationId, fromAgentId, toAgentId },
+        "Ignored invalid agent message route",
+      );
+      return;
+    }
+
+    const agentMessage = createMessage({
+      conversationId,
+      fromType: "agent",
+      fromId: fromAgentId,
+      toType: "agent",
+      toId: toAgentId,
+      content,
+      status: "done",
+      parentId: parentMessageId,
+    });
+    this.repository.saveMessage(agentMessage);
+    this.events.publish(conversationId, { type: "message", message: agentMessage });
+    track("message_sent", { conversationId, from: fromAgentId, to: toAgentId });
+
+    await this.routeMessageToAgent(conversationId, toAgentId, content, []);
+  }
+
   cancel(messageId: string): void {
     const controller = this.controllers.get(messageId);
     if (controller) controller.abort();
@@ -221,6 +273,7 @@ export class AgentRuntime {
     const controller = new AbortController();
     const chunks: StreamChunk[] = [];
     let output = "";
+    let agentMessagesToRoute: Array<{ agentId: string; content: string }> = [];
     const startedAt = Date.now();
     this.controllers.set(reply.id, controller);
     this.registry.setStatus(adapter.id, "busy");
@@ -246,29 +299,8 @@ export class AgentRuntime {
       const otherAgentIds = availableAgentIds.filter((id) => id !== adapter.id);
       let augmentedContent = content;
       if (conversation?.type === "group" && otherAgentIds.length > 0) {
-        const contentLower = content.toLowerCase();
-        const mentionedAgents = otherAgentIds
-          .map((id) => {
-            const agent = this.registry.get(id);
-            return { id, name: agent?.name ?? id };
-          })
-          .filter(
-            ({ id, name }) =>
-              contentLower.includes(`@${name.toLowerCase()}`) ||
-              contentLower.includes(`@${id.toLowerCase()}`),
-          );
-
-        if (mentionedAgents.length > 0) {
-          const request = mentionedAgents
-            .map(({ name }) => `@${name}`)
-            .reduce((msg, mention) => msg.replace(mention, ""), content)
-            .replace(/@\S+/giu, "")
-            .trim();
-          const a2aInstructions = mentionedAgents
-            .map(({ id }) => `[A2A_CALL: ${id}: ${request}]`)
-            .join("\n");
-          augmentedContent = `${content}\n\n--- System: The user mentioned ${mentionedAgents.map(({ name }) => name).join(", ")}. If you need help from them, use:\n${a2aInstructions}`;
-        }
+        const agentNames = otherAgentIds.map((id) => this.registry.get(id)?.name ?? id);
+        augmentedContent = `${content}\n\n--- System: You are in a group chat with: [${agentNames.join(", ")}]. If you want to ask another agent something, mention them with @AgentName in your response.`;
       }
       for await (const chunk of adapter.handleMessage(augmentedContent, {
         conversationId: reply.conversationId,
@@ -287,6 +319,12 @@ export class AgentRuntime {
       }
       this.finish(reply, output, "done", chunks, startedAt, adapter.id);
       this.metrics.recordInvocation(adapter.id, Date.now() - startedAt, true);
+      if (conversation?.type === "group") {
+        agentMessagesToRoute = findAgentMessages(
+          output,
+          otherAgentIds.map((id) => ({ id, name: this.registry.get(id)?.name ?? id })),
+        );
+      }
     } catch (error) {
       const cancelled =
         controller.signal.aborted || (error instanceof DOMException && error.name === "AbortError");
@@ -326,6 +364,16 @@ export class AgentRuntime {
         conversationId: reply.conversationId,
         isTyping: false,
       });
+    }
+
+    for (const agentMessage of agentMessagesToRoute) {
+      await this.routeAgentMessage(
+        reply.conversationId,
+        adapter.id,
+        agentMessage.agentId,
+        agentMessage.content,
+        reply.id,
+      );
     }
   }
 
@@ -481,6 +529,54 @@ function mentionKey(value: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
+}
+
+function findAgentMessages(
+  output: string,
+  agents: Array<{ id: string; name: string }>,
+): Array<{ agentId: string; content: string }> {
+  const messages = new Map<string, string>();
+
+  for (const line of output.split(/\r?\n/u)) {
+    // Skip quoted lines (e.g. mock adapter echoes user message with > prefix)
+    if (/^\s*>/u.test(line)) continue;
+    const matches = agents
+      .map((agent) => ({ agent, index: findAgentMention(line, agent) }))
+      .filter((match) => match.index >= 0)
+      .sort((left, right) => left.index - right.index);
+    if (matches.length === 0) continue;
+
+    const content = line.slice(matches[0]?.index ?? 0).trim();
+    if (!content) continue;
+    for (const { agent } of matches) {
+      if (!messages.has(agent.id)) messages.set(agent.id, content);
+    }
+  }
+
+  return [...messages].map(([agentId, content]) => ({ agentId, content }));
+}
+
+function findAgentMention(line: string, agent: { id: string; name: string }): number {
+  const tokens = [...new Set([agent.name, agent.id, mentionKey(agent.name)].filter(Boolean))].sort(
+    (left, right) => right.length - left.length,
+  );
+  const normalizedLine = line.toLocaleLowerCase();
+
+  for (const token of tokens) {
+    const mention = `@${token.toLocaleLowerCase()}`;
+    let index = normalizedLine.indexOf(mention);
+    while (index >= 0) {
+      const before = line[index - 1];
+      const after = line[index + mention.length];
+      const startsAtBoundary = index === 0 || !/[A-Za-z0-9_]/u.test(before ?? "");
+      const endsAtBoundary =
+        index + mention.length === line.length || /[\s.,!?;:，。！？；：)）\]}]/u.test(after ?? "");
+      if (startsAtBoundary && endsAtBoundary) return index;
+      index = normalizedLine.indexOf(mention, index + mention.length);
+    }
+  }
+
+  return -1;
 }
 
 function createMessage(input: Omit<Message, "id" | "timestamp">): Message {

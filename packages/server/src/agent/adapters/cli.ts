@@ -1,10 +1,9 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { randomUUID } from "node:crypto";
 import { constants } from "node:fs";
 import { access } from "node:fs/promises";
 import { delimiter, isAbsolute, resolve } from "node:path";
 import type { ConversationContext, StreamChunk } from "@agentlink/shared";
-import { BaseAdapter, messageFromError } from "../adapter";
+import { BaseAdapter } from "../adapter";
 
 type CliInputMode = "stdin" | "argument";
 type CliOutputMode = "jsonl" | "codex-json" | "plain" | "json";
@@ -26,19 +25,6 @@ interface ProcessResult {
   stderr: string;
   error?: Error;
 }
-
-interface PromptA2ACall {
-  targetAgentId: string;
-  message: string;
-}
-
-interface PromptA2AResponse extends PromptA2ACall {
-  output: string;
-  success: boolean;
-}
-
-const A2A_CALL_PATTERN = /\[A2A_CALL:\s*([^:\]\r\n]+?)\s*:\s*([\s\S]*?)\]/gu;
-const MAX_A2A_ROUNDS = 3;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -69,15 +55,34 @@ function collectJsonText(value: unknown, depth = 0): string[] {
   if (resultText.length) return resultText;
 
   const directText = getStringRecordValue(value, [
-    "message", "response", "text", "delta", "content", "summary",
-    "title", "command", "cmd", "error", "status",
+    "message",
+    "response",
+    "text",
+    "delta",
+    "content",
+    "summary",
+    "title",
+    "command",
+    "cmd",
+    "error",
+    "status",
   ]);
   if (directText) return [directText];
 
   return [
-    "message", "response", "delta", "content", "item", "event",
-    "tool_call", "toolCall", "result", "data",
-  ].flatMap((key) => collectJsonText(value[key], depth + 1)).filter(Boolean);
+    "message",
+    "response",
+    "delta",
+    "content",
+    "item",
+    "event",
+    "tool_call",
+    "toolCall",
+    "result",
+    "data",
+  ]
+    .flatMap((key) => collectJsonText(value[key], depth + 1))
+    .filter(Boolean);
 }
 
 function collectMessageContentText(message: unknown): string[] {
@@ -126,13 +131,8 @@ function formatJsonLine(rawEvent: unknown): string | null {
     return text || null;
   }
 
-  if (eventType === "result") {
-    const result = rawEvent.result;
-    const text = typeof result === "string"
-      ? result.trim()
-      : collectJsonText(result).join("").trim();
-    return text || null;
-  }
+  // Claude Code "result" event duplicates the full assistant text — skip to avoid doubling.
+  if (eventType === "result") return null;
 
   const text = collectJsonText(rawEvent)
     .filter((part) => part !== eventType)
@@ -150,7 +150,16 @@ function parseCodexJson(raw: unknown): string {
   const eventType = getStringRecordValue(raw, ["type"]);
 
   // Codex lifecycle events — skip
-  if (eventType === "thread.started" || eventType === "turn.started" || eventType === "turn.completed") {
+  if (
+    eventType === "thread.started" ||
+    eventType === "turn.started" ||
+    eventType === "turn.completed"
+  ) {
+    return "";
+  }
+
+  // Codex transient errors (API reconnects) — skip, don't treat as content
+  if (eventType === "error") {
     return "";
   }
 
@@ -178,8 +187,10 @@ function parseCodexJson(raw: unknown): string {
       return content
         .map((item) => {
           if (typeof item === "string") return item;
-          if (isRecord(item) && item.type === "text" && typeof item.text === "string") return item.text;
-          if (isRecord(item) && item.type === "tool_use") return `[tool] ${getStringRecordValue(item, ["name"])}`;
+          if (isRecord(item) && item.type === "text" && typeof item.text === "string")
+            return item.text;
+          if (isRecord(item) && item.type === "tool_use")
+            return `[tool] ${getStringRecordValue(item, ["name"])}`;
           return "";
         })
         .filter(Boolean)
@@ -213,9 +224,7 @@ export class CliAdapter extends BaseAdapter {
       output: (cfg.output as CliOutputMode) ?? "jsonl",
       env: (cfg.env as Record<string, string>) ?? undefined,
       cwd: typeof cfg.cwd === "string" ? cfg.cwd : undefined,
-      timeout: Number.isFinite(Number(cfg.timeout))
-        ? Math.max(1, Number(cfg.timeout))
-        : 300_000,
+      timeout: Number.isFinite(Number(cfg.timeout)) ? Math.max(1, Number(cfg.timeout)) : 300_000,
       a2aEnabled: typeof cfg.a2aEnabled === "boolean" ? cfg.a2aEnabled : true,
     } satisfies CliAdapterConfig;
     this.status = "online";
@@ -225,15 +234,19 @@ export class CliAdapter extends BaseAdapter {
     const config = this.config as unknown as CliAdapterConfig;
     const executable = config.command;
     const environment = { ...process.env, ...config.env };
-    const candidates = executable.includes("/") || executable.includes("\\")
-      ? [isAbsolute(executable) ? executable : resolve(config.cwd ?? process.cwd(), executable)]
-      : (environment.PATH ?? "").split(delimiter).filter(Boolean).flatMap((directory) => {
-          if (process.platform !== "win32") return [resolve(directory, executable)];
-          const extensions = executable.includes(".")
-            ? [""]
-            : (environment.PATHEXT ?? ".EXE;.CMD;.BAT;.COM").split(";");
-          return extensions.map((extension) => resolve(directory, `${executable}${extension}`));
-        });
+    const candidates =
+      executable.includes("/") || executable.includes("\\")
+        ? [isAbsolute(executable) ? executable : resolve(config.cwd ?? process.cwd(), executable)]
+        : (environment.PATH ?? "")
+            .split(delimiter)
+            .filter(Boolean)
+            .flatMap((directory) => {
+              if (process.platform !== "win32") return [resolve(directory, executable)];
+              const extensions = executable.includes(".")
+                ? [""]
+                : (environment.PATHEXT ?? ".EXE;.CMD;.BAT;.COM").split(";");
+              return extensions.map((extension) => resolve(directory, `${executable}${extension}`));
+            });
     for (const candidate of candidates) {
       try {
         await access(candidate, process.platform === "win32" ? constants.F_OK : constants.X_OK);
@@ -247,43 +260,30 @@ export class CliAdapter extends BaseAdapter {
 
   async *handleMessage(message: string, context: ConversationContext): AsyncGenerator<StreamChunk> {
     const cfg = this.config as unknown as CliAdapterConfig;
-    const availableAgentIds = [...new Set(context.availableAgentIds ?? [])];
-    const callableAgentIds = availableAgentIds.filter((agentId) => agentId !== this.id);
-    const promptA2AEnabled = cfg.a2aEnabled !== false
-      && availableAgentIds.length > 1
-      && callableAgentIds.length > 0;
+    yield* this.runCli(message, context, cfg, true);
+    yield { type: "done", content: "" };
+  }
 
-    if (!promptA2AEnabled) {
-      yield* this.runCli(message, context, cfg, true);
-      yield { type: "done", content: "" };
-      return;
-    }
+  /**
+   * Handle an A2A call from another agent.
+   * CLI agents simply run the CLI with the message, prefixed with caller context.
+   */
+  async *handleA2ACall(
+    from: string,
+    message: string,
+    context: ConversationContext,
+  ): AsyncGenerator<StreamChunk> {
+    const cfg = this.config as unknown as CliAdapterConfig;
+    const callerName = context.a2aCallerName ?? from;
+    const summary = context.a2aContextSummary ?? "No previous context was provided.";
+    const augmentedMessage = `[A2A call from ${callerName}]
+Previous context:
+${summary}
 
-    const systemPrompt = buildA2ASystemPrompt(callableAgentIds);
-    let prompt = `${systemPrompt}\n\n${message}`;
-    let a2aRounds = 0;
-
-    while (true) {
-      const output = yield* this.runCli(prompt, context, cfg, false);
-      const calls = parseA2ACalls(output);
-      const visibleOutput = stripA2ACalls(output);
-      if (visibleOutput.trim()) yield { type: "text", content: visibleOutput };
-
-      if (calls.length === 0) {
-        yield { type: "done", content: "" };
-        return;
-      }
-      if (a2aRounds >= MAX_A2A_ROUNDS) {
-        throw new Error(`CLI exceeded the maximum of ${MAX_A2A_ROUNDS} A2A rounds`);
-      }
-
-      const responses: PromptA2AResponse[] = [];
-      for (const call of calls) {
-        responses.push(yield* this.executeA2ACall(call, callableAgentIds, context));
-      }
-      a2aRounds += 1;
-      prompt = buildA2AFollowUpPrompt(systemPrompt, message, visibleOutput, responses);
-    }
+Request:
+${message}`;
+    yield* this.runCli(augmentedMessage, context, cfg, true);
+    yield { type: "done", content: "" };
   }
 
   private async *runCli(
@@ -353,82 +353,6 @@ export class CliAdapter extends BaseAdapter {
     }
   }
 
-  private async *executeA2ACall(
-    call: PromptA2ACall,
-    callableAgentIds: string[],
-    context: ConversationContext,
-  ): AsyncGenerator<StreamChunk, PromptA2AResponse> {
-    const threadId = randomUUID();
-    let callStarted = false;
-
-    try {
-      if (!callableAgentIds.includes(call.targetAgentId)) {
-        throw new Error(`Agent ${call.targetAgentId} is not available in this conversation`);
-      }
-      if (!context.a2aBus) throw new Error("A2A bus is unavailable");
-
-      callStarted = true;
-      yield {
-        type: "tool_call",
-        content: call.message,
-        threadId,
-        sourceAgentId: this.id,
-        metadata: { to: call.targetAgentId, request: call.message },
-      };
-
-      let output = "";
-      let failed = false;
-      for await (const chunk of context.a2aBus.call(
-        this.id,
-        call.targetAgentId,
-        call.message,
-        { ...context, a2aThreadId: threadId },
-      )) {
-        if (chunk.type === "text" || chunk.type === "task_step" || chunk.type === "error") {
-          output += chunk.content;
-        }
-        if (chunk.type === "error") failed = true;
-        if (failed && chunk.type === "done") continue;
-        yield {
-          type: "a2a_response",
-          content: chunk.content,
-          threadId,
-          sourceAgentId: call.targetAgentId,
-          metadata: {
-            ...chunk.metadata,
-            chunkType: chunk.type,
-            status: chunk.type === "done" ? "done" : chunk.type === "error" ? "error" : "streaming",
-          },
-        };
-      }
-
-      return {
-        ...call,
-        output: output || (failed ? "Agent call failed" : "Agent completed without a text response"),
-        success: !failed,
-      };
-    } catch (error) {
-      const detail = messageFromError(error);
-      if (!callStarted) {
-        yield {
-          type: "tool_call",
-          content: call.message || detail,
-          threadId,
-          sourceAgentId: this.id,
-          metadata: { to: call.targetAgentId || "unknown", request: call.message || detail },
-        };
-      }
-      yield {
-        type: "a2a_response",
-        content: detail,
-        threadId,
-        sourceAgentId: call.targetAgentId || "unknown",
-        metadata: { chunkType: "error", status: "error" },
-      };
-      return { ...call, output: detail, success: false };
-    }
-  }
-
   private async *streamOutput(
     child: ChildProcess,
     outputMode: CliOutputMode,
@@ -440,10 +364,14 @@ export class CliAdapter extends BaseAdapter {
     let stdoutBuffer = "";
     let stderr = "";
     let processError: Error | undefined;
-    const closed = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) => {
-      child.once("error", (error) => { processError = error; });
-      child.once("close", (code, signal) => resolve({ code, signal }));
-    });
+    const closed = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(
+      (resolve) => {
+        child.once("error", (error) => {
+          processError = error;
+        });
+        child.once("close", (code, signal) => resolve({ code, signal }));
+      },
+    );
 
     const flushJsonLine = (line: string): StreamChunk | null => {
       if (!line.trim()) return null;
@@ -485,11 +413,12 @@ export class CliAdapter extends BaseAdapter {
       stdoutBuffer = lines.pop() ?? "";
 
       for (const line of lines) {
-        const chunk = outputMode === "codex-json"
-          ? flushCodexJson(line)
-          : outputMode === "plain"
-            ? { type: "text" as const, content: line + "\n" }
-            : flushJsonLine(line);
+        const chunk =
+          outputMode === "codex-json"
+            ? flushCodexJson(line)
+            : outputMode === "plain"
+              ? { type: "text" as const, content: line + "\n" }
+              : flushJsonLine(line);
         if (chunk) chunks.push(chunk);
       }
 
@@ -521,50 +450,6 @@ export class CliAdapter extends BaseAdapter {
       }, 3000);
     }
   }
-}
-
-function buildA2ASystemPrompt(callableAgentIds: string[]): string {
-  return [
-    `You are in a multi-agent workspace. Other available agents: [${callableAgentIds.join(", ")}].`,
-    "If you need help from another agent, include this exact format in your response:",
-    "[A2A_CALL: target_agent_id: your_message_to_that_agent]",
-    "You can make multiple A2A calls. After each call, wait for the response before continuing.",
-  ].join("\n");
-}
-
-function parseA2ACalls(output: string): PromptA2ACall[] {
-  A2A_CALL_PATTERN.lastIndex = 0;
-  return [...output.matchAll(A2A_CALL_PATTERN)]
-    .map((match) => ({
-      targetAgentId: (match[1] ?? "").trim(),
-      message: (match[2] ?? "").trim(),
-    }))
-    .filter((call) => call.targetAgentId && call.message);
-}
-
-function stripA2ACalls(output: string): string {
-  A2A_CALL_PATTERN.lastIndex = 0;
-  return output.replace(A2A_CALL_PATTERN, "");
-}
-
-function buildA2AFollowUpPrompt(
-  systemPrompt: string,
-  originalMessage: string,
-  previousResponse: string,
-  responses: PromptA2AResponse[],
-): string {
-  const responseText = responses.map((response) => [
-    `[Response from ${response.targetAgentId}; ${response.success ? "success" : "error"}]`,
-    response.output,
-  ].join("\n")).join("\n\n");
-
-  return [
-    systemPrompt,
-    `Original user request:\n${originalMessage}`,
-    `Your previous response:\n${previousResponse || "(No user-visible text.)"}`,
-    `Responses from the agents you called:\n${responseText}`,
-    "Continue answering the original user request using these responses.",
-  ].join("\n\n");
 }
 
 function terminate(child: ChildProcess): void {

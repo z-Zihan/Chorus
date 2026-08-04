@@ -1,7 +1,59 @@
-<!-- Placeholder source icon. Replace with final artwork before release. -->
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
-  <title>AgentLink AL lettermark</title>
-  <rect width="512" height="512" rx="112" fill="#6366f1"/>
-  <path d="M100 356 205 142h54l105 214h-59l-21-47H180l-21 47h-59Zm102-97h60l-30-69-30 69Z" fill="#fff"/>
-  <path d="M324 142h58v164h82v50H324V142Z" fill="#fff"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2dd4bf"/>
+      <stop offset="100%" stop-color="#0891b2"/>
+    </linearGradient>
+    <linearGradient id="grad2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#6366f1"/>
+    </linearGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <rect width="1024" height="1024" rx="225" fill="url(#bg)"/>
+  
+  <g transform="translate(512, 480)">
+    <!-- Left chat bubble (teal) - slightly behind -->
+    <g transform="translate(-95, -20) rotate(-8)">
+      <path d="M -130,-120 
+               Q -130,-160 -90,-160 
+               L 90,-160 
+               Q 130,-160 130,-120 
+               L 130,60 
+               Q 130,100 90,100 
+               L 20,100 
+               L -10,150 
+               L -30,100 
+               L -90,100 
+               Q -130,100 -130,60 Z"
+            fill="url(#grad1)" filter="url(#glow)" opacity="0.95"/>
+    </g>
+    
+    <!-- Right chat bubble (blue) - overlapping, slightly in front -->
+    <g transform="translate(95, 20) rotate(8)">
+      <path d="M -130,-120 
+               Q -130,-160 -90,-160 
+               L 90,-160 
+               Q 130,-160 130,-120 
+               L 130,60 
+               Q 130,100 90,100 
+               L 30,100 
+               L 10,150 
+               L -10,100 
+               L -90,100 
+               Q -130,100 -130,60 Z"
+            fill="url(#grad2)" filter="url(#glow)" opacity="0.9"/>
+    </g>
+  </g>
 </svg>

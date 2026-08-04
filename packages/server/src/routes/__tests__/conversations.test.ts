@@ -51,8 +51,9 @@ describe("conversation routes", () => {
       .post("/api/conversations")
       .send({ title: "Messages", agentId: "test-agent" });
 
-    const response = await request(app.server)
-      .get(`/api/conversations/${created.body.id}/messages`);
+    const response = await request(app.server).get(
+      `/api/conversations/${created.body.id}/messages`,
+    );
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual(expect.any(Array));
@@ -72,39 +73,44 @@ describe("conversation routes", () => {
       .send({ content: "hello" });
 
     expect(response.status).toBe(201);
-    const messages = await request(app.server)
-      .get(`/api/conversations/${created.body.id}/messages`);
-    const agentMessages = messages.body.filter((message: { fromType: string }) =>
-      message.fromType === "agent"
+    const messages = await request(app.server).get(
+      `/api/conversations/${created.body.id}/messages`,
+    );
+    const agentMessages = messages.body.filter(
+      (message: { fromType: string }) => message.fromType === "agent",
     );
     expect(agentMessages).toHaveLength(1);
     expect(agentMessages[0].fromId).toBe("test-agent");
   });
 
-  it("broadcasts only when all agents are explicitly mentioned", async () => {
+  it("routes to explicitly selected agent, not @mentions (A2A hints)", async () => {
     const created = await request(app.server)
       .post("/api/conversations")
       .send({
-        title: "Broadcast",
+        title: "Mention routing",
         type: "group",
         agentIds: ["test-agent", "second-agent"],
       });
 
+    // @mention second-agent but explicitly route to test-agent
     const response = await request(app.server)
       .post(`/api/conversations/${created.body.id}/messages`)
       .send({
-        content: "hello everyone",
-        mentionedAgents: ["test-agent", "second-agent"],
+        content: "hey @second-agent can you help?",
+        agentId: "test-agent",
+        mentionedAgents: ["second-agent"],
       });
 
     expect(response.status).toBe(201);
-    const messages = await request(app.server)
-      .get(`/api/conversations/${created.body.id}/messages`);
+    const messages = await request(app.server).get(
+      `/api/conversations/${created.body.id}/messages`,
+    );
     const respondingAgentIds = messages.body
       .filter((message: { fromType: string }) => message.fromType === "agent")
       .map((message: { fromId: string }) => message.fromId)
       .sort();
-    expect(respondingAgentIds).toEqual(["second-agent", "test-agent"]);
+    // Only test-agent should respond — @mention is an A2A hint, not a routing target
+    expect(respondingAgentIds).toEqual(["test-agent"]);
   });
 
   it("gets and updates the per-conversation A2A permission", async () => {
