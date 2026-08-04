@@ -1,4 +1,4 @@
-import type { Agent, DirectoryManifest } from "@agentlink/shared";
+import type { Agent, AgentConfig, DirectoryManifest } from "@agentlink/shared";
 import type { AgentRegistry } from "../agent/registry.js";
 import { getUserKey } from "../credential-store.js";
 import type { Repository } from "../db/repository.js";
@@ -30,7 +30,8 @@ export class DirectoryService {
     if (!localUser?.publicKey) return null;
 
     const issuedAt = Date.now();
-    const agents = this.registry.list()
+    const agents = this.registry
+      .list()
       .map((agent) => ({ agent, visibility: agentVisibility(agent) }))
       .filter(({ visibility }) => isVisibleTo(visibility, audience))
       .map(({ agent, visibility }) => ({
@@ -101,6 +102,12 @@ export class DirectoryService {
     return this.remoteDirectories.get(hubId);
   }
 
+  /** Keep a remote Hub's historical identities, but make them unavailable until refreshed. */
+  markStaleAgents(hubId: string): void {
+    this.repository.setRemoteAgentsDisabled(hubId, true);
+    this.registry.markRemoteAgentsStale(hubId);
+  }
+
   /** Upsert a remote User and register its visible agents as one directory update. */
   applyRemoteDirectory(manifest: DirectoryManifest): void {
     const transaction = this.repository.context.sqlite.transaction(() => {
@@ -116,15 +123,31 @@ export class DirectoryService {
         lastSeenAt: Date.now(),
       });
 
+      this.markStaleAgents(manifest.user.hubId);
       for (const agent of manifest.agents) {
-        this.registry.registerRemoteAgent(agent.id, manifest.user.hubId, agent.name);
+        const remoteId = this.registry.getRemoteAgentId(manifest.user.hubId, agent.id);
+        this.repository.upsertAgent(
+          {
+            id: remoteId,
+            name: agent.name,
+            description: agent.description ?? "",
+            type: agent.type as AgentConfig["type"],
+            config: {},
+            source: "user",
+            managed: false,
+            customizedFields: [],
+            disabled: false,
+            ownerId: manifest.user.id,
+            ownerType: "remote",
+          },
+          null,
+        );
+        this.registry.registerRemoteAgent(agent.id, manifest.user.hubId, agent.name, agent.status);
       }
       for (const agentId of manifest.revokedAgentIds) {
         this.registry.removeRemoteAgent(manifest.user.hubId, agentId);
-        logger.info(
-          { agentId, hubId: manifest.user.hubId },
-          "Revoked remote directory agent",
-        );
+        this.repository.deleteAgent(this.registry.getRemoteAgentId(manifest.user.hubId, agentId));
+        logger.info({ agentId, hubId: manifest.user.hubId }, "Revoked remote directory agent");
       }
     });
     transaction();

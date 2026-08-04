@@ -103,11 +103,13 @@ export class A2ABus implements A2ABusLike {
         yield { type: "error", content: "Relay 当前未连接", threadId };
         return;
       }
+      const sourceAgentId = this.registry.getRemoteAgentSourceId(toAgentId);
       const separatorIndex = toAgentId.startsWith(remoteHubId) ? remoteHubId.length : -1;
       const remoteAgentId =
-        separatorIndex >= 0 && [":", "/"].includes(toAgentId[separatorIndex] ?? "")
+        sourceAgentId ??
+        (separatorIndex >= 0 && [":", "/"].includes(toAgentId[separatorIndex] ?? "")
           ? toAgentId.slice(separatorIndex + 1)
-          : toAgentId;
+          : toAgentId);
       const response = await this.hubMessageRouter.callRemoteAgent(
         remoteHubId,
         fromAgentId,

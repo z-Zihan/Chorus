@@ -96,7 +96,104 @@ describe("DirectoryService", () => {
     expect(service.isNewer(current)).toBe(true);
   });
 
-  it("registers a remote User and agents and applies revocations", () => {
+  it("generates the same deterministic ID for the same Hub and source Agent", () => {
+    const database = createDatabase(":memory:");
+    databases.push(database);
+    const registry = new AgentRegistry(new Repository(database));
+
+    const firstId = registry.registerRemoteAgent("agent-a", "hub-remote", "Agent A");
+    const secondId = registry.registerRemoteAgent("agent-a", "hub-remote", "Renamed Agent A");
+
+    expect(firstId).toBe("remote_T0AxriorP1mjb3yB");
+    expect(secondId).toBe(firstId);
+    expect(registry.getRemoteAgents()).toHaveLength(1);
+    expect(registry.getRemoteAgents()[0]).toMatchObject({
+      id: firstId,
+      sourceAgentId: "agent-a",
+      name: "Renamed Agent A",
+      hubId: "hub-remote",
+      status: "online",
+      stale: false,
+    });
+  });
+
+  it("persists same-name Agents from different Hubs without collisions", () => {
+    const database = createDatabase(":memory:");
+    databases.push(database);
+    const repository = new Repository(database);
+    const registry = new AgentRegistry(repository);
+    const service = new DirectoryService(repository, registry);
+    const hubA = manifestFixture({
+      user: remoteUser("usr-a", "hub-a", "Alice"),
+      agents: [{ ...directoryAgent("claude"), name: "Claude Code" }],
+    });
+    const hubB = manifestFixture({
+      user: remoteUser("usr-b", "hub-b", "Bob"),
+      agents: [{ ...directoryAgent("claude"), name: "Claude Code" }],
+    });
+
+    service.applyRemoteDirectory(hubA);
+    service.applyRemoteDirectory(hubB);
+
+    const remoteAgents = registry.getRemoteAgents();
+    expect(remoteAgents).toHaveLength(2);
+    expect(remoteAgents.map(({ id }) => id)).toEqual([
+      "remote_jGFVUm-C9CYXI8Xz",
+      "remote_aYlIHhveZ5ehezzL",
+    ]);
+    expect(remoteAgents.map(({ name }) => name)).toEqual(["Claude Code", "Claude Code"]);
+
+    const rows = repository.listAgentRows();
+    expect(rows).toHaveLength(2);
+    expect(rows.map(({ id }) => id)).toEqual(remoteAgents.map(({ id }) => id));
+    for (const row of rows) {
+      expect(row).toMatchObject({
+        name: "Claude Code",
+        config: "{}",
+        credentialRef: null,
+        ownerType: "remote",
+        disabled: false,
+      });
+    }
+  });
+
+  it("marks old remote Agents stale before refreshing the current directory", () => {
+    const database = createDatabase(":memory:");
+    databases.push(database);
+    const repository = new Repository(database);
+    const registry = new AgentRegistry(repository);
+    const service = new DirectoryService(repository, registry);
+    service.applyRemoteDirectory(
+      manifestFixture({
+        directoryVersion: 1,
+        agents: [directoryAgent("agent-a"), directoryAgent("agent-b")],
+      }),
+    );
+
+    service.markStaleAgents("hub-remote");
+
+    expect(registry.getRemoteAgents()).toEqual([
+      expect.objectContaining({ sourceAgentId: "agent-a", status: "offline", stale: true }),
+      expect.objectContaining({ sourceAgentId: "agent-b", status: "offline", stale: true }),
+    ]);
+    expect(repository.listAgentRows().every(({ disabled }) => disabled)).toBe(true);
+
+    service.applyRemoteDirectory(
+      manifestFixture({
+        directoryVersion: 2,
+        agents: [directoryAgent("agent-a")],
+      }),
+    );
+
+    expect(registry.getRemoteAgents()).toEqual([
+      expect.objectContaining({ sourceAgentId: "agent-a", status: "online", stale: false }),
+      expect.objectContaining({ sourceAgentId: "agent-b", status: "offline", stale: true }),
+    ]);
+    expect(repository.getAgentRow("remote_T0AxriorP1mjb3yB")?.disabled).toBe(false);
+    expect(repository.getAgentRow("remote_pbICehaU4Xkd8Fp8")?.disabled).toBe(true);
+  });
+
+  it("registers a remote User and removes revoked Agents from memory and DB", () => {
     const database = createDatabase(":memory:");
     databases.push(database);
     const repository = new Repository(database);
@@ -115,21 +212,31 @@ describe("DirectoryService", () => {
       hubId: "hub-remote",
       kind: "remote",
     });
-    expect(registry.getRemoteAgents()).toEqual([
-      { id: "remote:hub-remote:agent-a", name: "agent-a name", hubId: "hub-remote" },
-      { id: "remote:hub-remote:agent-b", name: "agent-b name", hubId: "hub-remote" },
-    ]);
+    expect(repository.getAgentRow("remote_T0AxriorP1mjb3yB")).toMatchObject({
+      config: "{}",
+      credentialRef: null,
+      ownerId: "usr_remote",
+      ownerType: "remote",
+    });
 
     const revoked = manifestFixture({
       directoryVersion: 2,
-      agents: [],
+      agents: [directoryAgent("agent-b")],
       revokedAgentIds: ["agent-a"],
     });
     service.applyRemoteDirectory(revoked);
 
     expect(registry.getRemoteAgents()).toEqual([
-      { id: "remote:hub-remote:agent-b", name: "agent-b name", hubId: "hub-remote" },
+      expect.objectContaining({
+        id: "remote_pbICehaU4Xkd8Fp8",
+        sourceAgentId: "agent-b",
+        name: "agent-b name",
+        hubId: "hub-remote",
+        stale: false,
+      }),
     ]);
+    expect(repository.getAgentRow("remote_T0AxriorP1mjb3yB")).toBeUndefined();
+    expect(repository.getAgentRow("remote_pbICehaU4Xkd8Fp8")?.disabled).toBe(false);
     expect(service.getRemoteDirectory("hub-remote")).toBe(revoked);
   });
 });
@@ -175,6 +282,15 @@ function directoryAgent(id: string): DirectoryManifest["agents"][number] {
     capabilities: [],
     status: "online",
     visibility: "trusted",
+  };
+}
+
+function remoteUser(id: string, hubId: string, name: string): DirectoryManifest["user"] {
+  return {
+    id,
+    name,
+    hubId,
+    publicKey: generateUserKeyPair().publicKey,
   };
 }
 

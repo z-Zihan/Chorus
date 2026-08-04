@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { realpath } from "node:fs/promises";
 import { delimiter, isAbsolute, normalize, resolve } from "node:path";
@@ -35,8 +36,11 @@ interface RegistryEntry {
 
 export interface RemoteAgent {
   id: string;
+  sourceAgentId: string;
   name: string;
   hubId: string;
+  status: AgentStatus;
+  stale: boolean;
 }
 
 export class AgentRegistry {
@@ -71,7 +75,12 @@ export class AgentRegistry {
           member.displayName,
         );
         if (member.hubId !== relayClient.currentHubId) {
-          this.registerRemoteAgent(member.hubId, member.hubId, member.displayName);
+          this.registerRemoteAgent(
+            member.hubId,
+            member.hubId,
+            member.displayName,
+            member.online ? "online" : "offline",
+          );
           this.trackRemoteAgentRoom(this.remoteAgentId(member.hubId, member.hubId), roomId);
         }
       }
@@ -113,9 +122,22 @@ export class AgentRegistry {
     return [...this.knownHubs.values()];
   }
 
-  registerRemoteAgent(agentId: string, hubId: string, agentName: string): void {
+  registerRemoteAgent(
+    agentId: string,
+    hubId: string,
+    agentName: string,
+    status: AgentStatus = "online",
+  ): string {
     const id = this.remoteAgentId(hubId, agentId);
-    this.remoteAgents.set(id, { id, name: agentName, hubId });
+    this.remoteAgents.set(id, {
+      id,
+      sourceAgentId: agentId,
+      name: agentName,
+      hubId,
+      status,
+      stale: false,
+    });
+    return id;
   }
 
   removeRemoteAgent(hubId: string, agentId: string): boolean {
@@ -128,6 +150,22 @@ export class AgentRegistry {
     return [...this.remoteAgents.values()];
   }
 
+  getRemoteAgentId(hubId: string, originalAgentId: string): string {
+    return this.remoteAgentId(hubId, originalAgentId);
+  }
+
+  getRemoteAgentSourceId(agentId: string): string | undefined {
+    return this.remoteAgents.get(agentId)?.sourceAgentId;
+  }
+
+  markRemoteAgentsStale(hubId: string): void {
+    for (const [id, agent] of this.remoteAgents) {
+      if (agent.hubId === hubId) {
+        this.remoteAgents.set(id, { ...agent, status: "offline", stale: true });
+      }
+    }
+  }
+
   getRemoteAgentHub(agentId: string): string | undefined {
     const registered = this.remoteAgents.get(agentId)?.hubId;
     if (registered) return registered;
@@ -138,7 +176,8 @@ export class AgentRegistry {
   }
 
   private remoteAgentId(hubId: string, originalAgentId: string): string {
-    return `remote:${hubId}:${originalAgentId}`;
+    const hash = createHash("sha256").update(`${hubId}:${originalAgentId}`).digest();
+    return `remote_${hash.toString("base64url").slice(0, 16)}`;
   }
 
   private trackRemoteAgentRoom(agentId: string, roomId: string): void {
@@ -285,7 +324,7 @@ export class AgentRegistry {
   }
 
   getStatus(id: string): AgentStatus {
-    return this.entries.get(id)?.status ?? "offline";
+    return this.entries.get(id)?.status ?? this.remoteAgents.get(id)?.status ?? "offline";
   }
 
   setStatus(id: string, status: AgentStatus, error?: string): void {

@@ -11,7 +11,7 @@ import type {
   PersistedAgentConfig,
   User,
 } from "@agentlink/shared";
-import { and, asc, desc, eq, isNull, lt } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, lt } from "drizzle-orm";
 import { getUserKey, setUserKey } from "../credential-store.js";
 import { deriveUserId, generateUserKeyPair } from "../identity/user-keys.js";
 import type { DatabaseContext } from "./index";
@@ -185,6 +185,24 @@ export class Repository {
 
   listAgentRows() {
     return this.context.db.select().from(agents).orderBy(asc(agents.createdAt)).all();
+  }
+
+  setRemoteAgentsDisabled(hubId: string, disabled: boolean): string[] {
+    const rows = this.context.db
+      .select({ id: agents.id })
+      .from(agents)
+      .innerJoin(users, eq(agents.ownerId, users.id))
+      .where(and(eq(agents.ownerType, "remote"), eq(users.hubId, hubId)))
+      .all();
+    const ids = rows.map(({ id }) => id);
+    if (ids.length > 0) {
+      this.context.db
+        .update(agents)
+        .set({ disabled, updatedAt: Date.now() })
+        .where(inArray(agents.id, ids))
+        .run();
+    }
+    return ids;
   }
 
   clearAgentCredentialRefs(): void {
