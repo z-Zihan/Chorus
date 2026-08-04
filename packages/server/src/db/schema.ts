@@ -45,6 +45,7 @@ export const conversations = sqliteTable("conversations", {
   a2aMode: text("a2a_mode").notNull().default("mention"),
   pinned: integer("pinned", { mode: "boolean" }).notNull().default(false),
   archived: integer("archived", { mode: "boolean" }).notNull().default(false),
+  relayRoomId: text("relay_room_id"),
   metadata: text("metadata"),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
@@ -60,6 +61,11 @@ export const conversationAgents = sqliteTable(
       .notNull()
       .references(() => agents.id),
     position: integer("position").notNull().default(0),
+    ownerId: text("owner_id"),
+    agentNameSnapshot: text("agent_name_snapshot"),
+    ownerNameSnapshot: text("owner_name_snapshot"),
+    hubIdSnapshot: text("hub_id_snapshot"),
+    joinedAt: integer("joined_at").notNull().default(0),
   },
   (table) => ({ pk: primaryKey({ columns: [table.conversationId, table.agentId] }) }),
 );

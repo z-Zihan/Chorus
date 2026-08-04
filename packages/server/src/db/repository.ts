@@ -317,6 +317,7 @@ export class Repository {
     title: string,
     type = "dm",
     agentIds: string[] = [],
+    relayRoomId?: string,
     metadata?: Conversation["metadata"],
   ): Conversation {
     const id = randomUUID();
@@ -329,6 +330,7 @@ export class Repository {
           id,
           title,
           type,
+          relayRoomId,
           metadata: metadata ? JSON.stringify(metadata) : null,
           createdAt: now,
           updatedAt: now,
@@ -337,9 +339,7 @@ export class Repository {
       if (uniqueAgentIds.length > 0) {
         this.context.db
           .insert(conversationAgents)
-          .values(
-            uniqueAgentIds.map((agentId, position) => ({ conversationId: id, agentId, position })),
-          )
+          .values(this.buildConversationMemberSnapshots(id, uniqueAgentIds, 0, now))
           .run();
       }
     });
@@ -352,6 +352,7 @@ export class Repository {
       a2aMode: "mention",
       pinned: false,
       archived: false,
+      relayRoomId,
       metadata,
       createdAt: now,
       updatedAt: now,
@@ -380,15 +381,22 @@ export class Repository {
     return this.removeAgentsFromConversation(conversationId, [agentId]);
   }
 
-  getConversationMembers(conversationId: string): Agent[] {
+  getConversationMembers(conversationId: string): Array<
+    Agent & {
+      agentNameSnapshot?: string;
+      ownerNameSnapshot?: string;
+      hubIdSnapshot?: string;
+      joinedAt: number;
+    }
+  > {
     const rows = this.context.db
-      .select({ agent: agents })
+      .select({ agent: agents, membership: conversationAgents })
       .from(conversationAgents)
       .innerJoin(agents, eq(conversationAgents.agentId, agents.id))
       .where(eq(conversationAgents.conversationId, conversationId))
       .orderBy(asc(conversationAgents.position))
       .all();
-    return rows.map(({ agent }) => ({
+    return rows.map(({ agent, membership }) => ({
       id: agent.id,
       name: agent.name,
       description: agent.description ?? "",
@@ -398,8 +406,12 @@ export class Repository {
       model: String(safeJson<Record<string, unknown>>(agent.config, {}).model ?? ""),
       disabled: agent.disabled,
       catalogEntryId: agent.catalogEntryId ?? undefined,
-      ownerId: agent.ownerId ?? undefined,
+      ownerId: membership.ownerId ?? undefined,
       ownerType: agent.ownerType as Agent["ownerType"],
+      agentNameSnapshot: membership.agentNameSnapshot ?? undefined,
+      ownerNameSnapshot: membership.ownerNameSnapshot ?? undefined,
+      hubIdSnapshot: membership.hubIdSnapshot ?? undefined,
+      joinedAt: membership.joinedAt,
       createdAt: agent.createdAt,
       updatedAt: agent.updatedAt,
     }));
@@ -424,11 +436,12 @@ export class Repository {
       this.context.db
         .insert(conversationAgents)
         .values(
-          uniqueAgentIds.map((agentId, index) => ({
+          this.buildConversationMemberSnapshots(
             conversationId,
-            agentId,
-            position: nextPosition + index,
-          })),
+            uniqueAgentIds,
+            nextPosition,
+            Date.now(),
+          ),
         )
         .onConflictDoNothing()
         .run();
@@ -609,6 +622,31 @@ export class Repository {
       .run();
   }
 
+  private buildConversationMemberSnapshots(
+    conversationId: string,
+    agentIds: string[],
+    startPosition: number,
+    joinedAt: number,
+  ): Array<typeof conversationAgents.$inferInsert> {
+    return agentIds.map((agentId, index) => {
+      const agent = this.getAgentRow(agentId);
+      if (!agent) throw new Error(`Agent not found: ${agentId}`);
+      const owner = agent.ownerId
+        ? this.context.db.select().from(users).where(eq(users.id, agent.ownerId)).get()
+        : undefined;
+      return {
+        conversationId,
+        agentId,
+        position: startPosition + index,
+        ownerId: agent.ownerId,
+        agentNameSnapshot: agent.name,
+        ownerNameSnapshot: owner?.name,
+        hubIdSnapshot: owner?.hubId,
+        joinedAt,
+      };
+    });
+  }
+
   private toConversation(row: typeof conversations.$inferSelect): Conversation {
     const links = this.context.db
       .select()
@@ -631,6 +669,7 @@ export class Repository {
       agentIds: links.map((link) => link.agentId),
       pinned: row.pinned,
       archived: row.archived,
+      relayRoomId: row.relayRoomId ?? undefined,
       metadata: safeJson(row.metadata, undefined),
       lastMessage: latest?.content,
       createdAt: row.createdAt,

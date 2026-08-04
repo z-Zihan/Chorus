@@ -13,9 +13,10 @@ const createConversationSchema = z.object({
     .nullish()
     .transform((value) => value ?? undefined)
     .optional(),
-  type: z.enum(["dm", "channel", "group"]).default("dm"),
+  type: z.enum(["dm", "group", "cross_hub"]).default("dm"),
   agentIds: z.array(z.string().trim().min(1)).max(20).optional(),
   agentId: z.string().trim().min(1).optional(),
+  relayRoomId: z.string().trim().min(1).optional(),
 });
 const messageSchema = z.object({
   content: z.string().trim().min(1).max(32_000),
@@ -41,7 +42,7 @@ const conversationQuerySchema = z.object({
     .enum(["true", "false"])
     .optional()
     .transform((value) => value === "true"),
-  type: z.enum(["dm", "channel", "group"]).optional(),
+  type: z.enum(["dm", "group", "cross_hub"]).optional(),
 });
 const a2aPermissionSchema = z.object({
   mode: z.enum(["auto", "confirm", "deny"]),
@@ -153,6 +154,7 @@ export function registerConversationRoutes(
       parsed.data.title ?? "新会话",
       parsed.data.type,
       agentIds,
+      parsed.data.relayRoomId,
     );
     reply.code(201);
     return conversation;

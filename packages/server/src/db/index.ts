@@ -31,6 +31,7 @@ export function createDatabase(dbPath: string) {
   const db = drizzle(sqlite, { schema });
   migrate(db, { migrationsFolder: resolveMigrationsFolder() });
   ensureCredentialRefColumn(sqlite);
+  ensureConversationColumns(sqlite);
   ensureUserColumns(sqlite);
   initializeMessageSearch(sqlite);
   return { sqlite, db };
@@ -63,9 +64,37 @@ function ensureCredentialRefColumn(sqlite: Database.Database): void {
   if (!columns.some((column) => column.name === "credential_ref")) {
     sqlite.exec("ALTER TABLE agents ADD COLUMN credential_ref TEXT");
   }
-  const convColumns = sqlite.prepare("PRAGMA table_info(conversations)").all() as Array<{ name: string }>;
-  if (!convColumns.some((column) => column.name === "metadata")) {
+}
+
+function ensureConversationColumns(sqlite: Database.Database): void {
+  const conversationColumns = sqlite.prepare("PRAGMA table_info(conversations)").all() as Array<{
+    name: string;
+  }>;
+  if (!conversationColumns.some((column) => column.name === "metadata")) {
     sqlite.exec("ALTER TABLE conversations ADD COLUMN metadata TEXT");
+  }
+  if (!conversationColumns.some((column) => column.name === "relay_room_id")) {
+    sqlite.exec("ALTER TABLE conversations ADD COLUMN relay_room_id TEXT");
+  }
+  sqlite.exec("UPDATE conversations SET type = 'group' WHERE type = 'channel'");
+
+  const memberColumns = sqlite.prepare("PRAGMA table_info(conversation_agents)").all() as Array<{
+    name: string;
+  }>;
+  if (!memberColumns.some((column) => column.name === "owner_id")) {
+    sqlite.exec("ALTER TABLE conversation_agents ADD COLUMN owner_id TEXT");
+  }
+  if (!memberColumns.some((column) => column.name === "agent_name_snapshot")) {
+    sqlite.exec("ALTER TABLE conversation_agents ADD COLUMN agent_name_snapshot TEXT");
+  }
+  if (!memberColumns.some((column) => column.name === "owner_name_snapshot")) {
+    sqlite.exec("ALTER TABLE conversation_agents ADD COLUMN owner_name_snapshot TEXT");
+  }
+  if (!memberColumns.some((column) => column.name === "hub_id_snapshot")) {
+    sqlite.exec("ALTER TABLE conversation_agents ADD COLUMN hub_id_snapshot TEXT");
+  }
+  if (!memberColumns.some((column) => column.name === "joined_at")) {
+    sqlite.exec("ALTER TABLE conversation_agents ADD COLUMN joined_at INTEGER NOT NULL DEFAULT 0");
   }
 }
 

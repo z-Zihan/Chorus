@@ -1,4 +1,4 @@
-export type ConversationType = "dm" | "channel" | "group";
+export type ConversationType = "dm" | "group" | "cross_hub";
 export type A2AMode = "mention" | "call" | "off";
 
 export interface Conversation {
@@ -9,6 +9,7 @@ export interface Conversation {
   agentIds: string[];
   pinned: boolean;
   archived: boolean;
+  relayRoomId?: string;
   metadata?: {
     relayRoomId?: string;
     [key: string]: unknown;
