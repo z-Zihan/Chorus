@@ -523,7 +523,7 @@ CREATE INDEX idx_agents_owner ON agents(owner_id, owner_type);
 | DELETE | `/api/conversations/:id` | 删除会话 |
 | GET | `/api/conversations/:id/messages` | 获取会话消息历史 |
 | POST | `/api/conversations/:id/messages` | 发送消息（非流式） |
-| GET/PATCH | `/api/conversations/:id/a2a-permission` | 查询或设置会话 A2A 模式 |
+| GET/PATCH | `/api/conversations/:id/a2a-mode` | 查询或设置会话 A2A 模式 |
 | POST | `/api/a2a/confirm` | 批准或拒绝待确认 A2A 调用 |
 | GET | `/api/hub/status` | 获取 Relay/P2P 状态和已知 Hub |
 | GET | `/api/hub/contacts` | 获取当前已知 Hub 联系人；不是完整 Agent 目录 |

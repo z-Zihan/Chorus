@@ -109,7 +109,7 @@ AgentLink 使用三层身份模型：
 在 **设置 → 隐私与权限** 中管理：
 - 已配对 Hub 列表（显示指纹、用户名、信任状态）
 - 阻止/移除信任
-- A2A 权限模式（每个会话独立设置 auto/confirm/deny）
+- A2A 模式（每个会话独立设置 mention/call/off）
 - 披露预览（查看外部 Hub 能看到你的哪些 Agent）
 
 ### 外部 Agent 接入
@@ -138,7 +138,6 @@ AgentLink 支持三种标准协议端点：
 | 归档 | 右键会话 → 归档 |
 | 导出 | 聊天区右上角 → 导出为 Markdown/JSON |
 | 删除 | 右键会话 → 删除（历史保留快照） |
-| 批量删除 | 侧边栏选择模式 → 勾选 → 删除 |
 
 ## 6. 跨设备协作
 
@@ -161,6 +160,20 @@ docker run -d -p 3211:3211 \
 4. 查看独立的连接状态：**连接中 / 已连接 / 未连接 / 正在重连 / 连接错误**。配置保存成功不代表 Relay 已连接。
 
 **English:** Open **Settings → Cross-device Collaboration**, enter an externally reachable URL such as `wss://your-relay.example.com/ws` or `ws://192.168.1.20:3211/ws`, and save. Loopback hosts (`localhost`, `127.0.0.1`, `::1`) are rejected outside explicit development mode. A successful save triggers a connection attempt; persistence and connection results are shown separately.
+
+### P2P 局域网直连 / P2P Direct Connection
+
+同一局域网内的设备可以不通过 Relay 直接通信：
+
+1. 在 **设置 → 跨设备协作** 中开启 **P2P 直连** 开关
+2. AgentLink 会通过 mDNS 自动发现同一局域网内的其他 AgentLink 设备
+3. 发现设备后会弹出确认提示，**不会自动连接**——需要你手动确认
+4. 确认后设备间建立加密 WebSocket 连接，消息直接传输，不经过第三方
+5. 在设置页可查看 P2P 连接状态（端口、已连接设备、延迟）
+
+> P2P 仅适用于同一局域网。跨网络仍需 Relay。
+
+**English:** Devices on the same LAN can communicate without a Relay via P2P. Enable in Settings → Cross-device Collaboration. mDNS discovery is passive — you must manually approve each device. View P2P status (port, connected devices, latency) in settings.
 
 ### 添加好友 / Add a contact
 
@@ -198,7 +211,7 @@ docker run -d -p 3211:3211 \
 | 语言 | 设置 → 语言 | 中文 / English |
 | Agent 配置 | 点击侧边栏 Agent | 名称、模型、System Prompt、API Key |
 | API Key 存储 | 设置 → 安全 | 存入系统钥匙串，不明文存数据库 |
-| A2A 权限 | 设置 → 隐私与权限 | 每个会话 auto/confirm/deny |
+| A2A 模式 | 设置 → 隐私与权限 | 每个会话 mention/call/off |
 | 信任管理 | 设置 → 隐私与权限 | 配对 Hub、阻止/移除、披露预览 |
 | Agent 可见性 | Agent 设置 → 可见性 | 默认 private；可选 room / public，公开不等于授权调用 |
 | Relay | 设置 → 跨设备协作 | 外部可访问地址、保存反馈和实时连接状态 |
@@ -232,7 +245,7 @@ docker run -d -p 3211:3211 \
 三种：`mention`（异步转发，默认）、`call`（同步调用，调用方拿到返回值继续推理）、`off`（关闭）。每个会话可独立设置。
 
 ### 跨设备通信安全吗？
-端到端加密，Relay 服务器无法解密内容。Hub 间需配对码认证，支持 block/remove。群组消息使用群组密钥加密。
+端到端加密，Relay 服务器无法解密内容。Hub 间需配对码认证（SPAKE2 + 6 位 SAS），支持 block/remove。群组消息使用群组密钥加密。P2P 直连同样使用 Ed25519 握手 + 消息签名验证。
 
 添加好友会看到我的 Agent 吗？不会。配对只交换最小联系人资料。你的 Agent 默认 `private`；只有你能把自己的 `room` 或 `public` Agent 加入聊天室。No. Pairing exchanges only minimal contact information, and only you can add your agents to a room.
 

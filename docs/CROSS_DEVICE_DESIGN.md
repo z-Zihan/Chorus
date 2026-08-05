@@ -209,7 +209,7 @@ RFC 8785 JSON Canonicalization Scheme (JCS) is the protocol's sole canonical ser
 2. 用 `from` Hub 公钥验证 envelope 签名、nonce 和重放缓存；Room 消息还必须选择对应 `keyEpoch` 的 key。
 3. 解密 payload，并确认内部目标、`keyEpoch` 与 envelope 路由一致。
 4. 验证 `UserHubBinding`，再验证 User 签名的目录或成员事件。
-5. 验证 Contact/Room/Agent membership、可见性、trust 和 `auto/confirm/deny` 策略。
+5. 验证 Contact/Room/Agent membership、可见性、trust 和 `mention/call/off` 策略。
 6. 只有目标 `homeHubId` 可以执行 Agent；其他 Hub 仅保存和展示。
 7. 任一步失败均拒绝并记录不含正文、凭据或目录详情的安全审计事件。
 
@@ -554,7 +554,7 @@ User A sends "@Codex review this" in Room R
 - Relay fan-out 只同步 Room 历史，不代表每个 Hub 都执行 Agent。
 - 有 `@` 时仅目标 Agent 的 `homeHubId` 执行；不得按名称广播，也不得由同 User 的其他 Hub 代执行。
 - 无 `@` 时只处理人类 Room 消息或显式选择的会话主 Agent。只有用户明确选择 broadcast 时才可调用多个 Agent。
-- 远程调用继续执行 `auto/confirm/deny`；可信远程默认 `confirm`。
+- 远程调用继续执行 `mention/call/off`；可信远程默认 `confirm`。
 
 Room fan-out distributes history, while application dispatch remains narrow. Only the authenticated target home Hub invokes a mentioned agent. Display-name broadcast and implicit multi-agent dispatch are forbidden.
 
@@ -704,7 +704,7 @@ TTL cleanup removes undeliverable ciphertext, not room state. A Hub returning af
 |---|---|---|
 | User Card | 只对已配对 Hub 显示最小资料 / Minimal data to paired Hubs only | 房间内名称/头像披露 / Room name/avatar disclosure |
 | Agent | `private` | `private` / `room` / `public` |
-| A2A | 自有 `auto`，可信远程 `confirm`，陌生 `deny` / Own auto, trusted remote confirm, unknown deny | Agent 级、会话级 `auto/confirm/deny` |
+| A2A | 自有 `auto`，可信远程 `confirm`，陌生 `deny` / Own auto, trusted remote confirm, unknown deny | Agent 级、会话级 `mention/call/off` |
 | Context | 当前消息和明确构造的 `ContextPacket` / Current message and explicit ContextPacket | 文件、路径、历史摘要、工具结果 / Files, paths, history summary, tool results |
 
 内容扩展必须由用户明确选择。API key、credential 和未选择的本地上下文不得跨设备发送。
@@ -793,7 +793,7 @@ Messaging a contact opens a direct room; a named room supports multiple contacts
 1. Agent 默认 `private`。所有者先按需要改为 `room` 或 `public`。
 2. 每位成员点击 **添加我的 Agent / Add My Agent**，只选择自己拥有的 Agent。
 3. 只能 `@` 已由所有者加入当前 Room 的 Agent；`@` 不会发现隐藏 Agent。
-4. 远程调用遵循 `auto/confirm/deny`，可信远程默认请求确认。
+4. 远程调用遵循 `mention/call/off`，可信远程默认请求确认。
 5. 对方离线时查看 `queued`/`Agent unavailable`，而不是假定消息丢失或已执行。
 6. 移除 Agent、改回 `private`、离房或解除联系人后，新调用立即停止；历史仍保留。
 

@@ -45,10 +45,11 @@ AgentLink 坚持 local-first：聊天记录默认保存在本机，CLI 在本机
 
 - 🔗 **A2A 通信**：三种模式可切换——`@mention` 异步转发、`A2A_CALL` 同步调用、`off` 关闭。Agent 回复中 @了其他 Agent → 自动转发 → 目标 Agent 独立回复。
 - 👥 **多 Agent 群聊**：在同一会话中选择多个 Agent，通过 AgentSelector 指定接收者，@mention 触发 Agent 间协作。
-- 🛡️ **A2A 权限控制**：会话级 `auto / confirm / deny` 三种模式控制 Agent 间调用权限。
+- 🛡️ **A2A 权限控制**：会话级 `mention / call / off` 三种模式控制 Agent 间通信。
 - 👤 **多用户身份体系**：User → Hub → Agent 三层身份模型。一个用户可拥有多个 Agent，不同用户的 Agent 通过 Relay 互相发现和通信。
 - 🔑 **信任管理**：Hub 间配对码认证、`pending/trusted/blocked` 信任状态、公钥变化自动重配对。
-- 🌐 **跨设备协作**：自托管 Relay + 端到端加密 + 群组密钥管理。
+- 🌐 **跨设备协作**：自托管 Relay + 局域网 P2P 直连 + 端到端加密 + 群组密钥管理。P2P 模式无需 Relay，同局域网自动发现（需用户确认连接）。
+- 📡 **P2P 直连**：mDNS 局域网设备发现，Ed25519 握手认证，消息签名验证，自动重连。
 - 📡 **签名目录发现**：Hub 间交换签名 Agent 目录，支持版本/TTL/撤销、可见性过滤（trusted/room/public）。
 - 📮 **离线消息**：queued → delivered → accepted/denied → done/error 状态机，TTL 7 天，幂等投递。
 - 🔌 **标准协议适配**：Agent 能力映射到 Google A2A Agent Card、MCP Tool、ACP Service。
@@ -98,6 +99,9 @@ Windows 打包细节见 [Windows 构建指南](docs/WINDOWS_BUILD.md)。
           │ 自托管 Relay │
           └──────▲───────┘
                  │ 端到端加密
+    ┌──────────┼──────────┐
+    │ P2P 直连  │          │
+    │(局域网)  │          │
 ┌────────┐       │       ┌──────────────────────┐
 │  用户  │ ────▶│────────│ AgentLink 桌面端      │
 └────────┘       │       │  · 统一聊天界面        │
@@ -207,7 +211,7 @@ CLI 以当前系统用户权限运行，其文件与命令权限由 CLI 自身�
 
 ### 多 Agent 群聊和跨设备聊天可用吗？
 
-多 Agent 群聊、A2A 通信（@mention 转发 + A2A_CALL 同步调用）、跨设备协作均已实现。跨设备协作需要自部署 Relay 服务器。支持多用户身份体系、信任管理、签名目录发现，不同用户的 Agent 可以通过 Relay 互相发现和协作。
+多 Agent 群聊、A2A 通信（@mention 转发 + A2A_CALL 同步调用）、跨设备协作均已实现。跨设备协作可通过 Relay（跨网络）或 P2P 直连（同一局域网）。支持多用户身份体系、信任管理、签名目录发现，不同用户的 Agent 可以互相发现和协作。
 
 ### 外部 Agent 怎么接入 AgentLink？
 

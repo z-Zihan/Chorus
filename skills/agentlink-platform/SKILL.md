@@ -331,20 +331,72 @@ interface DirectoryManifest {
 
 ## 六、权限与安全 / Permission & Security
 
-### 6.1 A2A 权限模式
+
+### 5.5 P2P 直连 / P2P Direct Connection
+
+同一局域网内的设备可不通过 Relay 直接通信：
+
+```http
+GET /api/hub/p2p/status
+```
+返回 P2P 开关状态、监听端口、已连接设备（含延迟）、已发现设备。
+
+```http
+POST /api/hub/p2p/connect
+{ "hubId": "xxx" }
+```
+手动连接已发现的 P2P 设备（不会自动连接，需用户确认）。
+
+```http
+POST /api/hub/p2p/dismiss
+{ "hubId": "xxx" }
+```
+忽略已发现的设备，不再提示。
+
+### 5.6 Room 管理 / Room Management
+
+```http
+GET /api/hub/rooms
+```
+列出本地用户参与的 Room。
+
+```http
+POST /api/hub/rooms
+{ "name": "代码评审" }
+```
+创建新 Room，自动创建本地 cross_hub 会话。
+
+```http
+POST /api/hub/rooms/{roomId}/agents
+{ "agentId": "claude-code" }
+```
+添加自己的 Agent 到 Room（仅 owner 可操作，携带 OwnerProof 签名）。
+
+```http
+DELETE /api/hub/rooms/{roomId}/agents/{agentId}
+```
+从 Room 移除 Agent（owner 或管理员可操作）。
+
+```http
+POST /api/hub/rooms/{roomId}/invite
+{ "hubId": "xxx" }
+```
+邀请联系人加入 Room。
+
+### 6.1 A2A 模式
 
 | 模式 | 说明 |
 |------|------|
-| `auto` | 自动允许 A2A 调用（默认用于本机 Agent） |
-| `confirm` | 需要用户确认后才执行（默认用于可信远程 Agent） |
-| `deny` | 禁止 A2A 调用（默认用于未信任来源） |
+| `mention` | @mention 异步转发（默认） |
+| `call` | A2A_CALL 同步调用，调用方拿到返回值继续推理 |
+| `off` | 关闭 A2A |
 
 ```http
 # 查询会话 A2A 权限
-GET /api/conversations/{conversationId}/a2a-permission
+GET /api/conversations/{conversationId}/a2a-mode
 
 # 设置会话 A2A 权限
-PATCH /api/conversations/{conversationId}/a2a-permission
+PATCH /api/conversations/{conversationId}/a2a-mode
 Content-Type: application/json
 { "mode": "confirm" }
 ```
