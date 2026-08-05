@@ -1,3 +1,4 @@
+import { useUIStore } from "@/store/uiStore";
 import { useEffect, useState } from "react";
 import {
   Activity,
@@ -129,6 +130,18 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
         p2pPort: hubConfig.p2pPort,
       });
       setHubConfig((prev) => (prev ? { ...prev, ...updated } : prev));
+      useUIStore.getState().addToast(t("settings:hubSaved"), "success");
+      // Refresh hub status to show connection state immediately
+      try {
+        const status = await api.getHubStatus();
+        if (status.relayState === "connected") {
+          useUIStore.getState().addToast(t("common:hub.connected"), "info");
+        } else if (status.relayState === "connecting" || status.relayState === "reconnecting") {
+          useUIStore.getState().addToast(t("settings:hubConnecting"), "info");
+        }
+      } catch {
+        // Status refresh is best-effort
+      }
     } catch {
       /* toast shown by api */
     } finally {

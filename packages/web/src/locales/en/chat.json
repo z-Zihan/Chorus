@@ -74,5 +74,6 @@
   "humanMembers": "Human members",
   "agentMembers": "Agent members",
   "relayDisconnected": "Relay disconnected. Reconnecting...",
-  "relayError": "Relay connection error"
+  "relayError": "Relay connection error",
+  "a2aTooltipFirst": "Agents can collaborate here. Click to switch A2A mode: @Mention, Sync Call, or Off."
 }

@@ -103,6 +103,7 @@ export function ChatArea() {
 
   const [a2aMode, setA2aMode] = useState<A2AMode>("mention");
   const [isAddAgentOpen, setIsAddAgentOpen] = useState(false);
+  const [showA2ATooltip, setShowA2ATooltip] = useState(false);
 
   useEffect(() => {
     if (!currentConv || currentConv.type !== "group") return;
@@ -219,6 +220,25 @@ export function ChatArea() {
         </div>
         <ConnectionStatus />
 
+        {currentConv?.type === "group" && (
+          <Tooltip open={showA2ATooltip || undefined}>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowA2ATooltip(false)}
+                aria-label={t("chat:a2aMode.title")}
+                title={t("chat:a2aMode.title")}
+                className="h-8 w-8"
+              >
+                <Network aria-hidden="true" className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="max-w-[200px] text-xs">
+              {t("chat:a2aTooltipFirst")}
+            </TooltipContent>
+          </Tooltip>
+        )}
         {currentConv?.type === "group" && (
           <Button
             variant="ghost"

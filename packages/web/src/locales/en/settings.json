@@ -92,5 +92,7 @@
   "disclosurePreview": "Disclosure Preview",
   "disclosurePreviewDesc": "Agents visible to your trusted hubs.",
   "noConversations": "No conversations yet.",
-  "noAgents": "No agents configured."
+  "noAgents": "No agents configured.",
+  "hubSaved": "Saved",
+  "hubConnecting": "Connecting…"
 }

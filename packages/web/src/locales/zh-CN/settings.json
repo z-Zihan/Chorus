@@ -92,5 +92,7 @@
   "disclosurePreview": "披露预览",
   "disclosurePreviewDesc": "你的可信 Hub 能看到的 Agent。",
   "noConversations": "暂无会话。",
-  "noAgents": "暂无已配置的 Agent。"
+  "noAgents": "暂无已配置的 Agent。",
+  "hubSaved": "保存成功",
+  "hubConnecting": "正在连接…"
 }

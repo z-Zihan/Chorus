@@ -74,5 +74,6 @@
   "humanMembers": "人类成员",
   "agentMembers": "Agent 成员",
   "relayDisconnected": "Relay 已断开，正在重连...",
-  "relayError": "Relay 连接错误"
+  "relayError": "Relay 连接错误",
+  "a2aTooltipFirst": "Agent 可以在这里协作。点击切换 A2A 模式：@转发、同步调用或关闭。"
 }
