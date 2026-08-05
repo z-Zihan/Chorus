@@ -70,3 +70,56 @@ P1 全部 ✅ done 且 Review 通过后发布：
 8. 两台真实设备通过 E2E-01~09
 9. P2P 有用户入口、发现确认、状态显示
 10. Tauri 生产包验证通过
+
+---
+
+## 项目暂停总结 / Project Pause Summary
+
+> **暂停时间**：2026-08-05
+> **状态**：开发完成，待真实设备测试和打包验证
+
+### 已完成
+
+- **60+ commits**，从 v0.1 MVP 到完整跨设备协作架构
+- **123 tests passed**，server + web + relay typecheck 全部通过
+- **所有文档与代码同步**（README/GUIDE/PRD/TECH/RELAY_DESIGN/CROSS_DEVICE_DESIGN/SKILL/DEV_PLAN）
+- **两轮设计 review**（Codex 12 issues + CC 7 issues）全部修复
+
+### 完成的模块
+
+| 模块 | 完成度 |
+|------|--------|
+| P0 身份+安全基线 | 10/10 ✅ |
+| P1 产品闭环+外部接入 | 全部 ✅ |
+| P2 规模化+互操作 | 4/4 ✅ |
+| XDEV 协议安全实现 | 12/12 ✅ |
+| P2P 产品化 | 3/3 ✅（P2P-04 加密留 P2） |
+| UX 交互闭环 | 10/10 ✅ |
+| P2P bug 修复 | 6/6 ✅ |
+
+### 恢复开发时的待办
+
+1. **TEST-01**：两台真实设备 E2E 测试（Relay + P2P + Hybrid）
+2. **PKG-01**：`pnpm tauri:build` 打 DMG 验证生产包
+3. **P2P-04**：P2P 消息加密（ECDH 会话密钥）
+4. **SCALE-02-VAL**：大群加密协商式验收
+5. **OPS-01-VAL / RELAY-OPS**：Relay 运维验收 + 官方部署
+
+### 快速恢复指南
+
+```bash
+cd ~/Desktop/Crucio/agentlink
+git pull
+source ~/.nvm/nvm.sh
+pnpm install
+pnpm --filter @agentlink/shared build
+pnpm dev  # 开发模式
+pnpm test  # 123 tests
+```
+
+参考文档：
+- 开发计划：本文件
+- 跨设备设计：`docs/CROSS_DEVICE_DESIGN.md`
+- 使用指南：`docs/GUIDE.md`
+- 技术文档：`docs/TECH.md`
+- 外部 Agent 接入：`skills/agentlink-platform/SKILL.md`
