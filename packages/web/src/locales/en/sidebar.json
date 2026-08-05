@@ -55,5 +55,15 @@
   "firstConversationWelcome": "Welcome! Your first conversation is ready.",
   "addMyAgent": "Add My Agent",
   "addAgentToRoom": "Add Agent to Room",
-  "selectAgentToAdd": "Select an agent to add to this room"
+  "selectAgentToAdd": "Select an agent to add to this room",
+  "p2pStatus": "P2P Status",
+  "p2pConnected": "Connected Devices",
+  "p2pDiscovered": "Discovered Devices",
+  "p2pNoConnected": "No P2P devices connected",
+  "p2pNoDiscovered": "No devices discovered",
+  "p2pConnect": "Connect",
+  "p2pDismiss": "Dismiss",
+  "p2pPort": "P2P Port",
+  "p2pLatency": "{{latency}}ms",
+  "p2pDescription": "Only for devices on the same local network. No Relay server required. Takes effect after restart."
 }

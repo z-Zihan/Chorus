@@ -55,5 +55,15 @@
   "firstConversationWelcome": "欢迎！已为你创建第一个会话。",
   "addMyAgent": "添加我的 Agent",
   "addAgentToRoom": "添加 Agent 到聊天室",
-  "selectAgentToAdd": "选择一个 Agent 加入聊天室"
+  "selectAgentToAdd": "选择一个 Agent 加入聊天室",
+  "p2pStatus": "P2P 状态",
+  "p2pConnected": "已连接设备",
+  "p2pDiscovered": "已发现设备",
+  "p2pNoConnected": "暂无已连接的 P2P 设备",
+  "p2pNoDiscovered": "未发现设备",
+  "p2pConnect": "连接",
+  "p2pDismiss": "忽略",
+  "p2pPort": "P2P 端口",
+  "p2pLatency": "{{latency}}毫秒",
+  "p2pDescription": "仅限同一局域网内使用，无需 Relay 服务器。重启后生效。"
 }

@@ -1,12 +1,27 @@
 import type { FastifyInstance } from "fastify";
-import type { HubConfig } from "@agentlink/shared";
+import type { HubConfig, P2PDiscoveredHub } from "@agentlink/shared";
 import type { AgentRegistry } from "../agent/registry.js";
 import { getUserKey } from "../credential-store.js";
 import type { Repository } from "../db/repository.js";
 import type { ConnectionManager } from "../hub/connection-manager.js";
 import type { HubIdentity } from "../hub/identity.js";
 import { createOwnerProof } from "../hub/owner-proof.js";
+import type { P2PListener } from "../hub/p2p-listener.js";
 import type { RelayClient } from "../hub/relay-client.js";
+
+const HUB_CONFIG_SETTING_KEY = "hub.config";
+const P2P_DISMISSED_SETTING_KEY = "hub.p2p.dismissed";
+
+interface PersistedHubConfig {
+  displayName?: string;
+  relayUrl?: string;
+  p2pEnabled?: boolean;
+  p2pPort?: number;
+}
+
+interface RoutableP2PListener extends P2PListener {
+  listeningPort?: number;
+}
 
 export interface HubRouteDependencies {
   identity: HubIdentity;
@@ -32,6 +47,32 @@ export function registerHubRoutes(
     connect,
   } = dependencies;
 
+  const savedConfig = parseObject(repository.getSetting(HUB_CONFIG_SETTING_KEY));
+  applyPersistedConfig(hubConfig, savedConfig);
+
+  const dismissedHubIds = new Set(
+    parseStringArray(repository.getSetting(P2P_DISMISSED_SETTING_KEY)),
+  );
+  const approvedHubIds = new Set<string>();
+  const discoveredPeers = new Map<string, P2PDiscoveredHub>();
+  const listener = (
+    connectionManager as unknown as { p2pListener: RoutableP2PListener }
+  ).p2pListener;
+
+  // P2P discovery is owned by the server bootstrap. Intercept its listener calls here so
+  // discovery remains passive until the user approves a device through the API.
+  const connectToHub = listener.connectToHub.bind(listener);
+  const setPeerPublicKey = listener.setPeerPublicKey.bind(listener);
+  listener.setPeerPublicKey = (hubId, publicKey) => {
+    if (approvedHubIds.has(hubId)) setPeerPublicKey(hubId, publicKey);
+  };
+  listener.connectToHub = async (hub) => {
+    discoveredPeers.set(hub.hubId, hub);
+    if (dismissedHubIds.has(hub.hubId) || !approvedHubIds.has(hub.hubId)) return;
+    setPeerPublicKey(hub.hubId, hub.publicKey);
+    await connectToHub(hub);
+  };
+
   const findRoomConversation = (id: string) => {
     const directMatch = repository.getConversation(id);
     if (directMatch?.type === "cross_hub" && directMatch.relayRoomId) return directMatch;
@@ -56,31 +97,111 @@ export function registerHubRoutes(
     const body = typeof request.body === "object" && request.body !== null
       ? request.body as Record<string, unknown>
       : {};
+    const nextConfig = configResponse();
     if (body.displayName !== undefined) {
       if (typeof body.displayName !== "string" || !body.displayName.trim()) {
         return reply.code(400).send({ error: "displayName must be a non-empty string" });
       }
-      hubConfig.displayName = body.displayName.trim();
+      nextConfig.displayName = body.displayName.trim();
     }
     if (body.relayUrl !== undefined) {
       if (typeof body.relayUrl !== "string" || !body.relayUrl.trim()) {
         return reply.code(400).send({ error: "relayUrl must be a non-empty string" });
       }
-      hubConfig.relay.url = body.relayUrl.trim();
+      nextConfig.relayUrl = body.relayUrl.trim();
     }
     if (body.p2pEnabled !== undefined) {
       if (typeof body.p2pEnabled !== "boolean") {
         return reply.code(400).send({ error: "p2pEnabled must be a boolean" });
       }
-      hubConfig.p2p.enabled = body.p2pEnabled;
+      nextConfig.p2pEnabled = body.p2pEnabled;
     }
     if (body.p2pPort !== undefined) {
       if (!Number.isInteger(body.p2pPort) || (body.p2pPort as number) < 1 || (body.p2pPort as number) > 65_535) {
         return reply.code(400).send({ error: "p2pPort must be an integer between 1 and 65535" });
       }
-      hubConfig.p2p.port = body.p2pPort as number;
+      nextConfig.p2pPort = body.p2pPort as number;
     }
+
+    hubConfig.displayName = nextConfig.displayName;
+    hubConfig.relay.url = nextConfig.relayUrl;
+    hubConfig.p2p.enabled = nextConfig.p2pEnabled;
+    hubConfig.p2p.port = nextConfig.p2pPort;
+    repository.setSetting(HUB_CONFIG_SETTING_KEY, JSON.stringify(nextConfig));
     return configResponse();
+  });
+
+  const listDiscovered = () => [...discoveredPeers.values()]
+    .filter((hub) => (
+      !dismissedHubIds.has(hub.hubId)
+      && !connectionManager.isP2PAvailable(hub.hubId)
+    ))
+    .map(({ hubId, displayName }) => ({ hubId, displayName }));
+
+  app.get("/api/hub/p2p/discovered", async () => listDiscovered());
+
+  app.post("/api/hub/p2p/connect", async (request, reply) => {
+    const body = parseBody(request.body);
+    if (typeof body.hubId !== "string" || !body.hubId.trim()) {
+      return reply.code(400).send({ error: "hubId must be a non-empty string" });
+    }
+    if (!hubConfig.p2p.enabled) {
+      return reply.code(409).send({ error: "P2P is disabled" });
+    }
+    const hubId = body.hubId.trim();
+    const hub = discoveredPeers.get(hubId);
+    if (!hub || dismissedHubIds.has(hubId)) {
+      return reply.code(404).send({ error: "P2P device not found" });
+    }
+    approvedHubIds.add(hubId);
+    setPeerPublicKey(hubId, hub.publicKey);
+    try {
+      await connectToHub(hub);
+      return { ok: true };
+    } catch (error) {
+      approvedHubIds.delete(hubId);
+      return reply.code(502).send({
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
+  app.post("/api/hub/p2p/dismiss", async (request, reply) => {
+    const body = parseBody(request.body);
+    if (typeof body.hubId !== "string" || !body.hubId.trim()) {
+      return reply.code(400).send({ error: "hubId must be a non-empty string" });
+    }
+    const hubId = body.hubId.trim();
+    approvedHubIds.delete(hubId);
+    dismissedHubIds.add(hubId);
+    repository.setSetting(P2P_DISMISSED_SETTING_KEY, JSON.stringify([...dismissedHubIds]));
+    return { ok: true };
+  });
+
+  app.get("/api/hub/p2p/status", async () => {
+    const knownHubs = new Map(
+      registry.getKnownHubs().map((hub) => [hub.hubId, hub]),
+    );
+    const candidateHubIds = new Set([
+      ...knownHubs.keys(),
+      ...discoveredPeers.keys(),
+    ]);
+    const connected = [...candidateHubIds]
+      .filter((hubId) => connectionManager.isP2PAvailable(hubId))
+      .map((hubId) => ({
+        hubId,
+        displayName: discoveredPeers.get(hubId)?.displayName
+          ?? knownHubs.get(hubId)?.displayName
+          ?? hubId.slice(0, 8),
+        latency: connectionManager.getConnectionInfo(hubId).p2pLatency,
+        status: "connected" as const,
+      }));
+    return {
+      enabled: hubConfig.p2p.enabled,
+      port: listener.listeningPort ?? hubConfig.p2p.port,
+      connected,
+      discovered: listDiscovered(),
+    };
   });
 
   app.post("/api/hub/rooms", async (request, reply) => {
@@ -277,4 +398,53 @@ function isLocalRoomAdministrator(
     Array.isArray(value)
     && value.some((id) => id === hubId || (userId !== undefined && id === userId))
   ));
+}
+
+function parseBody(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function parseObject(value: string | undefined): Record<string, unknown> {
+  if (!value) return {};
+  try {
+    return parseBody(JSON.parse(value));
+  } catch {
+    return {};
+  }
+}
+
+function parseStringArray(value: string | undefined): string[] {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed)
+      ? parsed.filter((item): item is string => typeof item === "string" && Boolean(item))
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function applyPersistedConfig(
+  hubConfig: HubConfig,
+  persisted: Record<string, unknown>,
+): void {
+  if (typeof persisted.displayName === "string" && persisted.displayName.trim()) {
+    hubConfig.displayName = persisted.displayName.trim();
+  }
+  if (typeof persisted.relayUrl === "string" && persisted.relayUrl.trim()) {
+    hubConfig.relay.url = persisted.relayUrl.trim();
+  }
+  if (typeof persisted.p2pEnabled === "boolean") {
+    hubConfig.p2p.enabled = persisted.p2pEnabled;
+  }
+  if (
+    Number.isInteger(persisted.p2pPort)
+    && (persisted.p2pPort as number) >= 1
+    && (persisted.p2pPort as number) <= 65_535
+  ) {
+    hubConfig.p2p.port = persisted.p2pPort as number;
+  }
 }

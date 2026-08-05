@@ -47,7 +47,7 @@ export class P2PListener {
   private readonly pendingPings = new Map<string, number>();
   private readonly pongTimers = new Map<string, NodeJS.Timeout>();
   private healthCheckTimer?: NodeJS.Timeout;
-  private listeningPort?: number;
+  listeningPort?: number;
   private stopping = true;
 
   async start(port: number, identity: HubIdentity): Promise<number> {

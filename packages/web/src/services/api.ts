@@ -337,6 +337,22 @@ export const api = {
       `/hub/rooms/${encodeURIComponent(roomId)}/agents/${encodeURIComponent(agentId)}`,
       { method: "DELETE" },
     ),
+  // P2P
+  getP2PStatus: () =>
+    request<{ enabled: boolean; port: number; connected: Array<{ hubId: string; displayName: string; latency: number | null; status: string }>; discovered: Array<{ hubId: string; displayName: string }> }>("/hub/p2p/status"),
+  getP2PDiscovered: () =>
+    request<Array<{ hubId: string; displayName: string }>>("/hub/p2p/discovered"),
+  connectP2PDevice: (hubId: string) =>
+    request<{ ok: boolean }>("/hub/p2p/connect", {
+      method: "POST",
+      body: JSON.stringify({ hubId }),
+    }),
+  dismissP2PDevice: (hubId: string) =>
+    request<{ ok: boolean }>("/hub/p2p/dismiss", {
+      method: "POST",
+      body: JSON.stringify({ hubId }),
+    }),
+
   inviteHubToRoom: (roomId: string, hubId: string) =>
     request<{ ok: boolean }>(`/hub/rooms/${encodeURIComponent(roomId)}/invite`, {
       method: "POST",
