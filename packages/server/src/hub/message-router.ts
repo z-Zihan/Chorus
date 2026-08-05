@@ -254,7 +254,7 @@ export class HubMessageRouter {
     const hasP2PConnection = this.connectionManager.getActivePath(toHubId) === "p2p";
     if (
       (this.offlineHubIds.has(toHubId) && !hasP2PConnection)
-      || !this.connectionManager.sendEnvelope(toHubId, envelope)
+      || !await this.connectionManager.sendEnvelope(toHubId, envelope)
     ) {
       this.offlineStore.queue(envelope, this.identity.hubId, toHubId);
       logger.info({ toHubId, envelopeId: envelope.id }, "Queued message for offline Hub");
@@ -495,7 +495,7 @@ export class HubMessageRouter {
 
   private async deliverPendingForHub(hubId: string): Promise<void> {
     for (const message of this.offlineStore.getPendingForHub(hubId)) {
-      if (!this.connectionManager.sendEnvelope(hubId, message.envelope)) return;
+      if (!await this.connectionManager.sendEnvelope(hubId, message.envelope)) return;
       this.offlineStore.markDelivered(message.id);
     }
   }

@@ -13,6 +13,7 @@ export type P2PConnectionState =
 
 export interface P2PDiscoveredHub {
   hubId: string;
+  publicKey: string;
   displayName: string;
   host: string;
   port: number;

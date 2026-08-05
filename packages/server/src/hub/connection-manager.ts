@@ -26,8 +26,8 @@ export class ConnectionManager {
     return this.p2pListener.isConnected(hubId);
   }
 
-  sendEnvelope(hubId: string, envelope: HubEnvelope): boolean {
-    if (this.p2pListener.sendToHub(hubId, envelope)) return true;
+  async sendEnvelope(hubId: string, envelope: HubEnvelope): Promise<boolean> {
+    if (await this.p2pListener.sendToHub(hubId, envelope)) return true;
     if (this.relayClient.state !== "connected") return false;
     this.relayClient.sendEnvelope(envelope);
     return true;

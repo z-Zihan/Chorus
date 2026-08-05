@@ -12,7 +12,7 @@ export class P2PDiscovery {
   private readonly services = new Map<string, P2PDiscoveredHub>();
   private readonly listeners = new Set<DiscoveredListener>();
 
-  start(hubId: string, displayName: string, port: number): void {
+  start(hubId: string, publicKey: string, displayName: string, port: number): void {
     if (this.bonjour) return;
     this.localHubId = hubId;
     this.bonjour = new Bonjour();
@@ -20,7 +20,7 @@ export class P2PDiscovery {
       name: `agentlink-${hubId.slice(0, 8)}`,
       type: "agentlink",
       port,
-      txt: { hubId, displayName, version: "1.0" },
+      txt: { hubId, publicKey, displayName, version: "1.0" },
     });
     this.browser = this.bonjour.find({ type: "agentlink" });
     this.browser.on("up", (service) => this.handleService(service));
@@ -52,13 +52,15 @@ export class P2PDiscovery {
   private handleService(service: Service): void {
     const txt = txtRecord(service.txt);
     const hubId = txt.hubId;
-    if (!hubId || hubId === this.localHubId || !Number.isInteger(service.port)) return;
+    const publicKey = txt.publicKey;
+    if (!hubId || !publicKey || hubId === this.localHubId || !Number.isInteger(service.port)) return;
     const host = service.addresses?.find((address) => address.includes("."))
       ?? service.addresses?.[0]
       ?? service.host;
     if (!host) return;
     const discovered: P2PDiscoveredHub = {
       hubId,
+      publicKey,
       displayName: txt.displayName || hubId.slice(0, 8),
       host,
       port: service.port,

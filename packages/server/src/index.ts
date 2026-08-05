@@ -91,7 +91,7 @@ async function main(): Promise<void> {
   if (hubIdentity && relayClient) {
     const identity = hubIdentity;
     const client = relayClient;
-    const listener = new P2PListener(client);
+    const listener = new P2PListener();
     const manager = new ConnectionManager(listener, client);
     connectionManager = manager;
     const directoryService = new DirectoryService(repository, registry, identity.hubId, trustStore);
@@ -111,12 +111,13 @@ async function main(): Promise<void> {
       const discovery = new P2PDiscovery();
       const p2pPort = hubConfig.p2p.port ?? 3212;
       const connectPeer = (hub: P2PDiscoveredHub) => {
+        listener.setPeerPublicKey(hub.hubId, hub.publicKey);
         if (listener.isConnected(hub.hubId)) return;
         void listener.connectToHub(hub).catch((error: unknown) => {
           logger.warn({ err: error, hubId: hub.hubId }, "P2P connection attempt failed");
         });
       };
-      await listener.start(p2pPort, identity);
+      const listeningPort = await listener.start(p2pPort, identity);
       listener.startHealthChecks();
       messageRouter.setP2PListener(listener);
       discovery.onDiscovered(connectPeer);
@@ -125,7 +126,12 @@ async function main(): Promise<void> {
         const hub = discovery.discover().find((candidate) => candidate.hubId === hubId);
         if (hub) connectPeer(hub);
       });
-      discovery.start(identity.hubId, hubConfig.displayName, p2pPort);
+      discovery.start(
+        identity.hubId,
+        identity.getPublicKey(),
+        hubConfig.displayName,
+        listeningPort,
+      );
       p2pDiscovery = discovery;
       p2pListener = listener;
     }
