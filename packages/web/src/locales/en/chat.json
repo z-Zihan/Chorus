@@ -69,5 +69,10 @@
   "jumpToSource": "Jump to group chat",
   "remoteAgent": "Remote Agent",
   "crossHub": "Cross Hub",
-  "owner": "Owner"
+  "owner": "Owner",
+  "members": "Members",
+  "humanMembers": "Human members",
+  "agentMembers": "Agent members",
+  "relayDisconnected": "Relay disconnected. Reconnecting...",
+  "relayError": "Relay connection error"
 }

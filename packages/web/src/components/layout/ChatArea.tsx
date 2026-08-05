@@ -19,6 +19,7 @@ import { InputBar } from "@/components/layout/InputBar";
 import { useChatStore } from "@/store/chatStore";
 import { useAgentStore } from "@/store/agentStore";
 import { useUIStore } from "@/store/uiStore";
+import { useHubStore } from "@/store/hubStore";
 import { STATUS_COLORS } from "@/constants/agent";
 import { AgentAvatar } from "@/components/agent/AgentAvatar";
 import { Button } from "@/components/ui/button";
@@ -56,6 +57,7 @@ export function ChatArea() {
   const pendingConfirmation = useChatStore((s) => s.a2aConfirmations[0]);
   const dismissA2AConfirmation = useChatStore((s) => s.dismissA2AConfirmation);
   const openSidebar = useUIStore((s) => s.openSidebar);
+  const hubConnectionState = useHubStore((s) => s.hubConnectionState);
   const [confirmationSubmitting, setConfirmationSubmitting] = useState(false);
   const currentConv = [...conversations, ...groupConversations, ...archivedConversations]
     .find((c) => c.id === currentConversationId);
@@ -165,7 +167,7 @@ export function ChatArea() {
             <h2 className="truncate font-semibold text-[var(--text-primary)]">
               {currentConv?.title ?? t("chat:defaultConversationTitle")}
             </h2>
-            {currentConv?.type === "group" ? (
+            {currentConv && (currentConv.type === "group" || currentConv.type === "cross_hub") ? (
               <>
               <GroupMemberList conversation={currentConv} />
               <Dialog open={isAddAgentOpen} onOpenChange={setIsAddAgentOpen}>
@@ -305,6 +307,17 @@ export function ChatArea() {
           </DropdownMenu>
         )}
       </header>
+
+      {currentConv?.type === "cross_hub"
+        && currentConv.relayRoomId
+        && (hubConnectionState === "disconnected" || hubConnectionState === "error") && (
+          <div
+            role="status"
+            className="border-b border-red-500/30 bg-red-500/15 px-4 py-2 text-center text-sm font-medium text-red-700 dark:text-red-300"
+          >
+            {t("chat:relayDisconnected")}
+          </div>
+        )}
 
       {/* Messages */}
       <div className="flex-1 overflow-hidden">

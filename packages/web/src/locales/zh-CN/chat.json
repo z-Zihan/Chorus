@@ -69,5 +69,10 @@
   "jumpToSource": "跳转到群聊",
   "remoteAgent": "远程 Agent",
   "crossHub": "跨 Hub",
-  "owner": "拥有者"
+  "owner": "拥有者",
+  "members": "成员",
+  "humanMembers": "人类成员",
+  "agentMembers": "Agent 成员",
+  "relayDisconnected": "Relay 已断开，正在重连...",
+  "relayError": "Relay 连接错误"
 }
