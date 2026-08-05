@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Archive,
   Bot,
@@ -105,14 +105,18 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
   const [isCreatingGroup, setIsCreatingGroup] = useState(false);
+  const [isCreatingRoom, setIsCreatingRoom] = useState(false);
   const [selectedGroupAgentIds, setSelectedGroupAgentIds] = useState<Set<string>>(new Set());
   const conversations = useChatStore((s) => s.conversations);
   const groupConversations = useChatStore((s) => s.groupConversations);
   const archivedConversations = useChatStore((s) => s.archivedConversations);
+  const hasLoadedConversations = useChatStore((s) => s.hasLoadedConversations);
   const currentConversationId = useChatStore((s) => s.currentConversationId);
   const setCurrentConversation = useChatStore((s) => s.setCurrentConversation);
   const createConversation = useChatStore((s) => s.createConversation);
   const createGroupConversation = useChatStore((s) => s.createGroupConversation);
+  const createRoom = useChatStore((s) => s.createRoom);
+  const fetchConversations = useChatStore((s) => s.fetchConversations);
   const renameConversation = useChatStore((s) => s.renameConversation);
   const togglePin = useChatStore((s) => s.togglePin);
   const toggleArchive = useChatStore((s) => s.toggleArchive);
@@ -121,6 +125,8 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
   const fetchGroupedAgents = useAgentStore((s) => s.fetchGroupedAgents);
   const isSidebarOpen = useUIStore((s) => s.isSidebarOpen);
   const closeSidebar = useUIStore((s) => s.closeSidebar);
+  const addToast = useUIStore((s) => s.addToast);
+  const initialConversationStarted = useRef(false);
   const allConversations = [...conversations, ...groupConversations, ...archivedConversations];
   const selectedGroupContainsRemote = agents.some(
     (agent) => selectedGroupAgentIds.has(agent.id) && agent.ownerType === "remote",
@@ -130,6 +136,24 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
     void fetchHubStatus();
     void api.getTrustList().then(setContacts).catch(() => {});
   }, [agents, fetchGroupedAgents, fetchHubStatus]);
+
+  useEffect(() => {
+    if (
+      initialConversationStarted.current ||
+      !hasLoadedConversations ||
+      agents.length === 0 ||
+      conversations.length > 0
+    ) return;
+
+    initialConversationStarted.current = true;
+    void api.createConversation(undefined, agents[0].id).then(async (conversation) => {
+      await fetchConversations();
+      useChatStore.getState().setCurrentConversation(conversation.id);
+      addToast(t("sidebar:firstConversationWelcome"), "success");
+    }).catch(() => {
+      initialConversationStarted.current = false;
+    });
+  }, [addToast, agents, conversations.length, fetchConversations, hasLoadedConversations, t]);
 
   const normalizedSearch = searchQuery.trim().toLocaleLowerCase();
   const matchesSearch = (conversation: Conversation) =>
@@ -191,6 +215,12 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
     setSelectedGroupAgentIds(new Set());
     setIsCreateGroupOpen(false);
     closeSidebar();
+  };
+
+  const handleCreateRoom = async () => {
+    setIsCreatingRoom(true);
+    await createRoom(t("sidebar:defaultRoomName"));
+    setIsCreatingRoom(false);
   };
 
   const openCreateGroupDialog = () => {
@@ -482,7 +512,7 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
             )}
         {hubConnectionState === "connected" && (() => {
           const hasContacts = contacts.length > 0;
-          const hasRooms = groupConversations.length > 0;
+          const hasRooms = groupConversations.some((conversation) => conversation.type === "cross_hub");
           const allStepsDone = hasContacts && hasRooms;
           if (allStepsDone) return null;
           return (
@@ -492,8 +522,19 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
                 <li className={`text-xs ${hasContacts ? "text-[var(--text-muted)] line-through" : "text-[var(--text-primary)]"}`}>
                   ① {t("sidebar:collabStep1")}
                 </li>
-                <li className={`text-xs ${hasRooms ? "text-[var(--text-muted)] line-through" : "text-[var(--text-primary)]"}`}>
-                  ② {t("sidebar:collabStep2")}
+                <li className={`flex items-center justify-between gap-2 text-xs ${hasRooms ? "text-[var(--text-muted)] line-through" : "text-[var(--text-primary)]"}`}>
+                  <span>② {t("sidebar:collabStep2")}</span>
+                  {hasContacts && !hasRooms && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="h-6 shrink-0 px-2 text-[11px]"
+                      disabled={isCreatingRoom}
+                      onClick={() => void handleCreateRoom()}
+                    >
+                      {isCreatingRoom ? t("sidebar:creatingRoom") : t("sidebar:createNow")}
+                    </Button>
+                  )}
                 </li>
                 <li className={`text-xs ${hasContacts ? "text-[var(--text-muted)] line-through" : "text-[var(--text-primary)]"}`}>
                   ③ {t("sidebar:collabStep3")}

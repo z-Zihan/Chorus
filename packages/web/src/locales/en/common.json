@@ -123,6 +123,8 @@
     "installed": "Installed",
     "failed": "Installation failed",
     "success": "Agent installed successfully",
+    "added": "Agent added",
+    "verificationFailed": "The Agent was added, but AgentLink could not confirm it. Please refresh and try again.",
     "permissions": "Permissions",
     "homepage": "Homepage",
     "apiKey": "API key",

@@ -1,4 +1,4 @@
-import type { Agent, AgentConfig, CliDetection, Conversation, ConversationType, CreateConversationInput, HubConnectionState, Message, OnboardingStatus, UserWithAgents } from "@agentlink/shared";
+import type { Agent, AgentConfig, CliDetection, Conversation, ConversationType, CreateConversationInput, HubConnectionState, Message, OnboardingStatus, RoomMember, UserWithAgents } from "@agentlink/shared";
 import { useUIStore } from "@/store/uiStore";
 import { getApiBaseUrl } from "./env";
 import i18n from "@/i18n";
@@ -57,6 +57,14 @@ export interface AgentMetrics {
   successRate: number;
   avgLatencyMs: number;
   lastCallAt: number | null;
+}
+
+export interface HubRoom extends Conversation {
+  roomId: string;
+  members: RoomMember[];
+  agents: Agent[];
+  revision?: number;
+  keyEpoch?: number;
 }
 
 // ===== API =====
@@ -125,7 +133,7 @@ export const api = {
   // Agents
   getAgents: (includeDisabled = false) =>
     request<Agent[]>(`/agents${includeDisabled ? "?includeDisabled=true" : ""}`),
-  getAgent: (id: string) => request<Agent>(`/agents/${id}`),
+  getAgent: (id: string, silent = false) => request<Agent>(`/agents/${id}`, undefined, silent),
   getUsersWithAgents: () =>
     request<UserWithAgents[]>("/users?includeAgents=true"),
   getAgentMetrics: (id: string) => request<AgentMetrics>(`/agents/${id}/metrics`, undefined, true),
@@ -311,11 +319,24 @@ export const api = {
       body: JSON.stringify(config),
     }),
   // Hub rooms
+  getHubRooms: () => request<Conversation[]>("/hub/rooms"),
+  getHubRoom: (id: string) =>
+    request<HubRoom>(`/hub/rooms/${encodeURIComponent(id)}`),
   createHubRoom: (name: string) =>
     request<{ roomId: string; name: string }>("/hub/rooms", {
       method: "POST",
       body: JSON.stringify({ name }),
     }),
+  addAgentToRoom: (roomId: string, agentId: string) =>
+    request<{ ok: boolean; agentId: string }>(`/hub/rooms/${encodeURIComponent(roomId)}/agents`, {
+      method: "POST",
+      body: JSON.stringify({ agentId }),
+    }),
+  removeAgentFromRoom: (roomId: string, agentId: string) =>
+    request<{ ok: boolean }>(
+      `/hub/rooms/${encodeURIComponent(roomId)}/agents/${encodeURIComponent(agentId)}`,
+      { method: "DELETE" },
+    ),
   inviteHubToRoom: (roomId: string, hubId: string) =>
     request<{ ok: boolean }>(`/hub/rooms/${encodeURIComponent(roomId)}/invite`, {
       method: "POST",

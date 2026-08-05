@@ -122,6 +122,8 @@
     "installed": "已安装",
     "failed": "安装失败",
     "success": "Agent 安装成功",
+    "added": "已添加",
+    "verificationFailed": "Agent 已添加，但暂时无法确认其状态，请刷新后重试。",
     "permissions": "权限",
     "homepage": "主页",
     "apiKey": "API 密钥",

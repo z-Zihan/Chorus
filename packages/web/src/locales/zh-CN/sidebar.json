@@ -49,6 +49,10 @@
   "collabStep2": "创建聊天室",
   "collabStep3": "邀请好友",
   "collabStep4": "添加你的 Agent",
+  "createNow": "立即创建",
+  "creatingRoom": "创建中…",
+  "defaultRoomName": "新聊天室",
+  "firstConversationWelcome": "欢迎！已为你创建第一个会话。",
   "addMyAgent": "添加我的 Agent",
   "addAgentToRoom": "添加 Agent 到聊天室",
   "selectAgentToAdd": "选择一个 Agent 加入聊天室"

@@ -38,6 +38,7 @@ interface ChatState {
   conversations: Conversation[];
   groupConversations: Conversation[];
   archivedConversations: Conversation[];
+  hasLoadedConversations: boolean;
   currentConversationId: string | null;
   targetMessageId: string | null;
   messages: Message[];
@@ -77,6 +78,7 @@ interface ChatState {
     type?: ConversationType,
   ) => Promise<void>;
   createGroupConversation: (title: string, agentIds: string[]) => Promise<void>;
+  createRoom: (name: string) => Promise<void>;
   syncConversation: (conversation: Conversation) => void;
   renameConversation: (id: string, title: string) => Promise<boolean>;
   togglePin: (id: string) => Promise<void>;
@@ -99,6 +101,7 @@ export const useChatStore = create<ChatState>((set, get) => {
     conversations: [],
     groupConversations: [],
     archivedConversations: [],
+    hasLoadedConversations: false,
     currentConversationId: null,
     targetMessageId: null,
     messages: [],
@@ -122,6 +125,7 @@ export const useChatStore = create<ChatState>((set, get) => {
           conversations: sortConversations(data),
           groupConversations: sortConversations(allGroups),
           archivedConversations: sortConversations(archived),
+          hasLoadedConversations: true,
         });
         // Auto-select first conversation if none selected
         const firstConversation = data[0] ?? allGroups[0];
@@ -130,6 +134,7 @@ export const useChatStore = create<ChatState>((set, get) => {
         }
       } catch (e) {
         logger.error("Failed to fetch conversations", e);
+        set({ hasLoadedConversations: true });
       }
     },
 
@@ -413,6 +418,23 @@ export const useChatStore = create<ChatState>((set, get) => {
         track("conversation_created", { conversationId: conv.id, type });
       } catch (error) {
         logger.error("Failed to create group conversation", error);
+      }
+    },
+
+    createRoom: async (name) => {
+      try {
+        const room = await api.createHubRoom(name);
+        await get().fetchConversations();
+        const conversation = get().groupConversations.find(
+          (item) => item.relayRoomId === room.roomId,
+        );
+        if (conversation) get().setCurrentConversation(conversation.id);
+        track("conversation_created", {
+          conversationId: conversation?.id ?? room.roomId,
+          type: "cross_hub",
+        });
+      } catch (error) {
+        logger.error("Failed to create Relay Room", error);
       }
     },
 

@@ -141,9 +141,17 @@ export const useCatalogStore = create<CatalogState>((set, get) => ({
         return;
       }
       const agent = await api.adoptDetection(detection.id);
+      try {
+        await api.getAgent(agent.id, true);
+      } catch (error) {
+        logger.error("Added agent could not be verified", error);
+        useUIStore.getState().addToast(i18n.t("catalog.verificationFailed"), "error");
+        await Promise.all([get().fetchCatalog(), useAgentStore.getState().fetchAgents()]);
+        return;
+      }
       await Promise.all([get().fetchCatalog(), useAgentStore.getState().fetchAgents()]);
       useAgentStore.getState().selectAgent(agent.id);
-      useUIStore.getState().addToast(i18n.t("catalog.success"), "success");
+      useUIStore.getState().addToast(i18n.t("catalog.added"), "success");
       set({ selectedEntry: null });
     } catch (error) {
       logger.error("Failed to adopt detected agent", error);

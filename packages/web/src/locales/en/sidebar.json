@@ -49,6 +49,10 @@
   "collabStep2": "Create a room",
   "collabStep3": "Invite friend",
   "collabStep4": "Add your Agent",
+  "createNow": "Create now",
+  "creatingRoom": "Creating…",
+  "defaultRoomName": "New Room",
+  "firstConversationWelcome": "Welcome! Your first conversation is ready.",
   "addMyAgent": "Add My Agent",
   "addAgentToRoom": "Add Agent to Room",
   "selectAgentToAdd": "Select an agent to add to this room"
