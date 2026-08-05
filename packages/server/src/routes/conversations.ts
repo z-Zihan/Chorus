@@ -254,12 +254,17 @@ export function registerConversationRoutes(
     const parsed = messageSchema.safeParse(req.body);
     if (!parsed.success)
       return reply.code(400).send({ error: "Invalid message", issues: parsed.error.flatten() });
-    await runtime.handleUserMessage(
-      req.params.id,
-      parsed.data.content,
-      parsed.data.mentionedAgents,
-      parsed.data.agentId,
-    );
+    try {
+      await runtime.handleUserMessage(
+        req.params.id,
+        parsed.data.content,
+        parsed.data.mentionedAgents,
+        parsed.data.agentId,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to send message";
+      return reply.code(400).send({ error: message });
+    }
     const latest = repository.listMessages(req.params.id, 1)[0];
     return reply.code(201).send(latest);
   });

@@ -118,7 +118,25 @@ export class AgentRuntime {
       ...new Set([...explicitMentions, ...parsed.mentionedAgents, ...mentionedByName]),
     ].filter((id) => conversation.agentIds.includes(id));
     if (explicitAgentId && !conversation.agentIds.includes(explicitAgentId)) {
-      throw new Error("Agent is not assigned to this conversation");
+      const errorMessage = createMessage({
+        conversationId,
+        fromType: "agent",
+        fromId: explicitAgentId,
+        content: "该 Agent 未加入此会话，请重新选择后再发送。",
+        status: "error",
+      });
+      this.repository.saveMessage(errorMessage);
+      this.events.publish(conversationId, { type: "message", message: errorMessage });
+      logger.warn(
+        { conversationId, explicitAgentId },
+        "Agent not assigned to conversation",
+      );
+      track("error", {
+        message: "Agent not assigned to conversation",
+        source: "agent_runtime",
+        agentId: explicitAgentId,
+      });
+      return;
     }
     // @mentions are A2A hints only — they do NOT determine routing.
     // Routing: explicitAgentId (from request) > first online agent (group) > first agent (DM)
