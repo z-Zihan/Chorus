@@ -177,7 +177,7 @@ export function InputBar() {
   return (
     <div className="border-t border-[var(--border-color)] bg-[var(--bg-surface)] px-4 py-3">
       <div className="flex items-end gap-3">
-        <div className="relative flex flex-1 items-end rounded-xl border border-[var(--border-color)] bg-[var(--bg-elevated)] px-4 py-2.5 focus-within:border-[var(--accent-color)]">
+        <div className="relative flex flex-1 items-end rounded-xl border border-[var(--border-color)] bg-[var(--bg-elevated)] px-4 focus-within:border-[var(--focus-ring)] focus-within:ring-2 focus-within:ring-[var(--focus-ring)]/35">
           {mentionQuery !== null &&
             currentConversation?.type === "group" &&
             mentionAgents.length > 0 && (
@@ -225,46 +225,56 @@ export function InputBar() {
               <div className="mx-2 h-6 w-px shrink-0 bg-[var(--border-color)]" />
             </>
           )}
-          {currentConversation?.type === "group" && (() => {
-            const routedAgent = selectedAgentIds.length > 0
-              ? agents.find((a) => a.id === selectedAgentIds[0])
-              : agents.find((a) =>
-                  currentConversation.agentIds.includes(a.id) &&
-                  !a.stale &&
-                  (a.ownerType === "remote" || a.status === "online" || a.status === "busy")
-                );
-            const displayName = routedAgent?.name ?? t("chat:noAgentAvailable");
-            return (
-              <span className="hidden shrink-0 items-center gap-1 text-[10px] text-[var(--text-tertiary)] sm:flex">
-                <span aria-hidden="true">→</span>
-                {displayName}
-              </span>
-            );
-          })()}
+          {currentConversation?.type === "group" &&
+            (() => {
+              const routedAgent =
+                selectedAgentIds.length > 0
+                  ? agents.find((a) => a.id === selectedAgentIds[0])
+                  : agents.find(
+                      (a) =>
+                        currentConversation.agentIds.includes(a.id) &&
+                        !a.stale &&
+                        (a.ownerType === "remote" || a.status === "online" || a.status === "busy"),
+                    );
+              const displayName = routedAgent?.name ?? t("chat:noAgentAvailable");
+              return (
+                <span className="hidden shrink-0 items-center gap-1 text-[10px] text-[var(--text-tertiary)] sm:flex">
+                  <span aria-hidden="true">→</span>
+                  {displayName}
+                </span>
+              );
+            })()}
           <textarea
             ref={textareaRef}
             value={input}
             onChange={handleInput}
             onKeyDown={handleKeyDown}
             rows={1}
-            placeholder={t("chat:inputPlaceholder")}
-            className="max-h-40 flex-1 resize-none bg-transparent text-sm text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none"
+            placeholder={t("chat:inputPlaceholderShort")}
+            aria-label={t("chat:messageInputLabel")}
+            className="min-h-11 max-h-40 flex-1 resize-none bg-transparent py-2.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none"
             disabled={isStreaming}
           />
         </div>
         {isStreaming ? (
-          <Button variant="danger" onClick={cancelStream} className="rounded-xl">
+          <Button
+            variant="danger"
+            onClick={cancelStream}
+            aria-label={t("common:buttons.stop")}
+            className="h-11 min-w-11 rounded-xl px-3 md:h-10"
+          >
             <Square aria-hidden="true" className="h-4 w-4 fill-current" />
-            {t("common:buttons.stop")}
+            <span className="hidden min-[360px]:inline">{t("common:buttons.stop")}</span>
           </Button>
         ) : (
           <Button
             onClick={handleSend}
             disabled={!input.trim() || !currentConversationId}
-            className="rounded-xl"
+            aria-label={t("common:buttons.send")}
+            className="h-11 min-w-11 rounded-xl px-3 md:h-10"
           >
             <Send aria-hidden="true" className="h-4 w-4" />
-            {t("common:buttons.send")}
+            <span className="hidden min-[360px]:inline">{t("common:buttons.send")}</span>
           </Button>
         )}
       </div>

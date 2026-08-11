@@ -1,12 +1,9 @@
 import type { AppConfig } from "@chorus/shared";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { TokenStore, tokenHasScope } from "../auth/token-store.js";
-import {
-  bearerToken,
-  isLoopbackRequest,
-  verifyAuthToken,
-} from "../middleware/auth.js";
+import { tokenHasScope } from "../auth/token-store.js";
+import type { TokenStore } from "../auth/token-store.js";
+import { bearerToken, isLoopbackRequest, verifyAuthToken } from "../middleware/auth.js";
 
 const DEFAULT_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1_000;
 const WS_TICKET_TTL_MS = 5 * 60 * 1_000;

@@ -20,10 +20,10 @@ function ErrorFallback({ error, onRetry }: { error: Error; onRetry: () => void }
     <div className="flex min-h-0 flex-1 items-center justify-center bg-[var(--bg-base)] p-6 text-[var(--text-primary)]">
       <div
         role="alert"
-        className="w-full max-w-md rounded-xl border border-red-900/60 bg-[var(--bg-surface)] p-6 text-center shadow-xl"
+        className="w-full max-w-md rounded-xl border border-[var(--status-error)]/40 bg-[var(--bg-surface)] p-6 text-center shadow-xl"
       >
         <h2 className="text-lg font-semibold">{t("errors:pageError")}</h2>
-        <p className="mt-2 break-words text-sm text-red-400">
+        <p className="mt-2 break-words text-sm text-[var(--status-error)]">
           {error.message || t("errors:unknown")}
         </p>
         <Button onClick={onRetry} className="mt-5">

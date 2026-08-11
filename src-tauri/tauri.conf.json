@@ -2,10 +2,10 @@
   "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/crates/tauri-config-schema/schema.json",
   "productName": "Chorus",
   "version": "0.1.0",
-  "identifier": "com.chorus.app",
+  "identifier": "com.chorus.desktop",
   "build": {
     "beforeDevCommand": "pnpm dev",
-    "beforeBuildCommand": "pnpm build",
+    "beforeBuildCommand": "pnpm build && pnpm tauri:prepare-sidecar",
     "devUrl": "http://localhost:5173",
     "frontendDist": "../packages/web/dist"
   },
@@ -35,16 +35,14 @@
   },
   "bundle": {
     "active": true,
-    "targets": [
-      "app",
-      "dmg",
-      "msi",
-      "nsis"
-    ],
+    "targets": ["app", "dmg", "msi", "nsis"],
     "resources": {
       "../packages/server/dist/": "packages/server/dist/",
+      "../packages/server/package.json": "packages/server/dist/package.json",
+      "runtime/node_modules/": "packages/server/dist/node_modules/",
       "../skills/": "skills/"
     },
+    "externalBin": ["binaries/chorus-node"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -56,24 +54,19 @@
       "nsis": {
         "installerIcon": "icons/icon.ico",
         "installMode": "perMachine",
-        "languages": [
-          "SimpChinese",
-          "English"
-        ],
+        "languages": ["SimpChinese", "English"],
         "displayLanguageSelector": true
       }
     },
-    "createUpdaterArtifacts": true
+    "createUpdaterArtifacts": false
   },
   "plugins": {
     "shell": {
       "open": true
     },
     "updater": {
-      "active": true,
-      "endpoints": [
-        "https://releases.chorus.app/{{target}}/{{arch}}/{{current_version}}"
-      ],
+      "active": false,
+      "endpoints": ["https://releases.chorus.app/{{target}}/{{arch}}/{{current_version}}"],
       "pubkey": ""
     }
   }

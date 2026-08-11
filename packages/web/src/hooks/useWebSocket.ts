@@ -26,6 +26,7 @@ export function useWebSocket() {
   const startA2AThread = useChatStore((s) => s.startA2AThread);
   const completeA2AThread = useChatStore((s) => s.completeA2AThread);
   const failA2AThread = useChatStore((s) => s.failA2AThread);
+  const updateA2ADelivery = useChatStore((s) => s.updateA2ADelivery);
   const requestA2AConfirmation = useChatStore((s) => s.requestA2AConfirmation);
   const setWebSocketSend = useChatStore((s) => s.setWebSocketSend);
   const currentConversationId = useChatStore((s) => s.currentConversationId);
@@ -91,7 +92,8 @@ export function useWebSocket() {
             !targetMessage ||
             targetMessage.conversationId !== chatState.currentConversationId ||
             chunk.threadId
-          ) break;
+          )
+            break;
           noteStreamActivity(messageId);
           if (chunk.type === "text") {
             appendStreamChunk(messageId, chunk.content);
@@ -106,7 +108,11 @@ export function useWebSocket() {
         }
 
         case "a2a_call":
-          if (!useChatStore.getState().messages.some((message) => message.id === `a2a-call-${event.eventId}`)) {
+          if (
+            !useChatStore
+              .getState()
+              .messages.some((message) => message.id === `a2a-call-${event.eventId}`)
+          ) {
             addMessage({
               id: `a2a-call-${event.eventId}`,
               conversationId: useChatStore.getState().currentConversationId ?? "",
@@ -138,19 +144,21 @@ export function useWebSocket() {
         case "a2a_response":
           {
             const chatState = useChatStore.getState();
-            const calls = chatState.messages.filter((message) =>
-              message.threadId === event.threadId && message.metadata?.a2aType === "call"
+            const calls = chatState.messages.filter(
+              (message) =>
+                message.threadId === event.threadId && message.metadata?.a2aType === "call",
             );
-            const call = [...calls].reverse().find(
-              (message) => message.toId === event.chunk.sourceAgentId
-            ) ?? calls.at(-1);
+            const call =
+              [...calls].reverse().find((message) => message.toId === event.chunk.sourceAgentId) ??
+              calls.at(-1);
             const responseId = `${call?.id ?? `a2a-${event.threadId}`}-response`;
             const existing = chatState.messages.find((message) => message.id === responseId);
-            const status: Message["status"] = event.chunk.type === "error"
-              ? "error"
-              : event.chunk.type === "done" || event.chunk.metadata?.status === "done"
-                ? "done"
-                : "streaming";
+            const status: Message["status"] =
+              event.chunk.type === "error"
+                ? "error"
+                : event.chunk.type === "done" || event.chunk.metadata?.status === "done"
+                  ? "done"
+                  : "streaming";
 
             if (!existing) {
               addMessage({
@@ -177,7 +185,8 @@ export function useWebSocket() {
         case "tool_call_start":
           startA2AThread({
             threadId: event.threadId,
-            conversationId: event.conversationId ?? useChatStore.getState().currentConversationId ?? "",
+            conversationId:
+              event.conversationId ?? useChatStore.getState().currentConversationId ?? "",
             parentMessageId: event.parentMessageId,
             from: event.from,
             to: event.to,
@@ -191,6 +200,13 @@ export function useWebSocket() {
 
         case "tool_call_error":
           failA2AThread(event.threadId, event.error);
+          break;
+
+        case "hub_delivery_status":
+          updateA2ADelivery(event.threadId, {
+            ...(event.transport ? { transport: event.transport } : {}),
+            ...(event.execution ? { execution: event.execution } : {}),
+          });
           break;
 
         case "agent_status":
@@ -212,6 +228,7 @@ export function useWebSocket() {
 
         case "error":
           logger.error("Server error", { message: event.message });
+          if (event.messageId) setMessageStatus(event.messageId, "error");
           track("error_occurred", { message: event.message, source: "websocket", lineno: 0 });
           break;
       }
@@ -228,11 +245,13 @@ export function useWebSocket() {
         reconnectDelay.current = RECONNECT_BASE;
         startHeartbeat();
         if (currentConversationId) {
-          ws.send(JSON.stringify({
-            type: "subscribe",
-            conversationId: currentConversationId,
-            lastEventId: lastEventId.current,
-          }));
+          ws.send(
+            JSON.stringify({
+              type: "subscribe",
+              conversationId: currentConversationId,
+              lastEventId: lastEventId.current,
+            }),
+          );
         }
         for (const event of pendingEvents.current.splice(0)) {
           ws.send(JSON.stringify(event));
@@ -244,7 +263,11 @@ export function useWebSocket() {
           handleEvent(JSON.parse(e.data));
         } catch (err) {
           logger.error("WebSocket message parse error", err);
-          track("error_occurred", { message: "WebSocket message parse error", source: "websocket", lineno: 0 });
+          track("error_occurred", {
+            message: "WebSocket message parse error",
+            source: "websocket",
+            lineno: 0,
+          });
         }
       };
 
@@ -277,6 +300,7 @@ export function useWebSocket() {
     startA2AThread,
     completeA2AThread,
     failA2AThread,
+    updateA2ADelivery,
     requestA2AConfirmation,
     setWebSocketSend,
     currentConversationId,

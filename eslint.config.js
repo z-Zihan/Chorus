@@ -28,6 +28,16 @@ module.exports = tseslint.config(
       },
     },
   },
+  {
+    files: ["**/*.mjs"],
+    languageOptions: {
+      sourceType: "module",
+      globals: {
+        console: "readonly",
+        process: "readonly",
+      },
+    },
+  },
   ...tseslint.configs.strict.map((config) => ({
     ...config,
     files: ["**/*.{ts,tsx}"],

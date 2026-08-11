@@ -6,9 +6,22 @@ import { setCredential } from "../credential-store.js";
 import type { Repository } from "../db/repository.js";
 import { logger } from "../utils/logger.js";
 
-const agentTypeSchema = z.enum(["openai", "openclaw", "dify", "cli", "mock", "custom", "langchain"]);
+const agentTypeSchema = z.enum([
+  "openai",
+  "openclaw",
+  "dify",
+  "cli",
+  "mock",
+  "custom",
+  "langchain",
+]);
 const createAgentSchema = z.object({
-  id: z.string().trim().min(1).max(64).regex(/^[\w-]+$/),
+  id: z
+    .string()
+    .trim()
+    .min(1)
+    .max(64)
+    .regex(/^[\w-]+$/),
   name: z.string().trim().min(1).max(100),
   description: z.string().trim().max(500).optional(),
   avatar: z.string().url().max(2_000).optional(),
@@ -16,12 +29,15 @@ const createAgentSchema = z.object({
   config: z.record(z.unknown()).default({}),
   capabilities: z.array(z.string().trim().min(1).max(100)).max(100).optional(),
 });
-const updateAgentSchema = createAgentSchema.pick({
-  name: true,
-  description: true,
-  avatar: true,
-  config: true,
-}).partial().extend({ disabled: z.boolean().optional() })
+const updateAgentSchema = createAgentSchema
+  .pick({
+    name: true,
+    description: true,
+    avatar: true,
+    config: true,
+  })
+  .partial()
+  .extend({ disabled: z.boolean().optional() })
   .refine((value) => Object.keys(value).length > 0, "At least one field is required");
 
 const booleanQuerySchema = z.enum(["true", "false"]).transform((value) => value === "true");
@@ -77,7 +93,8 @@ export function registerAgentRoutes(
       const userWithAgents = repository.getUserWithAgents(user.id);
       if (!userWithAgents) return { ...user, agentCount: 0 };
       if (parsed.data.includeAgents) return userWithAgents;
-      const { agents: _agents, ...userWithoutAgents } = userWithAgents;
+      const { agents, ...userWithoutAgents } = userWithAgents;
+      void agents;
       return userWithoutAgents;
     });
   });
@@ -130,10 +147,11 @@ export function registerAgentRoutes(
 
   app.post("/api/agents", async (req, reply) => {
     const parsed = createAgentSchema.safeParse(req.body);
-    if (!parsed.success) if (!parsed.success) {
-      logger.warn({ issues: parsed.error.flatten() }, "Invalid agent creation request");
-      return reply.code(400).send({ error: "Invalid Agent", issues: parsed.error.flatten() });
-    }
+    if (!parsed.success)
+      if (!parsed.success) {
+        logger.warn({ issues: parsed.error.flatten() }, "Invalid agent creation request");
+        return reply.code(400).send({ error: "Invalid Agent", issues: parsed.error.flatten() });
+      }
     if (registry.get(parsed.data.id)) {
       logger.warn({ agentId: parsed.data.id }, "Agent already exists");
       return reply.code(409).send({ error: "Agent already exists" });
@@ -144,7 +162,8 @@ export function registerAgentRoutes(
 
   app.patch<{ Params: { id: string } }>("/api/agents/:id", async (req, reply) => {
     const parsed = updateAgentSchema.safeParse(req.body);
-    if (!parsed.success) return reply.code(400).send({ error: "Invalid update", issues: parsed.error.flatten() });
+    if (!parsed.success)
+      return reply.code(400).send({ error: "Invalid update", issues: parsed.error.flatten() });
     const { disabled, ...updates } = parsed.data;
     const apiKey = updates.config?.apiKey;
     if (typeof apiKey === "string" && apiKey.trim()) {
@@ -167,7 +186,8 @@ export function registerAgentRoutes(
   });
 
   app.delete<{ Params: { id: string } }>("/api/agents/:id", async (req, reply) => {
-    if (!registry.get(req.params.id, true)) return reply.code(404).send({ error: "Agent not found" });
+    if (!registry.get(req.params.id, true))
+      return reply.code(404).send({ error: "Agent not found" });
     return { ok: await registry.unregisterAndDelete(req.params.id) };
   });
 

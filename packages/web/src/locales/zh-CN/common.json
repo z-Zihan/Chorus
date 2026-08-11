@@ -1,6 +1,9 @@
 {
   "appName": "Chorus",
   "loading": "加载中…",
+  "errors": {
+    "copyFailed": "无法写入剪贴板，请选中代码后手动复制。"
+  },
   "buttons": {
     "save": "保存",
     "saving": "保存中…",
@@ -69,6 +72,7 @@
     "selectAgents": "请选择至少两个在线 Agent"
   },
   "aria": {
+    "skipToContent": "跳到主要内容",
     "openSidebar": "打开侧栏",
     "closeSidebar": "关闭侧栏",
     "closeNotification": "关闭通知"
@@ -82,12 +86,16 @@
     "startDate": "开始日期",
     "endDate": "结束日期",
     "hint": "输入关键词搜索消息。",
-    "noResults": "未找到匹配的消息。"
+    "noResults": "未找到匹配的消息。",
+    "loadFailedTitle": "搜索暂时不可用",
+    "loadFailed": "无法搜索消息，请检查连接后重试。"
   },
   "export": {
     "title": "导出",
     "markdown": "导出为 Markdown",
-    "json": "导出为 JSON"
+    "json": "导出为 JSON",
+    "success": "会话已导出。",
+    "failed": "无法导出会话，请重试。"
   },
   "settings": {
     "title": "设置",
@@ -124,6 +132,12 @@
     "success": "Agent 安装成功",
     "added": "已添加",
     "verificationFailed": "Agent 已添加，但暂时无法确认其状态，请刷新后重试。",
+    "loadFailedTitle": "Agent 目录暂时不可用",
+    "loadFailed": "无法加载目录条目，安装状态未被更改。",
+    "installedLoadFailed": "无法加载已安装的 Agent，Chorus 不会将其误判为空列表。",
+    "noMatches": "没有符合当前筛选条件的 Agent。",
+    "updateFailed": "无法更改 Agent 状态，请重试。",
+    "deleteFailed": "无法删除 Agent，它仍保持已安装状态。",
     "permissions": "权限",
     "homepage": "主页",
     "apiKey": "API 密钥",
@@ -163,10 +177,18 @@
     },
     "notDetected": "未检测到该 CLI，请先安装",
     "detectedReady": "已检测到该 CLI，可直接添加",
+    "detected": "已检测到",
     "add": "添加"
   },
   "onboarding": {
     "bootstrapping": "正在初始化…",
+    "loadingSetup": "正在检查本机配置…",
+    "loadFailed": "Chorus 无法读取初始化状态。请确认本地服务正在运行，然后重试。",
+    "rescanFailed": "本次扫描未能完成，之前的检测结果仍会保留。",
+    "startFailed": "Chorus 无法启动这个 Agent，你的选择仍已保留，请重试。",
+    "retrySetup": "重新检查配置",
+    "rescanning": "正在扫描…",
+    "startingAgent": "正在启动…",
     "scanning": "正在检测已安装的 AI CLI…",
     "chooseAgent": "选择一个 Agent 开始",
     "useAgent": "使用此 Agent",

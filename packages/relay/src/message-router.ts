@@ -19,15 +19,18 @@ export class MessageRouter {
       const roomId = forwarded.to.slice("room:".length);
       const room = this.roomManager.getRoom(roomId);
       if (!room) throw new Error("Room not found");
+      if (!this.roomManager.isMember(roomId, forwarded.from)) {
+        throw new Error("Room membership required to send messages");
+      }
       let delivered = false;
       let queued = false;
       for (const member of this.roomManager.getMembers(roomId)) {
+        if (member.hubId === forwarded.from) continue;
         if (registry.isBlocked(forwarded.from, member.hubId)) continue;
+        offlineStore.store(forwarded, member.hubId);
         const socket = registry.getSocket(member.hubId);
-        if (!socket || !sendJson(socket, payload)) {
-          offlineStore.store(forwarded, member.hubId);
-          queued = true;
-        } else {
+        if (!socket || !sendJson(socket, payload)) queued = true;
+        else {
           delivered = true;
         }
       }
@@ -35,21 +38,14 @@ export class MessageRouter {
     }
 
     if (forwarded.to === "broadcast") {
-      let delivered = false;
-      for (const hub of registry.listOnline()) {
-        if (registry.isBlocked(forwarded.from, hub.hubId)) continue;
-        delivered = sendJson(hub.socket, payload) || delivered;
-      }
-      return delivered ? "delivered" : "blocked";
+      return "blocked";
     }
 
     if (registry.isBlocked(forwarded.from, forwarded.to)) return "blocked";
 
+    offlineStore.store(forwarded, forwarded.to);
     const recipient = registry.getSocket(forwarded.to);
-    if (!recipient || !sendJson(recipient, payload)) {
-      offlineStore.store(forwarded, forwarded.to);
-      return "queued";
-    }
+    if (!recipient || !sendJson(recipient, payload)) return "queued";
     return "delivered";
   }
 }

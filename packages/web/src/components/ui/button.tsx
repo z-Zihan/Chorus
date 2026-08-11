@@ -12,12 +12,12 @@ export const buttonVariants = cva(
           "border border-[var(--border-color)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]",
         ghost:
           "text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]",
-        danger: "bg-red-600 text-white hover:bg-red-500",
+        danger: "bg-[var(--status-error)] text-white hover:brightness-110",
       },
       size: {
-        sm: "h-8 px-3",
-        md: "h-10 px-4 py-2",
-        icon: "h-9 w-9 p-0",
+        sm: "h-11 px-3 sm:h-8",
+        md: "h-11 px-4 py-2 sm:h-10",
+        icon: "h-11 w-11 p-0 sm:h-9 sm:w-9",
       },
     },
     defaultVariants: {

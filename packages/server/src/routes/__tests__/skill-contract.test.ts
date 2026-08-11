@@ -352,45 +352,23 @@ describe("Chorus SKILL.md contract", () => {
 
   describe("Trust API", () => {
     it("returns the trusted Hub list", async () => {
-      const pair = await request(app.server).post("/api/trust/pair").send({ hubId: "hub-list" });
-      await request(app.server)
-        .post("/api/trust/confirm")
-        .send({ hubId: "hub-list", code: pair.body.code, nonce: pair.body.nonce, ephemeralPublicKey: pair.body.ephemeralPublicKey });
-
       const response = await request(app.server).get("/api/trust");
 
       expect(response.status).toBe(200);
-      expect(response.body).toEqual([
-        expect.objectContaining({ hubId: "hub-list", trustLevel: "trusted" }),
-      ]);
+      expect(response.body).toEqual([]);
     });
 
-    it("generates a pairing code for a Hub", async () => {
+    it("requires the live pairing service to create a pairing package", async () => {
       const response = await request(app.server)
         .post("/api/trust/pair")
         .send({ hubId: "hub-pair" });
 
-      expect(response.status).toBe(200);
-      expect(response.body).toEqual({
-        code: expect.stringMatching(/^\d{6}$/),
-        nonce: expect.any(String),
-        ephemeralPublicKey: expect.any(String),
-        sas: expect.stringMatching(/^\d{6}$/),
-      });
+      expect(response.status).toBe(503);
+      expect(response.body).toEqual({ error: "Pairing service is unavailable" });
     });
 
-    it("confirms a Hub pairing", async () => {
-      const pair = await request(app.server).post("/api/trust/pair").send({ hubId: "hub-confirm" });
-
-      const response = await request(app.server)
-        .post("/api/trust/confirm")
-        .send({ hubId: "hub-confirm", code: pair.body.code, nonce: pair.body.nonce, ephemeralPublicKey: pair.body.ephemeralPublicKey });
-
-      expect(response.status).toBe(200);
-      expect(response.body).toEqual({
-        success: true,
-        hub: expect.objectContaining({ hubId: "hub-confirm", trustLevel: "trusted" }),
-      });
+    it("removes the insecure self-confirmation endpoint", async () => {
+      expect((await request(app.server).post("/api/trust/confirm").send({})).status).toBe(404);
     });
 
     it("blocks a Hub", async () => {
@@ -407,10 +385,7 @@ describe("Chorus SKILL.md contract", () => {
     });
 
     it("removes a trusted Hub", async () => {
-      const pair = await request(app.server).post("/api/trust/pair").send({ hubId: "hub-remove" });
-      await request(app.server)
-        .post("/api/trust/confirm")
-        .send({ hubId: "hub-remove", code: pair.body.code, nonce: pair.body.nonce, ephemeralPublicKey: pair.body.ephemeralPublicKey });
+      await request(app.server).post("/api/trust/block").send({ hubId: "hub-remove" });
 
       const response = await request(app.server).delete("/api/trust/hub-remove");
 

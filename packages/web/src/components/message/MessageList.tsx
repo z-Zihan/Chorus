@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronDown, MessageSquare } from "lucide-react";
+import { AlertCircle, ChevronDown, MessageSquare, RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useChatStore, type Message } from "@/store/chatStore";
 import { useAgentStore } from "@/store/agentStore";
@@ -40,6 +40,8 @@ export function MessageList() {
   const messages = useChatStore((s) => s.messages);
   const a2aThreads = useChatStore((s) => s.a2aThreads);
   const isLoadingMessages = useChatStore((s) => s.isLoadingMessages);
+  const messagesError = useChatStore((s) => s.messagesError);
+  const fetchMessages = useChatStore((s) => s.fetchMessages);
   const isStreaming = useChatStore((s) => s.isStreaming);
   const currentConversationId = useChatStore((s) => s.currentConversationId);
   const conversations = useChatStore((s) => s.conversations);
@@ -169,15 +171,16 @@ export function MessageList() {
 
     const agent = agents.find((a) => a.id === msg.fromId);
     const isFirstFromAgent =
-      !previousTopLevelMessage
-      || previousTopLevelMessage.fromId !== msg.fromId
-      || previousTopLevelMessage.fromType !== msg.fromType;
+      !previousTopLevelMessage ||
+      previousTopLevelMessage.fromId !== msg.fromId ||
+      previousTopLevelMessage.fromType !== msg.fromType;
     const replies = repliesByParentId.get(msg.id) ?? [];
-    const attachedThreads = msg.fromType === "agent"
-      ? threadStates.filter(
-          (thread) => thread.parentMessageId === msg.id && !seenThreads.has(thread.threadId),
-        )
-      : [];
+    const attachedThreads =
+      msg.fromType === "agent"
+        ? threadStates.filter(
+            (thread) => thread.parentMessageId === msg.id && !seenThreads.has(thread.threadId),
+          )
+        : [];
 
     for (const thread of attachedThreads) seenThreads.add(thread.threadId);
 
@@ -244,8 +247,52 @@ export function MessageList() {
         className="h-full overflow-y-auto px-4 py-4 md:px-6"
       >
         <div className="mx-auto flex max-w-4xl flex-col gap-4">
+          {messagesError && messages.length > 0 && (
+            <div
+              role="alert"
+              className="flex items-center gap-3 rounded-xl border border-[var(--status-error)]/30 bg-[var(--status-error)]/5 px-3 py-2.5"
+            >
+              <AlertCircle
+                aria-hidden="true"
+                className="h-4 w-4 shrink-0 text-[var(--status-error)]"
+              />
+              <p className="min-w-0 flex-1 text-xs text-[var(--text-secondary)]">
+                {t("messageLoadFailed")}
+              </p>
+              <button
+                type="button"
+                onClick={() => currentConversationId && void fetchMessages(currentConversationId)}
+                className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-[var(--accent-hover)] hover:bg-[var(--bg-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-color)]"
+              >
+                {t("retry")}
+              </button>
+            </div>
+          )}
           {isLoadingMessages && messages.length === 0 ? (
             <MessageSkeletons label={t("loadingMessages")} />
+          ) : messagesError && messages.length === 0 ? (
+            <div
+              role="alert"
+              className="flex flex-col items-center justify-center py-24 text-center"
+            >
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--status-error)]/10 text-[var(--status-error)] ring-1 ring-[var(--status-error)]/20">
+                <AlertCircle aria-hidden="true" className="h-7 w-7" />
+              </div>
+              <p className="mt-4 text-sm font-medium text-[var(--text-primary)]">
+                {t("messageLoadFailedTitle")}
+              </p>
+              <p className="mt-1 max-w-sm text-xs leading-5 text-[var(--text-muted)]">
+                {t("messageLoadFailed")}
+              </p>
+              <button
+                type="button"
+                onClick={() => currentConversationId && void fetchMessages(currentConversationId)}
+                className="mt-4 inline-flex items-center gap-2 rounded-lg bg-[var(--accent-color)] px-3 py-2 text-sm font-medium text-[var(--accent-foreground)] hover:bg-[var(--accent-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-color)] focus-visible:ring-offset-2"
+              >
+                <RefreshCw aria-hidden="true" className="h-4 w-4" />
+                {t("retry")}
+              </button>
+            </div>
           ) : messages.length === 0 && Object.keys(a2aThreads).length === 0 && !isStreaming ? (
             <div className="flex flex-col items-center justify-center py-24 text-center">
               <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--bg-surface)] text-[var(--accent-hover)] ring-1 ring-[var(--border-color)]">

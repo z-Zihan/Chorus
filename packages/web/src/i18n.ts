@@ -44,6 +44,9 @@ function detectLanguage(): AppLanguage {
   return normalizeLanguage(import.meta.env.VITE_DEFAULT_LANG) ?? "zh-CN";
 }
 
+const initialLanguage = detectLanguage();
+if (typeof document !== "undefined") document.documentElement.lang = initialLanguage;
+
 void i18n.use(initReactI18next).init({
   resources: {
     "zh-CN": {
@@ -61,7 +64,7 @@ void i18n.use(initReactI18next).init({
       errors: enErrors,
     },
   },
-  lng: detectLanguage(),
+  lng: initialLanguage,
   fallbackLng: normalizeLanguage(import.meta.env.VITE_DEFAULT_LANG) ?? "zh-CN",
   supportedLngs: ["zh-CN", "en"],
   defaultNS: "common",
@@ -74,9 +77,16 @@ export function currentLanguage(): AppLanguage {
   return normalizeLanguage(i18n.resolvedLanguage ?? i18n.language) ?? "zh-CN";
 }
 
-export async function changeLanguage(language: AppLanguage): Promise<void> {
-  localStorage.setItem(LANGUAGE_STORAGE_KEY, language);
+export async function changeLanguage(language: AppLanguage): Promise<boolean> {
+  let persisted = true;
+  try {
+    localStorage.setItem(LANGUAGE_STORAGE_KEY, language);
+  } catch {
+    persisted = false;
+  }
   await i18n.changeLanguage(language);
+  document.documentElement.lang = language;
+  return persisted;
 }
 
 export default i18n;

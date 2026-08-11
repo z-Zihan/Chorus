@@ -5,10 +5,12 @@ import { TrustStore } from "../../hub/trust-store.js";
 import { registerTrustRoutes } from "../trust.js";
 
 describe("trust routes", () => {
-  const trustStore = new TrustStore();
-  const app = Fastify({ logger: false });
+  let trustStore: TrustStore;
+  let app: ReturnType<typeof Fastify>;
 
   beforeEach(async () => {
+    trustStore = new TrustStore();
+    app = Fastify({ logger: false });
     registerTrustRoutes(app, trustStore);
     await app.ready();
   });
@@ -17,24 +19,18 @@ describe("trust routes", () => {
     await app.close();
   });
 
-  it("pairs, retrieves, lists, blocks, and removes a Hub", async () => {
+  it("does not expose the retired self-confirming pairing route", async () => {
     const pair = await request(app.server).post("/api/trust/pair").send({ hubId: "hub-api" });
-    expect(pair.status).toBe(200);
-    expect(pair.body.code).toMatch(/^\d{6}$/);
-    expect(Buffer.from(pair.body.nonce, "base64url")).toHaveLength(16);
-    expect(pair.body.ephemeralPublicKey).toEqual(expect.any(String));
-    expect(pair.body.sas).toMatch(/^\d{6}$/);
+    expect(pair.status).toBe(503);
+    expect((await request(app.server).post("/api/trust/confirm").send({})).status).toBe(404);
+  });
 
-    const confirm = await request(app.server)
-      .post("/api/trust/confirm")
-      .send({
-        hubId: "hub-api",
-        code: pair.body.code,
-        nonce: pair.body.nonce,
-        ephemeralPublicKey: pair.body.ephemeralPublicKey,
-      });
-    expect(confirm.status).toBe(200);
-    expect(confirm.body.hub.trustLevel).toBe("trusted");
+  it("retrieves, lists, blocks, and removes a mutually paired Hub", async () => {
+    trustStore.completePairing("hub-api", {
+      userId: "usr_api",
+      userName: "API User",
+      userPublicKey: "a".repeat(64),
+    });
 
     expect((await request(app.server).get("/api/trust")).body).toHaveLength(1);
     expect((await request(app.server).get("/api/trust/hub-api")).body.hubId).toBe("hub-api");

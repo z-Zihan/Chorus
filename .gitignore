@@ -15,5 +15,7 @@ src-tauri/gen/
 .DS_Store
 packages/server/build/
 src-tauri/Cargo.lock
+src-tauri/binaries/chorus-node-*
+src-tauri/runtime/
 packages/relay/data/
 data/hub-keypair.json

@@ -1,12 +1,6 @@
 import type { HubEnvelope } from "@chorus/shared";
 
-export type DeliveryStatus =
-  | "queued"
-  | "delivered"
-  | "accepted"
-  | "denied"
-  | "done"
-  | "error";
+export type DeliveryStatus = "queued" | "delivered" | "accepted" | "denied" | "done" | "error";
 
 export interface OfflineMessage {
   id: string;
@@ -80,9 +74,9 @@ export class OfflineStore {
     return [...this.messages.values()]
       .filter(
         (message) =>
-          message.toHubId === hubId
-          && message.expiresAt > this.now()
-          && (message.status === "queued" || message.status === "delivered"),
+          message.toHubId === hubId &&
+          message.expiresAt > this.now() &&
+          (message.status === "queued" || message.status === "delivered"),
       )
       .sort((left, right) => left.queuedAt - right.queuedAt);
   }
@@ -102,5 +96,10 @@ export class OfflineStore {
   /** Check if a message with this envelope ID is already known. */
   has(messageId: string): boolean {
     return this.messages.has(messageId);
+  }
+
+  get(messageId: string): OfflineMessage | undefined {
+    const message = this.messages.get(messageId);
+    return message ? { ...message, envelope: { ...message.envelope } } : undefined;
   }
 }

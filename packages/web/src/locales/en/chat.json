@@ -1,5 +1,11 @@
 {
+  "messageInputLabel": "Message",
+  "inputPlaceholderShort": "Type a message…",
   "chooseConversation": "Select a conversation to start chatting",
+  "workspaceReadyTitle": "Your conversations, in one place",
+  "workspaceReadyDescription": "Start a focused chat, bring several agents into a group, or continue a recent conversation from the sidebar.",
+  "configureAgent": "Configure an agent",
+  "browseConversations": "Browse conversations",
   "participatingAgents": "Participating agents",
   "agentSelector": {
     "label": "Choose an agent",
@@ -17,24 +23,51 @@
   "defaultConversationTitle": "Direct message: My Agent",
   "inputPlaceholder": "Type a message… (Enter to send, Shift+Enter for a new line)",
   "loadingMessages": "Loading messages",
+  "messageLoadFailedTitle": "Messages are unavailable",
+  "messageLoadFailed": "This conversation could not be loaded. Try again without losing your place.",
+  "retry": "Retry",
   "emptyTitle": "Start your first conversation",
   "emptyDescription": "Type a message below and say hello to your Agent",
   "newMessages": "New messages",
   "expandMessage": "Show more",
   "collapseMessage": "Show less",
   "partialMessage": "Incomplete message (stream interrupted)",
+  "messageSending": "Sending…",
+  "messageSendFailed": "Could not send",
+  "statusFixture": {
+    "eyebrow": "Quiet Signal",
+    "title": "Message status",
+    "description": "Local sending, Relay transport, and target execution are separate. Delivery does not mean the Agent has completed."
+  },
   "a2aChain": "A2A call chain",
   "a2aRunning": "Running",
   "a2aCompleted": "Completed",
   "a2aFailed": "Failed",
   "a2aCancel": "Cancel call",
   "a2aCancelled": "A2A call cancelled",
+  "hubDelivery": {
+    "transport": "Transport",
+    "execution": "Execution",
+    "transportStatus": {
+      "queued": "Queued at Relay",
+      "delivered": "Received by device",
+      "failed": "Delivery failed"
+    },
+    "executionStatus": {
+      "accepted": "Accepted",
+      "denied": "Denied",
+      "done": "Completed",
+      "error": "Failed"
+    }
+  },
   "a2aForwardedMessage": "forwarded message",
   "unknownAgent": "Unknown Agent",
   "a2aMode": {
     "title": "A2A Mode",
     "description": "Control how agents communicate with each other",
     "label": "A2A: {{mode}}",
+    "unavailable": "A2A mode unavailable",
+    "loadFailed": "A2A mode could not be verified. Chorus will not assume a default permission.",
     "mention": {
       "label": "@Mention",
       "description": "Agent replies with @other agent → auto-forward"
@@ -58,7 +91,8 @@
     "title": "Confirm A2A call",
     "description": "{{from}} wants to call {{to}}. Allow this call?",
     "approve": "Allow",
-    "deny": "Deny"
+    "deny": "Deny",
+    "submitFailed": "The decision could not be sent. This request remains open so you can retry."
   },
   "a2aMessages_one": "{{count}} message",
   "a2aMessages_other": "{{count}} messages",
@@ -73,6 +107,21 @@
   "members": "Members",
   "humanMembers": "Human members",
   "agentMembers": "Agent members",
+  "inviteContacts": "Invite contacts",
+  "awaitingAcceptance": "Awaiting acceptance",
+  "roomInviteSent": "Room invitation sent. The contact will not join until they accept.",
+  "roomInviteFailed": "The Room invitation could not be sent. The contact was not added.",
+  "membersLoadFailed": "Members could not be loaded. Existing names shown here may be stale.",
+  "inviteContextFailed": "Invitation permissions and contacts could not be verified, so inviting remains disabled.",
+  "noHumanMembers": "No verified human members.",
+  "noAgentMembers": "No Agents in this conversation.",
+  "memberAdded": "Agent added to the conversation",
+  "memberRemoved": "Agent removed from the conversation",
+  "addMemberFailed": "The Agent could not be added. No membership was changed.",
+  "removeMemberFailed": "The Agent could not be removed. Membership was not changed.",
+  "removeMemberTitle": "Remove this Agent?",
+  "removeMemberMessage": "{{name}} will stop participating in new messages in this conversation. Existing messages remain.",
+  "removingMember": "Removing…",
   "relayDisconnected": "Relay disconnected. Reconnecting...",
   "relayError": "Relay connection error",
   "a2aTooltipFirst": "Agents can collaborate here. Click to switch A2A mode: @Mention, Sync Call, or Off."

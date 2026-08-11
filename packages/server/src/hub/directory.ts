@@ -81,7 +81,8 @@ export class DirectoryService {
 
   /** Sign a manifest with the User private key. */
   signManifest(manifest: DirectoryManifest, privateKey: string): DirectoryManifest {
-    const { signature: _signature, ...unsigned } = manifest;
+    const { signature, ...unsigned } = manifest;
+    void signature;
     return { ...unsigned, signature: signData(privateKey, unsigned) };
   }
 

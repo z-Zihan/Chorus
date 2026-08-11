@@ -1,5 +1,5 @@
 import type { HubEnvelope } from "@chorus/shared";
-import { asc, eq, lte, sql } from "drizzle-orm";
+import { and, asc, eq, lte, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import type { DatabaseContext } from "./db/index.js";
 import { offlineMessages } from "./db/schema.js";
@@ -23,13 +23,27 @@ export class OfflineStore {
     }
     const now = Date.now();
     this.database.sqlite.transaction(() => {
-      this.database.db.insert(offlineMessages).values({
-        id: nanoid(),
-        toHubId,
-        envelope: serializedEnvelope,
-        createdAt: now,
-        expiresAt: now + this.retentionMs,
-      }).run();
+      const existing = this.database.db
+        .select({ id: offlineMessages.id })
+        .from(offlineMessages)
+        .where(
+          and(
+            eq(offlineMessages.toHubId, toHubId),
+            sql`json_extract(${offlineMessages.envelope}, '$.id') = ${envelope.id}`,
+          ),
+        )
+        .get();
+      if (existing) return;
+      this.database.db
+        .insert(offlineMessages)
+        .values({
+          id: nanoid(),
+          toHubId,
+          envelope: serializedEnvelope,
+          createdAt: now,
+          expiresAt: now + this.retentionMs,
+        })
+        .run();
       this.trimExcessForHub(toHubId);
     })();
   }
@@ -51,12 +65,46 @@ export class OfflineStore {
   }
 
   /** Delete a persisted envelope only after transport delivery succeeds. */
-  ackMessage(messageId: string): number {
-    if (!messageId) return 0;
+  ackMessage(messageId: string, toHubId: string): number {
+    if (!messageId || !toHubId) return 0;
     return this.database.db
       .delete(offlineMessages)
-      .where(sql`json_extract(${offlineMessages.envelope}, '$.id') = ${messageId}`)
+      .where(
+        and(
+          eq(offlineMessages.toHubId, toHubId),
+          sql`json_extract(${offlineMessages.envelope}, '$.id') = ${messageId}`,
+        ),
+      )
       .run().changes;
+  }
+
+  getEnvelope(messageId: string, toHubId: string): HubEnvelope | undefined {
+    const row = this.database.db
+      .select({ envelope: offlineMessages.envelope })
+      .from(offlineMessages)
+      .where(
+        and(
+          eq(offlineMessages.toHubId, toHubId),
+          sql`json_extract(${offlineMessages.envelope}, '$.id') = ${messageId}`,
+        ),
+      )
+      .get();
+    if (!row) return undefined;
+    try {
+      return JSON.parse(row.envelope) as HubEnvelope;
+    } catch {
+      return undefined;
+    }
+  }
+
+  hasMessage(messageId: string): boolean {
+    return Boolean(
+      this.database.db
+        .select({ id: offlineMessages.id })
+        .from(offlineMessages)
+        .where(sql`json_extract(${offlineMessages.envelope}, '$.id') = ${messageId}`)
+        .get(),
+    );
   }
 
   cleanupExpired(): number {
@@ -74,7 +122,9 @@ export class OfflineStore {
   }
 
   private trimExcessForHub(hubId: string): number {
-    return this.database.sqlite.prepare(`
+    return this.database.sqlite
+      .prepare(
+        `
       DELETE FROM offline_messages
       WHERE id IN (
         SELECT id
@@ -83,6 +133,8 @@ export class OfflineStore {
         ORDER BY created_at DESC, rowid DESC
         LIMIT -1 OFFSET ?
       )
-    `).run(hubId, this.maxMessagesPerHub).changes;
+    `,
+      )
+      .run(hubId, this.maxMessagesPerHub).changes;
   }
 }

@@ -39,16 +39,14 @@ export class HubIdentity {
 
   /** Full Hub ID = Ed25519 public key hex */
   get hubId(): string {
-    if (!this.publicKey) throw new Error("Hub identity not initialized — call getOrCreateKeypair() first");
+    if (!this.publicKey)
+      throw new Error("Hub identity not initialized — call getOrCreateKeypair() first");
     return this.publicKey;
   }
 
   /** SHA-256 fingerprint of the raw Ed25519 public key, truncated to 128 bits. */
   getFingerprint(): string {
-    return createHash("sha256")
-      .update(Buffer.from(this.hubId, "hex"))
-      .digest("hex")
-      .slice(0, 32);
+    return createHash("sha256").update(Buffer.from(this.hubId, "hex")).digest("hex").slice(0, 32);
   }
 
   getPublicKey(): string {
@@ -101,7 +99,9 @@ export class HubIdentity {
   }
 
   private async writePublicKeyFile(file: HubKeypairFile | null, publicKey: string): Promise<void> {
-    const { secretKey: _secretKey, publicKey: _publicKey, ...metadata } = file ?? {};
+    const { secretKey, publicKey: storedPublicKey, ...metadata } = file ?? {};
+    void secretKey;
+    void storedPublicKey;
     const contents = JSON.stringify({ publicKey, ...metadata }, null, 2);
     const directory = dirname(this.keypairPath);
     const temporaryPath = `${this.keypairPath}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`;

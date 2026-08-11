@@ -64,7 +64,9 @@ export class AgentRegistry {
   ) {
     this.persistence = new AgentPersistence(repository);
     this.repository.setAgentStatusResolver((agentId) => this.getStatus(agentId));
-    relayClient?.onPresence((hubId, status) => this.setHubPresence(hubId, status));
+    relayClient?.onPresence((hubId, status, publicKey, displayName) => {
+      this.setHubPresence(hubId, status, publicKey ?? hubId, displayName);
+    });
     relayClient?.onRoomMembers((roomId, members) => {
       this.clearRemoteAgentsForRoom(roomId);
       for (const member of members) {

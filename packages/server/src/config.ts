@@ -18,6 +18,7 @@ export function resolveAppDataDir(): string {
 
 function defaultConfig(): AppConfig {
   return {
+    host: "127.0.0.1",
     port: 3210,
     dbPath: join(resolveAppDataDir(), "chorus.db"),
     cors: { origin: ["http://localhost:5173", "http://127.0.0.1:5173"] },
@@ -28,12 +29,29 @@ function defaultConfig(): AppConfig {
 }
 
 function applyEnvOverrides(config: AppConfig): AppConfig {
+  const host = process.env.SERVER_HOST?.trim() || config.host || "127.0.0.1";
   const envPort = Number.parseInt(process.env.SERVER_PORT ?? "", 10);
-  const port = Number.isInteger(envPort) && envPort > 0 && envPort <= 65_535
-    ? envPort
-    : config.port;
+  const port =
+    Number.isInteger(envPort) && envPort > 0 && envPort <= 65_535 ? envPort : config.port;
   const dbPath = process.env.SERVER_DB_PATH?.trim() || config.dbPath;
-  return { ...config, port, dbPath };
+  const resolved = { ...config, host, port, dbPath };
+  assertSafeNetworkConfig(resolved);
+  return resolved;
+}
+
+export function assertSafeNetworkConfig(config: AppConfig): void {
+  const host = config.host?.trim().toLowerCase() || "127.0.0.1";
+  const loopback =
+    host === "localhost" ||
+    host === "::1" ||
+    host === "[::1]" ||
+    /^127(?:\.\d{1,3}){3}$/u.test(host);
+  if (!loopback && !config.auth.enabled) {
+    throw new Error(
+      `Refusing to expose the Chorus API on ${host} while authentication is disabled. ` +
+        "Enable auth and configure a client token, or bind SERVER_HOST to 127.0.0.1.",
+    );
+  }
 }
 
 function locateConfig(): string | undefined {
@@ -79,7 +97,11 @@ export async function loadConfig(): Promise<LoadedConfig> {
   const defaults = defaultConfig();
   const configPath = locateConfig();
   if (!configPath) {
-    return { config: applyEnvOverrides(defaults), rootDir: process.cwd(), source: "defaults" };
+    return {
+      config: applyEnvOverrides(defaults),
+      rootDir: resolveAppDataDir(),
+      source: "defaults",
+    };
   }
 
   return loadConfigFile(configPath);

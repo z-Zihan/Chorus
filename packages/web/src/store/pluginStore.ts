@@ -13,21 +13,23 @@ export interface PluginInfo {
 interface PluginState {
   plugins: PluginInfo[];
   isLoading: boolean;
+  loadError: boolean;
   fetchPlugins: () => Promise<void>;
 }
 
 export const usePluginStore = create<PluginState>((set) => ({
   plugins: [],
   isLoading: false,
+  loadError: false,
 
   fetchPlugins: async () => {
-    set({ isLoading: true });
+    set({ isLoading: true, loadError: false });
     try {
-      const plugins = await api.getPlugins();
-      set({ plugins, isLoading: false });
+      const plugins = await api.getPlugins(true);
+      set({ plugins, isLoading: false, loadError: false });
     } catch (e) {
       logger.error("Failed to fetch plugins", e);
-      set({ isLoading: false });
+      set({ isLoading: false, loadError: true });
     }
   },
 }));

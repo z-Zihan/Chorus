@@ -425,13 +425,13 @@ Publishing is explicit and scope-bound. Receivers verify and register atomically
 
 ### 7.2 配对流程 / Pairing flow
 
-1. 发起方输入对方完整 Hub ID，生成至少 128 bit 的随机 `nonce` 和一次性配对码；双方交换完整 Hub ID，排序时按其 UTF-8 byte lexicographic order。
-2. 配对码必须作为 SPAKE2 的 password 输入，不得直接当作认证 token。SPAKE2 transcript 必须绑定排序后的两个完整 Hub ID、`nonce` 和双方密钥交换消息；双方以 PAKE 导出的确认密钥验证完整 transcript，任一 key confirmation 失败即终止配对。
-3. 双方计算 6 位数字 SAS：`digest = SHA-256(JCS({ hubIds: sort([hubIdA, hubIdB]), nonce }))`，`SAS = zeroPad6(OS2IP(digest) mod 1_000_000)`。这就是 `SHA-256(bothHubIds sorted + nonce)` 的 6 位十进制表示；必须保留前导零。
-4. 双方通过可信带外渠道逐位核对 SAS，并核验 User key 以及 32 hex 字符（128 bit）的 Hub 指纹、challenge 和有效期。SAS 不一致、SPAKE2 key confirmation 失败或指纹不匹配均必须拒绝，且不得保存部分信任状态。
+1. 发起方输入对方完整 Hub ID，生成 256 bit 一次性秘密、128 bit `nonce`、session ID 和 10 分钟有效期，并把完整配对包通过可信带外渠道交给指定 Hub。
+2. 双方配对帧由各自长期 Ed25519 Hub 私钥签名，并用双方 Ed25519→X25519 身份经 `crypto_box` 端到端加密；HMAC transcript 绑定 session、nonce、消息方向和两个完整 Hub ID。秘密替换、签名错误、错目标、回放或过期均失败关闭。
+3. 双方计算 6 位数字 SAS：`digest = HMAC-SHA-256(secret, JCS({ sessionId, hubIds: sort([hubIdA, hubIdB]), nonce }))`，`SAS = zeroPad6(OS2IP(digest) mod 1_000_000)`，必须保留前导零。
+4. 双方验证远端 User Card 的独立 Ed25519 签名，再通过可信带外渠道逐位核对 SAS。双方各自明确批准前，任一端都不得进入 `trusted`。
 5. 全部验证通过后双方保存 Contact 和信任记录；公钥变化必须重新配对。结果只显示头像、名称、32 字符 Hub 指纹和 presence；远端 Agent 数必须仍为 0。
 
-The initiator supplies the peer's full Hub ID and creates a random nonce of at least 128 bits plus a one-time pairing code. The code is the SPAKE2 password, and the PAKE transcript binds both sorted full Hub IDs, the nonce, and both key-exchange messages; both sides MUST complete key confirmation. They then compute `zeroPad6(OS2IP(SHA-256(JCS({ hubIds: sort([hubIdA, hubIdB]), nonce }))) mod 1_000_000)` and compare the six-digit SAS through a trusted out-of-band channel, including leading zeroes, while checking the User key and full 32-hex-character Hub fingerprint. Any mismatch fails closed. Successful pairing creates only a contact; it does not discover, register, or authorize any Agent.
+The initiator creates a target-bound package containing a 256-bit one-time secret, nonce, session ID, and ten-minute expiry. Pairing frames are Ed25519-signed, encrypted with the established Hub identities, and HMAC-bound to the complete transcript. Both sides verify independently signed User Cards, compare the same secret-derived six-digit SAS, and explicitly approve. Any mismatch, replay, wrong target, or expiry fails closed. Successful pairing creates only a contact; it does not discover, register, or authorize any Agent.
 
 ### 7.3 联系人授予与不授予的能力 / What a contact grants—and does not grant
 
@@ -804,7 +804,7 @@ Each participant explicitly brings only their own eligible agents into the room.
 | 状态 / State | 用户动作 / User action |
 |---|---|
 | Relay 地址不可达 / Relay unreachable | 检查公网/LAN 可达性、TLS 与防火墙 / Check reachability, TLS, and firewall |
-| 配对码错误或过期 / Pairing code invalid/expired | 重新生成并核验指纹 / Generate a new code and verify fingerprints |
+| 配对包错误或过期 / Pairing package invalid/expired | 重新生成配对包并核验 SAS/指纹 / Generate a new package and verify SAS/fingerprints |
 | 邀请待接受 / Invitation pending | 等待对方明确接受 / Wait for explicit acceptance |
 | Agent 未入房 / Agent not in room | 请所有者添加其 Agent / Ask the owner to add the agent |
 | 等待确认 / Awaiting confirmation | 由目标所有者批准或拒绝 / Target owner approves or denies |
@@ -840,8 +840,9 @@ Local Hub 执行 Contact、owner、role、visibility、permission 和本地会�
 |---|---|---|
 | PATCH | `/api/hub/config` | 验证并持久化 Relay 配置；异步连接 / Validate and persist Relay config, then connect asynchronously |
 | GET | `/api/hub/status` | 返回连接状态、路径、延迟与最近错误 / Return connection state, path, latency, and latest error |
-| POST | `/api/contacts/pairing-requests` | 按 Hub ID 创建一次性配对请求；不请求目录 / Create one-time pairing request without directory access |
-| POST | `/api/contacts/pairing-requests/:id/confirm` | 校验配对码/指纹并创建 Contact / Verify code/fingerprints and create contact |
+| POST | `/api/trust/pair` | 按 Hub ID 创建目标绑定的一次性配对包；不请求目录 / Create a target-bound one-time package without directory access |
+| POST | `/api/trust/pairing-sessions/accept` | 接收配对包并开始双向确认 / Accept a package and begin mutual confirmation |
+| POST | `/api/trust/pairing-sessions/:id/approve` | SAS 核对后批准；双方批准才创建 Contact / Approve after SAS comparison; both sides are required |
 | GET | `/api/contacts` | 只列最小 Contact Card 和 presence / List minimal contact cards and presence |
 | POST | `/api/rooms` | 创建 `direct`/`group` Room 与 `type=room` 会话 / Create room and local room conversation |
 | POST | `/api/rooms/:id/invitations` | 管理员邀请已配对联系人 / Admin invites a paired contact |

@@ -61,6 +61,7 @@ interface CatalogState {
   selectedEntry: CatalogEntry | null;
   installation: InstallationStatus | null;
   isLoading: boolean;
+  loadError: boolean;
   fetchCatalog: () => Promise<void>;
   selectEntry: (entry: CatalogEntry | null) => void;
   installAgent: (entryId: string, options?: InstallOptions) => Promise<void>;
@@ -75,21 +76,23 @@ export const useCatalogStore = create<CatalogState>((set, get) => ({
   selectedEntry: null,
   installation: null,
   isLoading: false,
+  loadError: false,
 
   fetchCatalog: async () => {
-    set({ isLoading: true });
+    set({ isLoading: true, loadError: false });
     try {
-      const entries = await api.getCatalog();
+      const entries = await api.getCatalog(true);
       set((state) => ({
         entries,
         selectedEntry: state.selectedEntry
-          ? entries.find((entry) => entry.id === state.selectedEntry?.id) ?? null
+          ? (entries.find((entry) => entry.id === state.selectedEntry?.id) ?? null)
           : null,
         isLoading: false,
+        loadError: false,
       }));
     } catch (error) {
       logger.error("Failed to fetch catalog", error);
-      set({ isLoading: false });
+      set({ isLoading: false, loadError: true });
     }
   },
 

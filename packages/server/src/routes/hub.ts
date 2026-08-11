@@ -12,13 +12,6 @@ import type { RelayClient } from "../hub/relay-client.js";
 const HUB_CONFIG_SETTING_KEY = "hub.config";
 const P2P_DISMISSED_SETTING_KEY = "hub.p2p.dismissed";
 
-interface PersistedHubConfig {
-  displayName?: string;
-  relayUrl?: string;
-  p2pEnabled?: boolean;
-  p2pPort?: number;
-}
-
 interface RoutableP2PListener extends P2PListener {
   listeningPort?: number;
 }
@@ -33,19 +26,9 @@ export interface HubRouteDependencies {
   connect: () => Promise<void>;
 }
 
-export function registerHubRoutes(
-  app: FastifyInstance,
-  dependencies: HubRouteDependencies,
-): void {
-  const {
-    identity,
-    repository,
-    relayClient,
-    registry,
-    connectionManager,
-    hubConfig,
-    connect,
-  } = dependencies;
+export function registerHubRoutes(app: FastifyInstance, dependencies: HubRouteDependencies): void {
+  const { identity, repository, relayClient, registry, connectionManager, hubConfig, connect } =
+    dependencies;
 
   const savedConfig = parseObject(repository.getSetting(HUB_CONFIG_SETTING_KEY));
   applyPersistedConfig(hubConfig, savedConfig);
@@ -55,9 +38,8 @@ export function registerHubRoutes(
   );
   const approvedHubIds = new Set<string>();
   const discoveredPeers = new Map<string, P2PDiscoveredHub>();
-  const listener = (
-    connectionManager as unknown as { p2pListener: RoutableP2PListener }
-  ).p2pListener;
+  const listener = (connectionManager as unknown as { p2pListener: RoutableP2PListener })
+    .p2pListener;
 
   // P2P discovery is owned by the server bootstrap. Intercept its listener calls here so
   // discovery remains passive until the user approves a device through the API.
@@ -94,9 +76,10 @@ export function registerHubRoutes(
   }));
 
   app.patch("/api/hub/config", async (request, reply) => {
-    const body = typeof request.body === "object" && request.body !== null
-      ? request.body as Record<string, unknown>
-      : {};
+    const body =
+      typeof request.body === "object" && request.body !== null
+        ? (request.body as Record<string, unknown>)
+        : {};
     const nextConfig = configResponse();
     if (body.displayName !== undefined) {
       if (typeof body.displayName !== "string" || !body.displayName.trim()) {
@@ -117,7 +100,11 @@ export function registerHubRoutes(
       nextConfig.p2pEnabled = body.p2pEnabled;
     }
     if (body.p2pPort !== undefined) {
-      if (!Number.isInteger(body.p2pPort) || (body.p2pPort as number) < 1 || (body.p2pPort as number) > 65_535) {
+      if (
+        !Number.isInteger(body.p2pPort) ||
+        (body.p2pPort as number) < 1 ||
+        (body.p2pPort as number) > 65_535
+      ) {
         return reply.code(400).send({ error: "p2pPort must be an integer between 1 and 65535" });
       }
       nextConfig.p2pPort = body.p2pPort as number;
@@ -131,12 +118,12 @@ export function registerHubRoutes(
     return configResponse();
   });
 
-  const listDiscovered = () => [...discoveredPeers.values()]
-    .filter((hub) => (
-      !dismissedHubIds.has(hub.hubId)
-      && !connectionManager.isP2PAvailable(hub.hubId)
-    ))
-    .map(({ hubId, displayName }) => ({ hubId, displayName }));
+  const listDiscovered = () =>
+    [...discoveredPeers.values()]
+      .filter(
+        (hub) => !dismissedHubIds.has(hub.hubId) && !connectionManager.isP2PAvailable(hub.hubId),
+      )
+      .map(({ hubId, displayName }) => ({ hubId, displayName }));
 
   app.get("/api/hub/p2p/discovered", async () => listDiscovered());
 
@@ -179,20 +166,16 @@ export function registerHubRoutes(
   });
 
   app.get("/api/hub/p2p/status", async () => {
-    const knownHubs = new Map(
-      registry.getKnownHubs().map((hub) => [hub.hubId, hub]),
-    );
-    const candidateHubIds = new Set([
-      ...knownHubs.keys(),
-      ...discoveredPeers.keys(),
-    ]);
+    const knownHubs = new Map(registry.getKnownHubs().map((hub) => [hub.hubId, hub]));
+    const candidateHubIds = new Set([...knownHubs.keys(), ...discoveredPeers.keys()]);
     const connected = [...candidateHubIds]
       .filter((hubId) => connectionManager.isP2PAvailable(hubId))
       .map((hubId) => ({
         hubId,
-        displayName: discoveredPeers.get(hubId)?.displayName
-          ?? knownHubs.get(hubId)?.displayName
-          ?? hubId.slice(0, 8),
+        displayName:
+          discoveredPeers.get(hubId)?.displayName ??
+          knownHubs.get(hubId)?.displayName ??
+          hubId.slice(0, 8),
         latency: connectionManager.getConnectionInfo(hubId).p2pLatency,
         status: "connected" as const,
       }));
@@ -205,9 +188,10 @@ export function registerHubRoutes(
   });
 
   app.post("/api/hub/rooms", async (request, reply) => {
-    const body = typeof request.body === "object" && request.body !== null
-      ? request.body as Record<string, unknown>
-      : {};
+    const body =
+      typeof request.body === "object" && request.body !== null
+        ? (request.body as Record<string, unknown>)
+        : {};
     if (typeof body.name !== "string" || !body.name.trim()) {
       return reply.code(400).send({ error: "name must be a non-empty string" });
     }
@@ -219,11 +203,11 @@ export function registerHubRoutes(
     return reply.code(201).send({ roomId: room.id, name: room.name });
   });
 
-  app.get("/api/hub/rooms", async () => (
+  app.get("/api/hub/rooms", async () =>
     repository
       .listConversations({ type: "cross_hub" })
-      .filter((conversation) => Boolean(conversation.relayRoomId))
-  ));
+      .filter((conversation) => Boolean(conversation.relayRoomId)),
+  );
 
   app.get<{ Params: { id: string } }>("/api/hub/rooms/:id", async (request, reply) => {
     const conversation = findRoomConversation(request.params.id);
@@ -245,9 +229,10 @@ export function registerHubRoutes(
   });
 
   app.post<{ Params: { id: string } }>("/api/hub/rooms/:id/agents", async (request, reply) => {
-    const body = typeof request.body === "object" && request.body !== null
-      ? request.body as Record<string, unknown>
-      : {};
+    const body =
+      typeof request.body === "object" && request.body !== null
+        ? (request.body as Record<string, unknown>)
+        : {};
     if (typeof body.agentId !== "string" || !body.agentId.trim()) {
       return reply.code(400).send({ error: "agentId must be a non-empty string" });
     }
@@ -277,11 +262,9 @@ export function registerHubRoutes(
       roomState.keyEpoch,
       userKey.privateKey,
     );
-    const updated = repository.addAgentToConversation(
-      conversation.id,
-      [agentId],
-      { [agentId]: JSON.stringify(ownerProof) },
-    );
+    const updated = repository.addAgentToConversation(conversation.id, [agentId], {
+      [agentId]: JSON.stringify(ownerProof),
+    });
     if (!updated) return reply.code(404).send({ error: "Room or Agent not found" });
     repository.incrementRoomRevision(conversation.relayRoomId);
     return { ok: true, agentId, ownerProof };
@@ -328,23 +311,68 @@ export function registerHubRoutes(
   );
 
   app.post<{ Params: { id: string } }>("/api/hub/rooms/:id/invite", async (request, reply) => {
-    const body = typeof request.body === "object" && request.body !== null
-      ? request.body as Record<string, unknown>
-      : {};
+    const body =
+      typeof request.body === "object" && request.body !== null
+        ? (request.body as Record<string, unknown>)
+        : {};
     if (typeof body.hubId !== "string" || !body.hubId.trim()) {
       return reply.code(400).send({ error: "hubId must be a non-empty string" });
     }
-    await relayClient.inviteToRoomRequest(
+    const invitation = await relayClient.inviteToRoomRequest(
       hubConfig.relay.url,
       request.params.id,
       body.hubId.trim(),
     );
-    return { ok: true };
+    return { ok: true, invitation };
   });
+
+  app.get("/api/hub/room-invitations", async () => ({
+    invitations: (await relayClient.listRoomInvitationsRequest(hubConfig.relay.url)).filter(
+      (invitation) =>
+        invitation.status === "pending" ||
+        (invitation.status === "accepted" && !findRoomConversation(invitation.roomId)),
+    ),
+  }));
+
+  app.post<{ Params: { id: string } }>(
+    "/api/hub/room-invitations/:id/accept",
+    async (request, reply) => {
+      const result = await relayClient.respondToRoomInvitationRequest(
+        hubConfig.relay.url,
+        request.params.id,
+        "accepted",
+      );
+      let conversation = findRoomConversation(request.params.id);
+      if (!conversation) {
+        const room = result.room;
+        if (!room) return reply.code(502).send({ error: "Relay did not return the accepted Room" });
+        conversation = repository.createConversation(room.name, "cross_hub", [], room.id, {
+          createdByHubId: room.createdBy,
+          adminHubIds: [room.createdBy],
+        });
+      }
+      relayClient.joinRoom(request.params.id);
+      return reply.send({ invitation: result.invitation, conversation });
+    },
+  );
+
+  app.post<{ Params: { id: string } }>(
+    "/api/hub/room-invitations/:id/decline",
+    async (request) => ({
+      invitation: (
+        await relayClient.respondToRoomInvitationRequest(
+          hubConfig.relay.url,
+          request.params.id,
+          "declined",
+        )
+      ).invitation,
+    }),
+  );
 
   app.get("/api/hub/status", async () => ({
     relayState: relayClient.state,
-    peers: registry.getKnownHubs()
+    peers: registry
+      .getKnownHubs()
       .filter((hub) => hub.hubId !== identity.hubId)
       .map((hub) => {
         const connection = connectionManager.getConnectionInfo(hub.hubId);
@@ -352,9 +380,7 @@ export function registerHubRoutes(
           hubId: hub.hubId,
           displayName: hub.displayName,
           path: connection.path,
-          latency: connection.path === "p2p"
-            ? connection.p2pLatency
-            : connection.relayLatency,
+          latency: connection.path === "p2p" ? connection.p2pLatency : connection.relayLatency,
         };
       }),
   }));
@@ -376,9 +402,9 @@ export function registerHubRoutes(
     return { state: relayClient.state };
   });
 
-  app.get("/api/hub/contacts", async () => (
-    registry.getKnownHubs().filter((hub) => hub.hubId !== identity.hubId)
-  ));
+  app.get("/api/hub/contacts", async () =>
+    registry.getKnownHubs().filter((hub) => hub.hubId !== identity.hubId),
+  );
 }
 
 function isLocalRoomAdministrator(
@@ -394,16 +420,15 @@ function isLocalRoomAdministrator(
     metadata.adminUserIds,
     metadata.administrators,
   ];
-  return administrators.some((value) => (
-    Array.isArray(value)
-    && value.some((id) => id === hubId || (userId !== undefined && id === userId))
-  ));
+  return administrators.some(
+    (value) =>
+      Array.isArray(value) &&
+      value.some((id) => id === hubId || (userId !== undefined && id === userId)),
+  );
 }
 
 function parseBody(value: unknown): Record<string, unknown> {
-  return typeof value === "object" && value !== null
-    ? value as Record<string, unknown>
-    : {};
+  return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
 }
 
 function parseObject(value: string | undefined): Record<string, unknown> {
@@ -427,10 +452,7 @@ function parseStringArray(value: string | undefined): string[] {
   }
 }
 
-function applyPersistedConfig(
-  hubConfig: HubConfig,
-  persisted: Record<string, unknown>,
-): void {
+function applyPersistedConfig(hubConfig: HubConfig, persisted: Record<string, unknown>): void {
   if (typeof persisted.displayName === "string" && persisted.displayName.trim()) {
     hubConfig.displayName = persisted.displayName.trim();
   }
@@ -441,9 +463,9 @@ function applyPersistedConfig(
     hubConfig.p2p.enabled = persisted.p2pEnabled;
   }
   if (
-    Number.isInteger(persisted.p2pPort)
-    && (persisted.p2pPort as number) >= 1
-    && (persisted.p2pPort as number) <= 65_535
+    Number.isInteger(persisted.p2pPort) &&
+    (persisted.p2pPort as number) >= 1 &&
+    (persisted.p2pPort as number) <= 65_535
   ) {
     hubConfig.p2p.port = persisted.p2pPort as number;
   }

@@ -125,9 +125,6 @@ describe("DirectoryService", () => {
     const repository = new Repository(database);
     const registry = new AgentRegistry(repository);
     const trustStore = new TrustStore(repository);
-    trustHub(trustStore, "hub-a");
-    trustHub(trustStore, "hub-b");
-    const service = new DirectoryService(repository, registry, "", trustStore);
     const hubA = manifestFixture({
       user: remoteUser("usr-a", "hub-a", "Alice"),
       agents: [{ ...directoryAgent("claude"), name: "Claude Code" }],
@@ -136,6 +133,9 @@ describe("DirectoryService", () => {
       user: remoteUser("usr-b", "hub-b", "Bob"),
       agents: [{ ...directoryAgent("claude"), name: "Claude Code" }],
     });
+    trustHub(trustStore, "hub-a", hubA.user.publicKey);
+    trustHub(trustStore, "hub-b", hubB.user.publicKey);
+    const service = new DirectoryService(repository, registry, "", trustStore);
 
     service.applyRemoteDirectory(hubA);
     service.applyRemoteDirectory(hubB);
@@ -259,10 +259,10 @@ describe("DirectoryService", () => {
     const repository = new Repository(database);
     const registry = new AgentRegistry(repository);
     const trustStore = new TrustStore(repository);
-    trustHub(trustStore, "hub-phone");
-    trustHub(trustStore, "hub-computer");
-    const service = new DirectoryService(repository, registry, "", trustStore);
     const publicKey = generateUserKeyPair().publicKey;
+    trustHub(trustStore, "hub-phone", publicKey);
+    trustHub(trustStore, "hub-computer", publicKey);
+    const service = new DirectoryService(repository, registry, "", trustStore);
 
     service.applyRemoteDirectory(
       manifestFixture({
@@ -297,10 +297,10 @@ describe("DirectoryService", () => {
     const repository = new Repository(database);
     const registry = new AgentRegistry(repository);
     const trustStore = new TrustStore(repository);
-    trustHub(trustStore, "hub-phone");
-    trustHub(trustStore, "hub-computer");
-    const service = new DirectoryService(repository, registry, "", trustStore);
     const publicKey = generateUserKeyPair().publicKey;
+    trustHub(trustStore, "hub-phone", publicKey);
+    trustHub(trustStore, "hub-computer", publicKey);
+    const service = new DirectoryService(repository, registry, "", trustStore);
 
     for (const [hubId, agentId] of [
       ["hub-phone", "phone-agent"],
@@ -407,12 +407,14 @@ function manifestFixture(overrides: Partial<DirectoryManifest> = {}): DirectoryM
   };
 }
 
-function trustHub(store: TrustStore, hubId: string): void {
-  const challenge = store.generatePairingCode(hubId);
-  if (!store.confirmPairing(
-    hubId,
-    challenge.code,
-    challenge.nonce,
-    challenge.ephemeralPublicKey,
-  )) throw new Error(`Unable to trust ${hubId}`);
+function trustHub(
+  store: TrustStore,
+  hubId: string,
+  userPublicKey = defaultRemoteUserPublicKey,
+): void {
+  store.completePairing(hubId, {
+    userId: `usr_${hubId}`,
+    userName: hubId,
+    userPublicKey,
+  });
 }

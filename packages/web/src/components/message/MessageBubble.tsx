@@ -5,13 +5,14 @@ import {
   type ComponentPropsWithoutRef,
   type ReactNode,
 } from "react";
-import { Check, ChevronDown, ChevronUp, Copy } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Copy, LoaderCircle, TriangleAlert } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useTranslation } from "react-i18next";
 import { AgentAvatar } from "@/components/agent/AgentAvatar";
 import { formatMessageTime } from "@/lib/date";
 import type { Message } from "@/store/chatStore";
+import { useUIStore } from "@/store/uiStore";
 
 const LONG_MESSAGE_THRESHOLD = 2_000;
 const COLLAPSED_MESSAGE_LENGTH = 500;
@@ -32,7 +33,9 @@ function highlightMentions(children: ReactNode): ReactNode {
         <span key={`${part}-${index}`} className="rounded bg-[var(--accent-color)]/20 px-0.5">
           {part}
         </span>
-      ) : part,
+      ) : (
+        part
+      ),
     );
   });
 }
@@ -48,6 +51,7 @@ function getTextContent(node: ReactNode): string {
 
 function CodeBlock({ children }: ComponentPropsWithoutRef<"pre">) {
   const { t } = useTranslation("common");
+  const addToast = useUIStore((state) => state.addToast);
   const [copied, setCopied] = useState(false);
   const codeElement = Children.toArray(children)[0];
   const className = isValidElement<{ className?: string }>(codeElement)
@@ -63,6 +67,7 @@ function CodeBlock({ children }: ComponentPropsWithoutRef<"pre">) {
       window.setTimeout(() => setCopied(false), 1_500);
     } catch (error) {
       console.error("Failed to copy code:", error);
+      addToast(t("errors.copyFailed"), "error");
     }
   };
 
@@ -97,6 +102,7 @@ export function MessageBubble({ message, agentName, agentAvatar, isGroup = false
   const isError = message.status === "error";
   const isPartial = message.status === "partial";
   const isStreaming = message.status === "streaming";
+  const isSending = isUser && message.status === "sending";
   const isLongMessage = message.content.length > LONG_MESSAGE_THRESHOLD;
   const displayedContent =
     isLongMessage && !isExpanded
@@ -129,10 +135,10 @@ export function MessageBubble({ message, agentName, agentAvatar, isGroup = false
       {/* Bubble */}
       <div
         className={`group relative max-w-[85%] rounded-2xl px-4 py-2.5 md:max-w-[75%] ${
-          isUser
-            ? "bg-[var(--accent-color)] text-white"
-            : isError
-              ? "border border-red-700/50 bg-red-900/40 text-red-200"
+          isError
+            ? "border border-[var(--status-error)]/45 bg-[var(--danger-subtle)] text-[var(--text-primary)]"
+            : isUser
+              ? "bg-[var(--accent-color)] text-[var(--accent-foreground)]"
               : "bg-[var(--bg-elevated)] text-[var(--text-primary)]"
         }`}
       >
@@ -174,8 +180,8 @@ export function MessageBubble({ message, agentName, agentAvatar, isGroup = false
             type="button"
             onClick={() => setIsExpanded((expanded) => !expanded)}
             className={`mt-2 text-xs font-medium transition-colors ${
-              isUser
-                ? "text-teal-100 hover:text-white"
+              isUser && !isError
+                ? "text-[var(--accent-foreground)] opacity-80 hover:opacity-100"
                 : "text-[var(--accent-hover)] hover:opacity-80"
             }`}
           >
@@ -190,13 +196,38 @@ export function MessageBubble({ message, agentName, agentAvatar, isGroup = false
 
         {/* Partial tag */}
         {isPartial && (
-          <div className="mt-1 text-xs text-yellow-500">⚠ {t("chat:partialMessage")}</div>
+          <div className="mt-2 flex items-center gap-1.5 rounded-md bg-[var(--warning-subtle)] px-2 py-1.5 text-xs text-[var(--status-busy)]">
+            <TriangleAlert aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+            {t("chat:partialMessage")}
+          </div>
+        )}
+
+        {isSending && (
+          <div
+            className="mt-2 flex items-center justify-end gap-1.5 text-xs text-[var(--accent-foreground)] opacity-75"
+            aria-live="polite"
+          >
+            <LoaderCircle aria-hidden="true" className="h-3.5 w-3.5 animate-spin" />
+            {t("chat:messageSending")}
+          </div>
+        )}
+
+        {isUser && isError && (
+          <div
+            className="mt-2 flex items-center justify-end gap-1.5 rounded-md bg-[var(--danger-subtle)] px-2 py-1.5 text-xs font-medium text-[var(--status-error)]"
+            role="alert"
+          >
+            <TriangleAlert aria-hidden="true" className="h-3.5 w-3.5" />
+            {t("chat:messageSendFailed")}
+          </div>
         )}
 
         {/* Timestamp */}
         <div
           className={`mt-1 text-right text-[10px] ${
-            isUser ? "text-teal-200/70" : "text-[var(--text-tertiary)]"
+            isUser && !isError
+              ? "text-[var(--accent-foreground)] opacity-65"
+              : "text-[var(--text-tertiary)]"
           }`}
         >
           {formatMessageTime(message.timestamp)}

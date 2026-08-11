@@ -1,5 +1,11 @@
 {
+  "messageInputLabel": "消息",
+  "inputPlaceholderShort": "输入消息…",
   "chooseConversation": "选择一个会话开始对话",
+  "workspaceReadyTitle": "在一处继续所有对话",
+  "workspaceReadyDescription": "发起单独对话、让多个 Agent 加入群聊，或从侧栏继续最近的会话。",
+  "configureAgent": "配置 Agent",
+  "browseConversations": "浏览会话",
   "participatingAgents": "参与会话的 Agents",
   "agentSelector": {
     "label": "选择 Agent",
@@ -17,24 +23,51 @@
   "defaultConversationTitle": "私聊：我的 Agent",
   "inputPlaceholder": "输入消息…（Enter 发送，Shift+Enter 换行）",
   "loadingMessages": "正在加载消息",
+  "messageLoadFailedTitle": "消息暂时不可用",
+  "messageLoadFailed": "无法加载此会话，请重试；你当前的位置不会丢失。",
+  "retry": "重试",
   "emptyTitle": "开始你的第一次对话",
   "emptyDescription": "在下方输入消息，和 Agent 打个招呼吧",
   "newMessages": "新消息",
   "expandMessage": "展开全文",
   "collapseMessage": "收起",
   "partialMessage": "消息不完整（流式中断）",
+  "messageSending": "正在发送…",
+  "messageSendFailed": "发送失败",
+  "statusFixture": {
+    "eyebrow": "Quiet Signal",
+    "title": "消息状态",
+    "description": "本地发送、Relay 传输与目标设备执行分别呈现，传输成功不等于 Agent 已完成。"
+  },
   "a2aChain": "A2A 调用链",
   "a2aRunning": "运行中",
   "a2aCompleted": "已完成",
   "a2aFailed": "失败",
   "a2aCancel": "取消调用",
   "a2aCancelled": "A2A 调用已取消",
+  "hubDelivery": {
+    "transport": "传输",
+    "execution": "执行",
+    "transportStatus": {
+      "queued": "Relay 已排队",
+      "delivered": "目标设备已接收",
+      "failed": "投递失败"
+    },
+    "executionStatus": {
+      "accepted": "已接受",
+      "denied": "已拒绝",
+      "done": "已完成",
+      "error": "执行失败"
+    }
+  },
   "a2aForwardedMessage": "转发了消息",
   "unknownAgent": "未知 Agent",
   "a2aMode": {
     "title": "A2A 模式",
     "description": "控制 Agent 之间如何通信",
     "label": "A2A：{{mode}}",
+    "unavailable": "A2A 模式不可用",
+    "loadFailed": "无法核验 A2A 模式，Chorus 不会假设默认权限。",
     "mention": {
       "label": "@转发",
       "description": "Agent 回复中 @其他 Agent 时自动转发"
@@ -58,7 +91,8 @@
     "title": "确认 A2A 调用",
     "description": "{{from}} 想调用 {{to}}，是否允许？",
     "approve": "允许",
-    "deny": "拒绝"
+    "deny": "拒绝",
+    "submitFailed": "无法发送此决定，请求仍保持打开，你可以重试。"
   },
   "a2aMessages_one": "{{count}} 条消息",
   "a2aMessages_other": "{{count}} 条消息",
@@ -73,6 +107,21 @@
   "members": "成员",
   "humanMembers": "人类成员",
   "agentMembers": "Agent 成员",
+  "inviteContacts": "邀请联系人",
+  "awaitingAcceptance": "等待接受",
+  "roomInviteSent": "聊天室邀请已发送，对方接受前不会加入。",
+  "roomInviteFailed": "无法发送聊天室邀请，联系人未被加入。",
+  "membersLoadFailed": "无法加载成员，当前仍显示的名称可能已过期。",
+  "inviteContextFailed": "无法核验邀请权限和联系人，因此邀请功能已保持禁用。",
+  "noHumanMembers": "暂无已核验的人类成员。",
+  "noAgentMembers": "此会话中暂无 Agent。",
+  "memberAdded": "已将 Agent 加入会话",
+  "memberRemoved": "已将 Agent 移出会话",
+  "addMemberFailed": "无法添加 Agent，成员关系未被更改。",
+  "removeMemberFailed": "无法移除 Agent，成员关系未被更改。",
+  "removeMemberTitle": "移除此 Agent？",
+  "removeMemberMessage": "{{name}} 将不再参与此会话的新消息；已有消息会保留。",
+  "removingMember": "移除中…",
   "relayDisconnected": "Relay 已断开，正在重连...",
   "relayError": "Relay 连接错误",
   "a2aTooltipFirst": "Agent 可以在这里协作。点击切换 A2A 模式：@转发、同步调用或关闭。"

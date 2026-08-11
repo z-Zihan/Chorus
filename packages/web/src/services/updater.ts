@@ -2,8 +2,7 @@ import type { DownloadEvent, Update } from "@tauri-apps/plugin-updater";
 
 export const UPDATE_CHANNEL_STORAGE_KEY = "chorus-update-channel";
 export const UPDATE_AVAILABLE_EVENT = "chorus:update-available";
-export const UPDATE_ENDPOINT =
-  "https://releases.chorus.app/{{target}}/{{arch}}/{{current_version}}";
+export const UPDATE_ENDPOINT = import.meta.env.VITE_CHORUS_UPDATE_ENDPOINT?.trim() ?? "";
 
 export type UpdateChannel = "stable" | "beta";
 export type UpdateInfo = Update;
@@ -17,7 +16,7 @@ function isUpdateChannel(value: string | null): value is UpdateChannel {
   return value === "stable" || value === "beta";
 }
 
-function isTauriRuntime(): boolean {
+export function isTauriRuntime(): boolean {
   return typeof window !== "undefined" && Boolean(window.__TAURI_INTERNALS__);
 }
 
@@ -30,16 +29,30 @@ export function getUpdateChannel(): UpdateChannel {
   }
 }
 
-export function setUpdateChannel(channel: UpdateChannel): void {
-  localStorage.setItem(UPDATE_CHANNEL_STORAGE_KEY, channel);
+export function setUpdateChannel(channel: UpdateChannel): boolean {
+  try {
+    localStorage.setItem(UPDATE_CHANNEL_STORAGE_KEY, channel);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function getUpdateEndpoint(channel = getUpdateChannel()): string {
+  if (!UPDATE_ENDPOINT) return "";
   return `${UPDATE_ENDPOINT}?channel=${encodeURIComponent(channel)}`;
 }
 
+export function isUpdateConfigured(): boolean {
+  return UPDATE_ENDPOINT.length > 0;
+}
+
+export function isUpdateSupported(): boolean {
+  return isTauriRuntime() && isUpdateConfigured();
+}
+
 export async function checkForUpdates(): Promise<UpdateInfo | null> {
-  if (!isTauriRuntime()) return null;
+  if (!isTauriRuntime() || !isUpdateConfigured()) return null;
 
   const channel = getUpdateChannel();
   const { check } = await import("@tauri-apps/plugin-updater");
@@ -60,7 +73,6 @@ export function announceUpdate(update: UpdateInfo): void {
 export async function downloadAndInstall(
   update: UpdateInfo,
   onProgress: (progress: DownloadProgress) => void,
-  restartPrompt: string,
 ): Promise<void> {
   let downloaded = 0;
   let total: number | null = null;
@@ -84,9 +96,9 @@ export async function downloadAndInstall(
 
   await update.downloadAndInstall(handleDownloadEvent);
   onProgress({ downloaded: total ?? downloaded, total, percent: 100 });
+}
 
-  if (window.confirm(restartPrompt)) {
-    const { relaunch } = await import("@tauri-apps/plugin-process");
-    await relaunch();
-  }
+export async function relaunchApp(): Promise<void> {
+  const { relaunch } = await import("@tauri-apps/plugin-process");
+  await relaunch();
 }

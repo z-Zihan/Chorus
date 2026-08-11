@@ -1,6 +1,7 @@
 import type { AppConfig } from "@chorus/shared";
 
 export default {
+  host: "127.0.0.1",
   port: 3210,
   dbPath: "./data/chorus.db",
   cors: {

@@ -2,14 +2,15 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { CatalogService } from "../catalog/index.js";
 import type { InstallExecutor } from "../catalog/installer.js";
-import { logger } from "../utils/logger.js";
 
-const installOptionsSchema = z.object({
-  recipeMethod: z.enum(["brew", "npm", "winget", "download"]).optional(),
-  apiKey: z.string().trim().max(20_000).optional(),
-  config: z.record(z.unknown()).optional(),
-  acceptPermissions: z.boolean().optional(),
-}).default({});
+const installOptionsSchema = z
+  .object({
+    recipeMethod: z.enum(["brew", "npm", "winget", "download"]).optional(),
+    apiKey: z.string().trim().max(20_000).optional(),
+    config: z.record(z.unknown()).optional(),
+    acceptPermissions: z.boolean().optional(),
+  })
+  .default({});
 
 export function registerCatalogRoutes(
   app: FastifyInstance,
@@ -27,7 +28,9 @@ export function registerCatalogRoutes(
   app.post<{ Params: { id: string } }>("/api/catalog/:id/install", async (request, reply) => {
     const parsed = installOptionsSchema.safeParse(request.body);
     if (!parsed.success) {
-      return reply.code(400).send({ error: "INVALID_INSTALL_OPTIONS", issues: parsed.error.flatten() });
+      return reply
+        .code(400)
+        .send({ error: "INVALID_INSTALL_OPTIONS", issues: parsed.error.flatten() });
     }
     try {
       const options = parsed.data.apiKey

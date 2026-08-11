@@ -12,7 +12,7 @@ describe("GroupKeyManager", () => {
     expect(second.id).not.toBe(first.id);
     expect(second.key).not.toBe(first.key);
     expect(second.keyCommitment).toEqual(expect.any(String));
-    expect(manager.getKey("conversation-1")!.version).toBe(second.version);
+    expect(manager.getKey("conversation-1")?.version).toBe(second.version);
   });
 
   it("encrypts and decrypts a message", () => {
@@ -20,14 +20,15 @@ describe("GroupKeyManager", () => {
     manager.generateKey("conversation-1");
 
     const encrypted = manager.encryptMessage("conversation-1", "你好, group");
+    if (!encrypted) throw new Error("Expected the message to be encrypted");
 
     expect(encrypted).not.toBeNull();
     expect(
       manager.decryptMessage(
         "conversation-1",
-        encrypted!.ciphertext,
-        encrypted!.nonce,
-        encrypted!.keyId,
+        encrypted.ciphertext,
+        encrypted.nonce,
+        encrypted.keyId,
       ),
     ).toBe("你好, group");
   });
@@ -35,7 +36,8 @@ describe("GroupKeyManager", () => {
   it("cannot decrypt an old-key message after rekeying", () => {
     const manager = new GroupKeyManager();
     manager.generateKey("conversation-1");
-    const encrypted = manager.encryptMessage("conversation-1", "old message")!;
+    const encrypted = manager.encryptMessage("conversation-1", "old message");
+    if (!encrypted) throw new Error("Expected the message to be encrypted");
 
     manager.rekey("conversation-1");
 

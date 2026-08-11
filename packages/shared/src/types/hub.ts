@@ -1,15 +1,7 @@
 export type HubConnectionState =
-  | "disconnected"
-  | "connecting"
-  | "connected"
-  | "reconnecting"
-  | "error";
+  "disconnected" | "connecting" | "connected" | "reconnecting" | "error";
 
-export type P2PConnectionState =
-  | "disconnected"
-  | "connecting"
-  | "authenticated"
-  | "error";
+export type P2PConnectionState = "disconnected" | "connecting" | "authenticated" | "error";
 
 export interface P2PDiscoveredHub {
   hubId: string;
@@ -55,7 +47,7 @@ export interface HubEnvelope {
   /** 接收方 Hub ID | "room:xxx" | "broadcast" */
   to: string;
   /** 消息类型 */
-  type: "direct" | "group" | "broadcast" | "presence" | "discovery";
+  type: "direct" | "group" | "broadcast" | "presence" | "discovery" | "pairing";
   /** 发送方 Unix ms */
   timestamp: number;
   /** 防重放 nonce (base64, 24 bytes) */

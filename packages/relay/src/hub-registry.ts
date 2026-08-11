@@ -8,6 +8,7 @@ export type HubRecord = typeof hubs.$inferSelect;
 export class HubRegistry {
   private readonly sockets = new Map<string, RelaySocket>();
   private readonly blockedHubs = new Map<string, Set<string>>();
+  private shuttingDown = false;
 
   constructor(private readonly database: DatabaseContext) {
     database.db.update(hubs).set({ online: false, updatedAt: Date.now() }).run();
@@ -15,12 +16,21 @@ export class HubRegistry {
 
   register(hubId: string, publicKey: string, displayName: string): HubRecord {
     const now = Date.now();
+    const authVersion = (this.get(hubId)?.authVersion ?? 0) + 1;
     this.database.db
       .insert(hubs)
-      .values({ hubId, publicKey, displayName, online: false, createdAt: now, updatedAt: now })
+      .values({
+        hubId,
+        publicKey,
+        displayName,
+        online: false,
+        authVersion,
+        createdAt: now,
+        updatedAt: now,
+      })
       .onConflictDoUpdate({
         target: hubs.hubId,
-        set: { publicKey, displayName, updatedAt: now },
+        set: { publicKey, displayName, authVersion, updatedAt: now },
       })
       .run();
     const hub = this.get(hubId);
@@ -43,11 +53,21 @@ export class HubRegistry {
 
   setOffline(hubId: string): void {
     this.sockets.delete(hubId);
+    if (this.shuttingDown) return;
     this.database.db
       .update(hubs)
       .set({ online: false, updatedAt: Date.now() })
       .where(eq(hubs.hubId, hubId))
       .run();
+  }
+
+  shutdown(): void {
+    if (this.shuttingDown) return;
+    this.shuttingDown = true;
+    this.database.db.update(hubs).set({ online: false, updatedAt: Date.now() }).run();
+    for (const socket of this.sockets.values()) socket.close(1001, "Relay shutting down");
+    this.sockets.clear();
+    this.blockedHubs.clear();
   }
 
   getSocket(hubId: string): RelaySocket | null {
@@ -67,8 +87,10 @@ export class HubRegistry {
 
   /** Blocks are symmetric for routing even though only one side installs them. */
   isBlocked(fromHubId: string, toHubId: string): boolean {
-    return this.blockedHubs.get(fromHubId)?.has(toHubId) === true
-      || this.blockedHubs.get(toHubId)?.has(fromHubId) === true;
+    return (
+      this.blockedHubs.get(fromHubId)?.has(toHubId) === true ||
+      this.blockedHubs.get(toHubId)?.has(fromHubId) === true
+    );
   }
 
   list(): HubRecord[] {

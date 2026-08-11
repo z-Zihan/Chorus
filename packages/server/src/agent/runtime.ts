@@ -37,8 +37,16 @@ export class AgentRuntime {
     relayClient?: RelayClient,
   ) {
     this.a2aPermissions = new A2APermissions(repository);
-    this.a2aBus = new A2ABus(registry, undefined, relayClient, (request) =>
-      this.authorizeA2A(request),
+    this.a2aBus = new A2ABus(
+      registry,
+      undefined,
+      relayClient,
+      (request) => this.authorizeA2A(request),
+      (update) =>
+        events.publish(update.conversationId, {
+          type: "hub_delivery_status",
+          ...update,
+        }),
     );
   }
 
@@ -100,6 +108,7 @@ export class AgentRuntime {
     rawContent: string,
     explicitMentions: string[] = [],
     explicitAgentId?: string,
+    clientMessageId?: string,
   ): Promise<void> {
     const conversation = this.repository.getConversation(conversationId);
     if (!conversation) throw new Error("Conversation not found");
@@ -127,10 +136,7 @@ export class AgentRuntime {
       });
       this.repository.saveMessage(errorMessage);
       this.events.publish(conversationId, { type: "message", message: errorMessage });
-      logger.warn(
-        { conversationId, explicitAgentId },
-        "Agent not assigned to conversation",
-      );
+      logger.warn({ conversationId, explicitAgentId }, "Agent not assigned to conversation");
       track("error", {
         message: "Agent not assigned to conversation",
         source: "agent_runtime",
@@ -172,15 +178,18 @@ export class AgentRuntime {
       "Message routing decision",
     );
 
-    const userMessage = createMessage({
-      conversationId,
-      fromType: "user",
-      fromId: "user",
-      toType: "agent",
-      toId: targetAgentIds.length === 1 ? targetAgentIds[0] : undefined,
-      content,
-      status: "done",
-    });
+    const userMessage = createMessage(
+      {
+        conversationId,
+        fromType: "user",
+        fromId: "user",
+        toType: "agent",
+        toId: targetAgentIds.length === 1 ? targetAgentIds[0] : undefined,
+        content,
+        status: "done",
+      },
+      clientMessageId,
+    );
     this.repository.saveMessage(userMessage);
     this.events.publish(conversationId, { type: "message", message: userMessage });
     track("message_sent", {
@@ -232,7 +241,10 @@ export class AgentRuntime {
         this.repository.saveMessage(errorMessage);
         this.events.publish(conversationId, { type: "message", message: errorMessage });
         this.registry.setStatus(agentId, "error");
-        logger.warn({ conversationId, agentId, detail: preflight.detail }, "Agent preflight failed");
+        logger.warn(
+          { conversationId, agentId, detail: preflight.detail },
+          "Agent preflight failed",
+        );
         track("error", { message: "Preflight failed", source: "agent_runtime", agentId });
         return;
       }
@@ -620,6 +632,9 @@ function findAgentMention(line: string, agent: { id: string; name: string }): nu
   return -1;
 }
 
-function createMessage(input: Omit<Message, "id" | "timestamp">): Message {
-  return { ...input, id: randomUUID(), timestamp: Date.now() };
+function createMessage(
+  input: Omit<Message, "id" | "timestamp">,
+  id: string = randomUUID(),
+): Message {
+  return { ...input, id, timestamp: Date.now() };
 }

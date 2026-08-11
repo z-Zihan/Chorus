@@ -28,5 +28,28 @@ export default defineConfig({
   // Ensure clear separation between Tauri and web builds
   build: {
     outDir: "dist",
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return undefined;
+          if (
+            id.includes("react-markdown") ||
+            id.includes("/remark-") ||
+            id.includes("/rehype-") ||
+            id.includes("/unified/") ||
+            id.includes("/micromark")
+          )
+            return "markdown";
+          if (id.includes("/@radix-ui/")) return "radix";
+          if (id.includes("/lucide-react/")) return "icons";
+          if (id.includes("/i18next") || id.includes("/react-i18next/")) return "i18n";
+          if (id.includes("/zustand/")) return "state";
+          if (id.includes("/react/") || id.includes("/react-dom/") || id.includes("/scheduler/")) {
+            return "react";
+          }
+          return undefined;
+        },
+      },
+    },
   },
 });

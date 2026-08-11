@@ -26,8 +26,10 @@ import type { TrustStore } from "../hub/trust-store.js";
 import { registerTrustRoutes } from "./trust.js";
 import type { TokenStore } from "../auth/token-store.js";
 import type { AppConfig } from "@chorus/shared";
+import type { PluginLoader } from "../plugins/loader.js";
 import { registerTokenRoutes } from "./tokens.js";
 import { registerStandardRoutes } from "./standards.js";
+import type { PairingService } from "../hub/pairing-service.js";
 
 export function registerRoutes(
   app: FastifyInstance,
@@ -39,9 +41,10 @@ export function registerRoutes(
   onboarding = new OnboardingService(repository, registry, detector),
   catalog = new CatalogService(registry, detector),
   installer = new InstallExecutor(catalog, registry, detector),
-  loader?: import("../plugins/loader.js").PluginLoader,
+  loader?: PluginLoader,
   hub?: HubRouteDependencies,
   trustStore?: TrustStore,
+  pairingService?: PairingService,
   tokenStore?: TokenStore,
   auth: AppConfig["auth"] = { enabled: false, tokens: {} },
 ): void {
@@ -51,7 +54,10 @@ export function registerRoutes(
 
   // Global error handler — log all unhandled errors
   app.setErrorHandler((error, request, reply) => {
-    const statusCode = error instanceof Error && "statusCode" in error ? (error as { statusCode: number }).statusCode : 500;
+    const statusCode =
+      error instanceof Error && "statusCode" in error
+        ? (error as { statusCode: number }).statusCode
+        : 500;
     const message = error instanceof Error ? error.message : String(error);
     logger.error(
       { method: request.method, url: request.url, statusCode, error: message },
@@ -72,6 +78,6 @@ export function registerRoutes(
   registerCatalogRoutes(app, catalog, installer);
   if (loader) registerPluginRoutes(app, loader);
   if (hub) registerHubRoutes(app, hub);
-  if (trustStore) registerTrustRoutes(app, trustStore);
+  if (trustStore) registerTrustRoutes(app, trustStore, pairingService);
   if (tokenStore) registerTokenRoutes(app, tokenStore, auth);
 }

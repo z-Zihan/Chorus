@@ -1,5 +1,10 @@
 import { randomUUID } from "node:crypto";
-import type { ConversationContext, HubEnvelope, HubPayload } from "@chorus/shared";
+import type {
+  ConversationContext,
+  HubEnvelope,
+  HubPayload,
+  TransportReceipt,
+} from "@chorus/shared";
 import type { AgentRegistry } from "../agent/registry.js";
 import type { AgentRuntime } from "../agent/runtime.js";
 import type { Repository } from "../db/repository.js";
@@ -15,6 +20,7 @@ import type { DirectoryService } from "./directory.js";
 import type { TrustStore } from "./trust-store.js";
 import { OfflineStore } from "./offline-store.js";
 import { ResyncService } from "./resync.js";
+import type { PairingService } from "./pairing-service.js";
 
 const REMOTE_CALL_TIMEOUT_MS = 120_000;
 const MAX_SEEN_MESSAGES = 1_000;
@@ -27,6 +33,11 @@ interface PendingMessage {
   signal?: AbortSignal;
   abort?: () => void;
 }
+
+type DeliveryStatusListener = (update: {
+  transport?: "queued" | "delivered" | "failed";
+  execution?: "accepted" | "denied" | "done" | "error";
+}) => void;
 
 type OutboundPayload = Omit<
   HubPayload,
@@ -42,6 +53,15 @@ interface LocalUserIdentity {
 export class HubMessageRouter {
   private readonly pendingOutbound = new Map<string, PendingMessage>();
   private readonly seenMessageIds = new Set<string>();
+  private readonly outboundPayloadByEnvelope = new Map<string, string>();
+  private readonly deliveryListeners = new Map<
+    string,
+    {
+      listener: DeliveryStatusListener;
+      transportTerminal: boolean;
+      executionTerminal: boolean;
+    }
+  >();
   private readonly offlineHubIds = new Set<string>();
   private readonly authorizationService: AuthorizationService;
   private readonly resyncService: ResyncService;
@@ -50,6 +70,7 @@ export class HubMessageRouter {
   private removeP2PMessageListener?: () => void;
   private removeRelayStateListener?: () => void;
   private removeRoomMembersListener?: () => void;
+  private removeTransportStatusListener?: () => void;
 
   constructor(
     private readonly identity: HubIdentity,
@@ -61,6 +82,7 @@ export class HubMessageRouter {
     private readonly directoryService: DirectoryService,
     private readonly trustStore: TrustStore,
     private readonly repository: Repository,
+    private readonly pairingService?: PairingService,
     private readonly offlineStore = new OfflineStore(),
   ) {
     this.authorizationService = new AuthorizationService(trustStore, repository);
@@ -69,8 +91,9 @@ export class HubMessageRouter {
       relayClient,
       (toHubId, payload, roomId) => this.handleOutbound(toHubId, payload, roomId),
       identity.hubId,
-      (ownerId) => repository.getUser(ownerId)?.publicKey
-        ?? trustStore.listTrusted().find((hub) => hub.userId === ownerId)?.userPublicKey,
+      (ownerId) =>
+        repository.getUser(ownerId)?.publicKey ??
+        trustStore.listTrusted().find((hub) => hub.userId === ownerId)?.userPublicKey,
     );
     this.offlineStore.purgeExpired();
     this.offlinePurgeTimer = setInterval(() => {
@@ -79,9 +102,7 @@ export class HubMessageRouter {
     }, OFFLINE_PURGE_INTERVAL_MS);
     this.offlinePurgeTimer.unref();
     relayClient.onMessage((envelope) => {
-      void this.onEnvelope(envelope, relayClient).catch((error: unknown) => {
-        logger.warn({ err: error, envelopeId: envelope.id }, "Unable to route Hub envelope");
-      });
+      void this.processRelayEnvelope(envelope);
     });
     relayClient.onOfflineMessages((envelopes) => {
       void this.routeOfflineMessages(envelopes);
@@ -107,6 +128,21 @@ export class HubMessageRouter {
         logger.warn({ err: error, roomId }, "Unable to request Room resync");
       });
     });
+    this.removeTransportStatusListener = relayClient.onTransportStatus?.((update) => {
+      if (update.status === "delivered") this.offlineStore.markDelivered(update.messageId);
+      else if (update.status === "failed")
+        this.offlineStore.markComplete(update.messageId, "error");
+      const payloadMessageId = this.outboundPayloadByEnvelope.get(update.messageId);
+      if (payloadMessageId) {
+        this.emitDeliveryStatus(payloadMessageId, { transport: update.status });
+        if (update.status === "delivered" || update.status === "failed") {
+          this.outboundPayloadByEnvelope.delete(update.messageId);
+        }
+        if (update.status === "failed") {
+          this.settlePending(payloadMessageId, "", new Error("Relay delivery failed"));
+        }
+      }
+    });
   }
 
   get pendingCount(): number {
@@ -117,6 +153,7 @@ export class HubMessageRouter {
     clearInterval(this.offlinePurgeTimer);
     this.removeRelayStateListener?.();
     this.removeRoomMembersListener?.();
+    this.removeTransportStatusListener?.();
   }
 
   setP2PListener(listener: P2PListener): void {
@@ -134,6 +171,11 @@ export class HubMessageRouter {
   }
 
   async onEnvelope(envelope: HubEnvelope, relayClient: RelayClient): Promise<void> {
+    if (envelope.type === "pairing") {
+      if (!this.pairingService) throw new Error("Pairing service is unavailable");
+      await this.pairingService.onEnvelope(envelope);
+      return;
+    }
     if (this.seenMessageIds.has(envelope.id)) return;
     this.rememberMessage(envelope.id);
 
@@ -178,28 +220,36 @@ export class HubMessageRouter {
         },
         "Dropping unauthorized inbound Hub message",
       );
+      await this.sendDeliveryAck(envelope.from, payload, envelope.id, "denied");
       return;
     }
 
-    const correlationId = stringMetadata(payload.metadata, "correlationId")
-      ?? stringMetadata(payload.metadata, "replyTo");
-    if (correlationId && (payload.messageType === "a2a_response" || payload.messageType === "chat")) {
-      const error = payload.metadata?.error === true
-        ? new Error(payload.content || "Remote Agent call failed")
-        : undefined;
+    const correlationId =
+      stringMetadata(payload.metadata, "correlationId") ??
+      stringMetadata(payload.metadata, "replyTo");
+    if (
+      correlationId &&
+      (payload.messageType === "a2a_response" || payload.messageType === "chat")
+    ) {
+      const error =
+        payload.metadata?.error === true
+          ? new Error(payload.content || "Remote Agent call failed")
+          : undefined;
       this.settlePending(correlationId, payload.content ?? "", error);
       return;
     }
 
     if (payload.messageType === "a2a_call") {
-      await this.handleInboundA2A(envelope.from, payload, relayClient);
+      await this.sendDeliveryAck(envelope.from, payload, envelope.id, "accepted");
+      await this.handleInboundA2A(envelope.from, envelope.id, payload, relayClient);
     } else if (payload.messageType === "chat") {
-      await this.handleInboundChat(envelope.from, payload, relayClient);
+      await this.sendDeliveryAck(envelope.from, payload, envelope.id, "accepted");
+      await this.handleInboundChat(envelope.from, envelope.id, payload, relayClient);
     } else if (payload.messageType === "directory_request") {
       await this.handleDirectoryRequest(envelope.from, payload);
     } else if (
-      payload.messageType === "directory_announce"
-      || payload.messageType === "directory_revoke"
+      payload.messageType === "directory_announce" ||
+      payload.messageType === "directory_revoke"
     ) {
       this.handleDirectoryUpdate(envelope.from, payload);
     } else if (payload.messageType === "delivery_ack") {
@@ -251,10 +301,17 @@ export class HubMessageRouter {
       ...unsigned,
       signature: await signEnvelope(signingData(unsigned), await this.identity.getSecretKey()),
     };
-    const hasP2PConnection = this.connectionManager.getActivePath(toHubId) === "p2p";
+    if (this.pendingOutbound.has(payload.messageId)) {
+      this.outboundPayloadByEnvelope.set(envelope.id, payload.messageId);
+    }
+    const activePath = this.connectionManager.getActivePath(toHubId);
+    const hasP2PConnection = activePath === "p2p";
+    if (activePath !== "p2p") {
+      this.offlineStore.queue(envelope, this.identity.hubId, toHubId);
+    }
     if (
-      (this.offlineHubIds.has(toHubId) && !hasP2PConnection)
-      || !await this.connectionManager.sendEnvelope(toHubId, envelope)
+      (this.offlineHubIds.has(toHubId) && !hasP2PConnection) ||
+      !(await this.connectionManager.sendEnvelope(toHubId, envelope))
     ) {
       this.offlineStore.queue(envelope, this.identity.hubId, toHubId);
       logger.info({ toHubId, envelopeId: envelope.id }, "Queued message for offline Hub");
@@ -268,8 +325,16 @@ export class HubMessageRouter {
     toAgentId: string,
     message: string,
     context: ConversationContext,
+    onDeliveryStatus?: DeliveryStatusListener,
   ): Promise<string> {
     const messageId = randomUUID();
+    if (onDeliveryStatus) {
+      this.deliveryListeners.set(messageId, {
+        listener: onDeliveryStatus,
+        transportTerminal: false,
+        executionTerminal: false,
+      });
+    }
     const response = this.waitForResponse(messageId, context.signal);
     const payload: OutboundPayload = {
       messageType: "a2a_call",
@@ -287,17 +352,14 @@ export class HubMessageRouter {
     try {
       await this.handleOutbound(toHubId, payload, context.conversationId);
     } catch (error) {
-      this.settlePending(
-        messageId,
-        "",
-        error instanceof Error ? error : new Error(String(error)),
-      );
+      this.settlePending(messageId, "", error instanceof Error ? error : new Error(String(error)));
     }
     return response;
   }
 
   private async handleInboundA2A(
     fromHubId: string,
+    envelopeId: string,
     payload: HubPayload,
     relayClient: RelayClient,
   ): Promise<void> {
@@ -310,26 +372,24 @@ export class HubMessageRouter {
       ? payload.metadata.callStack.filter((value): value is string => typeof value === "string")
       : [fromAgentId];
     try {
-      const content = await this.runtime.handleRemoteA2ACall(
-        fromAgentId,
-        targetAgentId,
-        message,
-        {
-          conversationId,
-          history: [],
-          callStack,
-          a2aThreadId: stringMetadata(payload.metadata, "a2aThreadId"),
-        },
-      );
+      const content = await this.runtime.handleRemoteA2ACall(fromAgentId, targetAgentId, message, {
+        conversationId,
+        history: [],
+        callStack,
+        a2aThreadId: stringMetadata(payload.metadata, "a2aThreadId"),
+      });
+      await this.sendDeliveryAck(fromHubId, payload, envelopeId, "done");
       await this.sendResponse(fromHubId, payload, content, false, relayClient);
     } catch (error) {
       const content = error instanceof Error ? error.message : String(error);
+      await this.sendDeliveryAck(fromHubId, payload, envelopeId, "error");
       await this.sendResponse(fromHubId, payload, content, true, relayClient);
     }
   }
 
   private async handleInboundChat(
     fromHubId: string,
+    envelopeId: string,
     payload: HubPayload,
     relayClient: RelayClient,
   ): Promise<void> {
@@ -342,9 +402,11 @@ export class HubMessageRouter {
       const message = requiredString(payload.content, "content", "chat message");
       const targetAgentId = payload.toAgentId ?? stringMetadata(payload.metadata, "targetAgentId");
       const content = await this.runtime.handleHubMessage(conversationId, message, targetAgentId);
+      await this.sendDeliveryAck(fromHubId, payload, envelopeId, "done");
       await this.sendResponse(fromHubId, payload, content, false, relayClient, "chat");
     } catch (error) {
       const content = error instanceof Error ? error.message : String(error);
+      await this.sendDeliveryAck(fromHubId, payload, envelopeId, "error");
       await this.sendResponse(fromHubId, payload, content, true, relayClient, "chat");
     }
   }
@@ -399,12 +461,14 @@ export class HubMessageRouter {
   }
 
   private handleDeliveryAck(payload: HubPayload): void {
-    const messageId = stringMetadata(payload.metadata, "envelopeId")
-      ?? stringMetadata(payload.metadata, "messageId")
-      ?? stringMetadata(payload.metadata, "correlationId")
-      ?? stringMetadata(payload.metadata, "replyTo")
-      ?? payload.content
-      ?? payload.messageId;
+    const envelopeId = stringMetadata(payload.metadata, "envelopeId");
+    const messageId =
+      envelopeId ??
+      stringMetadata(payload.metadata, "messageId") ??
+      stringMetadata(payload.metadata, "correlationId") ??
+      stringMetadata(payload.metadata, "replyTo") ??
+      payload.content ??
+      payload.messageId;
     const status = stringMetadata(payload.metadata, "status") ?? "accepted";
     if (status === "accepted" || status === "denied") {
       this.offlineStore.markSettled(messageId, status);
@@ -412,20 +476,59 @@ export class HubMessageRouter {
       this.offlineStore.markComplete(messageId, status);
     } else {
       logger.warn({ messageId, status }, "Ignoring delivery ACK with invalid status");
+      return;
     }
+    const payloadMessageId =
+      stringMetadata(payload.metadata, "messageId") ??
+      (envelopeId ? this.outboundPayloadByEnvelope.get(envelopeId) : undefined);
+    if (payloadMessageId) {
+      this.emitDeliveryStatus(payloadMessageId, {
+        execution: status as "accepted" | "denied" | "done" | "error",
+      });
+      if (status === "denied") {
+        this.settlePending(payloadMessageId, "", new Error("Remote Hub denied the request"));
+      }
+    }
+  }
+
+  private async sendDeliveryAck(
+    toHubId: string,
+    request: HubPayload,
+    envelopeId: string,
+    status: "accepted" | "denied" | "done" | "error",
+  ): Promise<void> {
+    await this.handleOutbound(
+      toHubId,
+      {
+        messageType: "delivery_ack",
+        messageId: randomUUID(),
+        conversationId: request.conversationId,
+        toUserId: request.fromUserId,
+        metadata: {
+          envelopeId,
+          messageId: request.messageId,
+          status,
+        },
+      },
+      request.conversationId ?? request.messageId,
+    );
   }
 
   private async handleResyncRequest(fromHubId: string, payload: HubPayload): Promise<void> {
     if (!payload.resyncRequest) throw new Error("Inbound resync request has no payload");
     const response = this.resyncService.handleResyncRequest(payload.resyncRequest);
-    await this.handleOutbound(fromHubId, {
-      messageType: "resync_response",
-      messageId: randomUUID(),
-      conversationId: response.roomId,
-      toUserId: payload.fromUserId,
-      resyncResponse: response,
-      metadata: { correlationId: payload.messageId },
-    }, response.roomId);
+    await this.handleOutbound(
+      fromHubId,
+      {
+        messageType: "resync_response",
+        messageId: randomUUID(),
+        conversationId: response.roomId,
+        toUserId: payload.fromUserId,
+        resyncResponse: response,
+        metadata: { correlationId: payload.messageId },
+      },
+      response.roomId,
+    );
   }
 
   private async sendResponse(
@@ -455,15 +558,20 @@ export class HubMessageRouter {
   private waitForResponse(messageId: string, signal?: AbortSignal): Promise<string> {
     return new Promise<string>((resolve, reject) => {
       const timer = setTimeout(() => {
-        this.settlePending(messageId, "", new Error("Remote Agent call timed out after 120 seconds"));
+        this.settlePending(
+          messageId,
+          "",
+          new Error("Remote Agent call timed out after 120 seconds"),
+        );
       }, REMOTE_CALL_TIMEOUT_MS);
       timer.unref();
       const pending: PendingMessage = { resolve, reject, timer, signal };
       if (signal) {
         pending.abort = () => {
-          const reason = signal.reason instanceof Error
-            ? signal.reason
-            : new DOMException("Remote Agent call aborted", "AbortError");
+          const reason =
+            signal.reason instanceof Error
+              ? signal.reason
+              : new DOMException("Remote Agent call aborted", "AbortError");
           this.settlePending(messageId, "", reason);
         };
         signal.addEventListener("abort", pending.abort, { once: true });
@@ -483,19 +591,58 @@ export class HubMessageRouter {
     else pending.resolve(content);
   }
 
+  private emitDeliveryStatus(
+    messageId: string,
+    update: Parameters<DeliveryStatusListener>[0],
+  ): void {
+    const delivery = this.deliveryListeners.get(messageId);
+    if (!delivery) return;
+    delivery.listener(update);
+    if (update.transport === "delivered" || update.transport === "failed") {
+      delivery.transportTerminal = true;
+    }
+    if (update.execution && ["denied", "done", "error"].includes(update.execution)) {
+      delivery.executionTerminal = true;
+    }
+    if (
+      update.transport === "failed" ||
+      (delivery.transportTerminal && delivery.executionTerminal)
+    ) {
+      this.deliveryListeners.delete(messageId);
+    }
+  }
+
   private async routeOfflineMessages(envelopes: HubEnvelope[]): Promise<void> {
     for (const envelope of envelopes) {
-      try {
-        await this.onEnvelope(envelope, this.relayClient);
-      } catch (error) {
-        logger.warn({ err: error, envelopeId: envelope.id }, "Unable to route offline Hub envelope");
-      }
+      await this.processRelayEnvelope(envelope);
     }
+  }
+
+  private async processRelayEnvelope(envelope: HubEnvelope): Promise<void> {
+    try {
+      await this.onEnvelope(envelope, this.relayClient);
+      this.relayClient.sendTransportReceipt(await this.createTransportReceipt(envelope.id));
+    } catch (error) {
+      logger.warn({ err: error, envelopeId: envelope.id }, "Unable to route Hub envelope");
+    }
+  }
+
+  private async createTransportReceipt(messageId: string): Promise<TransportReceipt> {
+    const unsigned = {
+      messageId,
+      recipientHubId: this.identity.hubId,
+      status: "persisted" as const,
+      timestamp: Date.now(),
+    };
+    return {
+      ...unsigned,
+      signature: await signEnvelope(unsigned, await this.identity.getSecretKey()),
+    };
   }
 
   private async deliverPendingForHub(hubId: string): Promise<void> {
     for (const message of this.offlineStore.getPendingForHub(hubId)) {
-      if (!await this.connectionManager.sendEnvelope(hubId, message.envelope)) return;
+      if (!(await this.connectionManager.sendEnvelope(hubId, message.envelope))) return;
       this.offlineStore.markDelivered(message.id);
     }
   }
@@ -508,7 +655,9 @@ export class HubMessageRouter {
   }
 }
 
-function signingData(envelope: Omit<HubEnvelope, "signature"> | HubEnvelope): Omit<HubEnvelope, "signature" | "relayTimestamp"> {
+function signingData(
+  envelope: Omit<HubEnvelope, "signature"> | HubEnvelope,
+): Omit<HubEnvelope, "signature" | "relayTimestamp"> {
   return {
     id: envelope.id,
     from: envelope.from,
@@ -520,7 +669,10 @@ function signingData(envelope: Omit<HubEnvelope, "signature"> | HubEnvelope): Om
   };
 }
 
-function stringMetadata(metadata: Record<string, unknown> | undefined, key: string): string | undefined {
+function stringMetadata(
+  metadata: Record<string, unknown> | undefined,
+  key: string,
+): string | undefined {
   const value = metadata?.[key];
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }

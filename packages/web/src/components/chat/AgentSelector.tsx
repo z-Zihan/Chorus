@@ -14,6 +14,9 @@ import { Input } from "@/components/ui/input";
 import { STATUS_COLORS } from "@/constants/agent";
 import { useAgentStore } from "@/store/agentStore";
 
+const PLUS_SIGN = "+";
+const LABEL_SEPARATOR = ":";
+
 interface AgentSelectorProps {
   agentIds: string[];
   isGroup: boolean;
@@ -89,7 +92,8 @@ export function AgentSelector({
               ))}
               {hiddenSelectedCount > 0 && (
                 <span className="relative flex h-6 min-w-6 items-center justify-center rounded-full bg-[var(--bg-elevated)] px-1 text-[10px] font-medium text-[var(--text-secondary)] ring-2 ring-[var(--bg-surface)]">
-                  +{hiddenSelectedCount}
+                  {PLUS_SIGN}
+                  {hiddenSelectedCount}
                 </span>
               )}
             </span>
@@ -132,7 +136,7 @@ export function AgentSelector({
             onChange={(event) => setQuery(event.target.value)}
             placeholder={t("agentSelector.search")}
             aria-label={t("agentSelector.search")}
-            className="h-8 pl-8"
+            className="h-11 pl-8 md:h-8"
           />
         </div>
         <DropdownMenuSeparator />
@@ -154,7 +158,7 @@ export function AgentSelector({
             <span
               className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
                 value.includes(agent.id)
-                  ? "border-teal-500 bg-teal-500 text-white"
+                  ? "border-[var(--accent-color)] bg-[var(--accent-color)] text-[var(--accent-foreground)]"
                   : "border-[var(--border-color)] bg-[var(--bg-base)]"
               }`}
             >
@@ -163,19 +167,21 @@ export function AgentSelector({
             <span className="relative shrink-0">
               <AgentAvatar name={agent.name} src={agent.avatar} size="xs" />
               <span
-                className={`absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-[var(--bg-surface)] ${agent.stale ? "bg-gray-400" : STATUS_COLORS[agent.status]}`}
+                className={`absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-[var(--bg-surface)] ${agent.stale ? "bg-[var(--status-offline)]" : STATUS_COLORS[agent.status]}`}
               />
             </span>
             <span className="min-w-0 flex-1">
               <span className="block truncate">{agent.name}</span>
               {agent.ownerType === "remote" && (
                 <span className="block truncate text-[10px] text-[var(--text-tertiary)]">
-                  {t("owner")}: {agent.owner?.name ?? agent.ownerId ?? "—"} · {agent.homeHubId ?? "—"}
+                  {t("owner")}
+                  {LABEL_SEPARATOR} {agent.owner?.name ?? agent.ownerId ?? "—"} ·{" "}
+                  {agent.homeHubId ?? "—"}
                 </span>
               )}
             </span>
             {agent.ownerType === "remote" && (
-              <span className="shrink-0 rounded bg-blue-500/15 px-1 py-0.5 text-[9px] text-blue-600 dark:text-blue-300">
+              <span className="shrink-0 rounded bg-[var(--info-subtle)] px-1 py-0.5 text-[9px] text-[var(--status-info)]">
                 {t("remoteAgent")}
               </span>
             )}
@@ -196,7 +202,7 @@ export function AgentSelector({
             variant="ghost"
             size="sm"
             disabled={selectedAgents.length === 0}
-            className="h-7 px-2 text-xs text-teal-600 dark:text-teal-400"
+            className="h-7 px-2 text-xs text-[var(--accent-color)]"
             onClick={() => onValueChange([])}
           >
             {t("agentSelector.clearSelection")}

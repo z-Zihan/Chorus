@@ -24,7 +24,7 @@ export const SelectTrigger = forwardRef<
   <SelectTriggerPrimitive
     ref={ref}
     className={cn(
-      "flex h-10 w-full items-center justify-between rounded-lg border border-[var(--border-color)] bg-[var(--bg-base)] px-3 text-sm text-[var(--text-primary)] outline-none transition focus:border-[var(--accent-color)] focus:ring-2 focus:ring-[var(--accent-subtle)] disabled:cursor-not-allowed disabled:opacity-50",
+      "flex h-11 w-full items-center justify-between rounded-lg border border-[var(--border-color)] bg-[var(--bg-base)] px-3 text-sm text-[var(--text-primary)] outline-none transition focus:border-[var(--accent-color)] focus:ring-2 focus:ring-[var(--accent-subtle)] disabled:cursor-not-allowed disabled:opacity-50 sm:h-10",
       className,
     )}
     {...props}
@@ -67,7 +67,7 @@ export const SelectItem = forwardRef<
   <SelectItemPrimitive
     ref={ref}
     className={cn(
-      "relative flex cursor-default select-none items-center rounded-md py-2 pl-8 pr-2 text-sm outline-none data-[disabled]:pointer-events-none data-[highlighted]:bg-[var(--bg-hover)] data-[disabled]:opacity-50",
+      "relative flex min-h-11 cursor-default select-none items-center rounded-md py-2 pl-8 pr-2 text-sm outline-none data-[disabled]:pointer-events-none data-[highlighted]:bg-[var(--bg-hover)] data-[disabled]:opacity-50 sm:min-h-0",
       className,
     )}
     {...props}

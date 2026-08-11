@@ -11,6 +11,7 @@ import { logger } from "@/utils/logger";
 export type { Conversation, Message } from "@chorus/shared";
 
 type WebSocketSend = (event: ClientEvent) => boolean;
+type ConversationMutation = "rename" | "pin" | "archive" | "delete";
 
 export interface A2AThreadState {
   threadId: string;
@@ -24,6 +25,10 @@ export interface A2AThreadState {
   status: "running" | "completed" | "error";
   startedAt: number;
   completedAt?: number;
+  delivery?: {
+    transport?: "queued" | "delivered" | "failed";
+    execution?: "accepted" | "denied" | "done" | "error";
+  };
 }
 
 export interface A2AConfirmation {
@@ -39,15 +44,18 @@ interface ChatState {
   groupConversations: Conversation[];
   archivedConversations: Conversation[];
   hasLoadedConversations: boolean;
+  conversationsError: string | null;
   currentConversationId: string | null;
   targetMessageId: string | null;
   messages: Message[];
   isLoadingMessages: boolean;
+  messagesError: string | null;
   isStreaming: boolean;
   streamingMessageId: string | null;
   a2aThreads: Record<string, A2AThreadState>;
   a2aConfirmations: A2AConfirmation[];
   webSocketSend: WebSocketSend | null;
+  pendingConversationActions: Record<string, ConversationMutation>;
 
   fetchConversations: (includeArchived?: boolean) => Promise<void>;
   setCurrentConversation: (id: string) => void;
@@ -68,6 +76,7 @@ interface ChatState {
   startA2AThread: (thread: Omit<A2AThreadState, "result" | "status" | "startedAt">) => void;
   completeA2AThread: (threadId: string, result: string) => void;
   failA2AThread: (threadId: string, error: string) => void;
+  updateA2ADelivery: (threadId: string, update: NonNullable<A2AThreadState["delivery"]>) => void;
   cancelA2AThread: (threadId: string) => void;
   requestA2AConfirmation: (confirmation: A2AConfirmation) => void;
   dismissA2AConfirmation: (threadId: string) => void;
@@ -76,15 +85,15 @@ interface ChatState {
     title?: string,
     agentId?: string,
     type?: ConversationType,
-  ) => Promise<void>;
-  createGroupConversation: (title: string, agentIds: string[]) => Promise<void>;
-  createRoom: (name: string) => Promise<void>;
+  ) => Promise<Conversation | null>;
+  createGroupConversation: (title: string, agentIds: string[]) => Promise<Conversation | null>;
+  createRoom: (name: string) => Promise<boolean>;
   syncConversation: (conversation: Conversation) => void;
   renameConversation: (id: string, title: string) => Promise<boolean>;
-  togglePin: (id: string) => Promise<void>;
-  toggleArchive: (id: string) => Promise<void>;
+  togglePin: (id: string) => Promise<boolean>;
+  toggleArchive: (id: string) => Promise<boolean>;
   deleteConversation: (id: string) => Promise<boolean>;
-  deleteConversations: (ids: string[]) => Promise<number>;
+  deleteConversations: (ids: string[]) => Promise<number | null>;
 }
 
 function sortConversations(items: Conversation[]): Conversation[] {
@@ -96,29 +105,49 @@ function sortConversations(items: Conversation[]): Conversation[] {
 export const useChatStore = create<ChatState>((set, get) => {
   let messagesRequestId = 0;
   const streamManager = new StreamManager(get, set);
+  const beginConversationAction = (id: string, action: ConversationMutation) => {
+    if (get().pendingConversationActions[id]) return false;
+    set((state) => ({
+      pendingConversationActions: { ...state.pendingConversationActions, [id]: action },
+    }));
+    return true;
+  };
+  const endConversationAction = (id: string) => {
+    set((state) => ({
+      pendingConversationActions: Object.fromEntries(
+        Object.entries(state.pendingConversationActions).filter(
+          ([conversationId]) => conversationId !== id,
+        ),
+      ),
+    }));
+  };
 
   return {
     conversations: [],
     groupConversations: [],
     archivedConversations: [],
     hasLoadedConversations: false,
+    conversationsError: null,
     currentConversationId: null,
     targetMessageId: null,
     messages: [],
     isLoadingMessages: false,
+    messagesError: null,
     isStreaming: false,
     streamingMessageId: null,
     a2aThreads: {},
     a2aConfirmations: [],
     webSocketSend: null,
+    pendingConversationActions: {},
 
     fetchConversations: async (includeArchived = true) => {
+      set({ conversationsError: null });
       try {
         const [data, groups, crossHubGroups, archived] = await Promise.all([
-          api.getConversations(false, "dm"),
-          api.getConversations(false, "group"),
-          api.getConversations(false, "cross_hub"),
-          includeArchived ? api.getConversations(true) : Promise.resolve([]),
+          api.getConversations(false, "dm", true),
+          api.getConversations(false, "group", true),
+          api.getConversations(false, "cross_hub", true),
+          includeArchived ? api.getConversations(true, undefined, true) : Promise.resolve([]),
         ]);
         const allGroups = [...groups, ...crossHubGroups];
         set({
@@ -126,6 +155,7 @@ export const useChatStore = create<ChatState>((set, get) => {
           groupConversations: sortConversations(allGroups),
           archivedConversations: sortConversations(archived),
           hasLoadedConversations: true,
+          conversationsError: null,
         });
         // Auto-select first conversation if none selected
         const firstConversation = data[0] ?? allGroups[0];
@@ -134,7 +164,10 @@ export const useChatStore = create<ChatState>((set, get) => {
         }
       } catch (e) {
         logger.error("Failed to fetch conversations", e);
-        set({ hasLoadedConversations: true });
+        set({
+          hasLoadedConversations: true,
+          conversationsError: i18n.t("sidebar:conversationLoadFailed"),
+        });
       }
     },
 
@@ -146,6 +179,7 @@ export const useChatStore = create<ChatState>((set, get) => {
         a2aThreads: {},
         a2aConfirmations: [],
         isLoadingMessages: true,
+        messagesError: null,
       });
       get().fetchMessages(id);
     },
@@ -167,15 +201,18 @@ export const useChatStore = create<ChatState>((set, get) => {
     fetchMessages: async (conversationId) => {
       const requestId = ++messagesRequestId;
       if (get().currentConversationId === conversationId) {
-        set({ isLoadingMessages: true });
+        set({ isLoadingMessages: true, messagesError: null });
       }
       try {
-        const data = await api.getMessages(conversationId);
+        const data = await api.getMessages(conversationId, true);
         if (requestId === messagesRequestId && get().currentConversationId === conversationId) {
-          set({ messages: data, a2aThreads: {} });
+          set({ messages: data, a2aThreads: {}, messagesError: null });
         }
       } catch (e) {
         logger.error("Failed to fetch messages", e);
+        if (requestId === messagesRequestId && get().currentConversationId === conversationId) {
+          set({ messagesError: i18n.t("chat:messageLoadFailed") });
+        }
       } finally {
         if (requestId === messagesRequestId && get().currentConversationId === conversationId) {
           set({ isLoadingMessages: false });
@@ -210,9 +247,7 @@ export const useChatStore = create<ChatState>((set, get) => {
           (agent) =>
             agent.id === agentId &&
             !agent.stale &&
-            (agent.ownerType === "remote" ||
-              agent.status === "online" ||
-              agent.status === "busy"),
+            (agent.ownerType === "remote" || agent.status === "online" || agent.status === "busy"),
         );
       const firstOnlineAgentId = conversation?.agentIds.find(isRoutable);
       // For DM: route to the conversation's agent (or first selected)
@@ -260,6 +295,7 @@ export const useChatStore = create<ChatState>((set, get) => {
       const sent = get().webSocketSend?.({
         type: "message",
         conversationId: convId,
+        clientMessageId: userMsg.id,
         content: trimmedContent,
         agentId: activeAgentId,
         mentionedAgents,
@@ -346,6 +382,21 @@ export const useChatStore = create<ChatState>((set, get) => {
         };
       }),
 
+    updateA2ADelivery: (threadId, update) =>
+      set((state) => {
+        const thread = state.a2aThreads[threadId];
+        if (!thread) return {};
+        return {
+          a2aThreads: {
+            ...state.a2aThreads,
+            [threadId]: {
+              ...thread,
+              delivery: { ...thread.delivery, ...update },
+            },
+          },
+        };
+      }),
+
     cancelA2AThread: (threadId) => {
       get().webSocketSend?.({ type: "cancel", messageId: threadId });
       get().failA2AThread(threadId, i18n.t("chat:a2aCancelled"));
@@ -377,12 +428,12 @@ export const useChatStore = create<ChatState>((set, get) => {
         );
         if (conv && (!targetAgentId || conv.agentIds.includes(targetAgentId))) {
           // Switch to the existing empty conversation instead of creating a new one
-          if (conv.agentIds[0] === targetAgentId) return;
+          if (conv.agentIds[0] === targetAgentId) return conv;
         }
       }
 
       try {
-        const conv = await api.createConversation(title, targetAgentId, type);
+        const conv = await api.createConversation(title, targetAgentId, type, true);
         set((state) => ({
           conversations:
             conv.type === "dm"
@@ -397,8 +448,10 @@ export const useChatStore = create<ChatState>((set, get) => {
           isLoadingMessages: false,
         }));
         track("conversation_created", { conversationId: conv.id, type: conv.type });
+        return conv;
       } catch (e) {
         logger.error("Failed to create conversation", e);
+        return null;
       }
     },
 
@@ -408,7 +461,7 @@ export const useChatStore = create<ChatState>((set, get) => {
           .getState()
           .agents.some((agent) => agentIds.includes(agent.id) && agent.ownerType === "remote");
         const type: ConversationType = containsRemoteAgent ? "cross_hub" : "group";
-        const conv = await api.createConversation(title, agentIds, type);
+        const conv = await api.createConversation(title, agentIds, type, true);
         set((state) => ({
           groupConversations: sortConversations([conv, ...state.groupConversations]),
           currentConversationId: conv.id,
@@ -416,14 +469,16 @@ export const useChatStore = create<ChatState>((set, get) => {
           isLoadingMessages: false,
         }));
         track("conversation_created", { conversationId: conv.id, type });
+        return conv;
       } catch (error) {
         logger.error("Failed to create group conversation", error);
+        return null;
       }
     },
 
     createRoom: async (name) => {
       try {
-        const room = await api.createHubRoom(name);
+        const room = await api.createHubRoom(name, true);
         await get().fetchConversations();
         const conversation = get().groupConversations.find(
           (item) => item.relayRoomId === room.roomId,
@@ -433,8 +488,10 @@ export const useChatStore = create<ChatState>((set, get) => {
           conversationId: conversation?.id ?? room.roomId,
           type: "cross_hub",
         });
+        return true;
       } catch (error) {
         logger.error("Failed to create Relay Room", error);
+        return false;
       }
     },
 
@@ -454,8 +511,9 @@ export const useChatStore = create<ChatState>((set, get) => {
     renameConversation: async (id, title) => {
       const trimmed = title.trim();
       if (!trimmed) return false;
+      if (!beginConversationAction(id, "rename")) return false;
       try {
-        const updated = await api.updateConversation(id, { title: trimmed });
+        const updated = await api.updateConversation(id, { title: trimmed }, true);
         set((state) => ({
           conversations: state.conversations.map((item) => (item.id === id ? updated : item)),
           groupConversations: state.groupConversations.map((item) =>
@@ -469,19 +527,25 @@ export const useChatStore = create<ChatState>((set, get) => {
       } catch (error) {
         logger.error("Failed to rename conversation", error);
         return false;
+      } finally {
+        endConversationAction(id);
       }
     },
 
     togglePin: async (id) => {
+      if (!beginConversationAction(id, "pin")) return false;
       const state = get();
       const conversation = [
         ...state.conversations,
         ...state.groupConversations,
         ...state.archivedConversations,
       ].find((item) => item.id === id);
-      if (!conversation) return;
+      if (!conversation) {
+        endConversationAction(id);
+        return false;
+      }
       try {
-        const updated = await api.updateConversation(id, { pinned: !conversation.pinned });
+        const updated = await api.updateConversation(id, { pinned: !conversation.pinned }, true);
         set((current) => ({
           conversations: sortConversations(
             current.conversations.map((item) => (item.id === id ? updated : item)),
@@ -493,21 +557,33 @@ export const useChatStore = create<ChatState>((set, get) => {
             current.archivedConversations.map((item) => (item.id === id ? updated : item)),
           ),
         }));
+        return true;
       } catch (error) {
         logger.error("Failed to pin conversation", error);
+        return false;
+      } finally {
+        endConversationAction(id);
       }
     },
 
     toggleArchive: async (id) => {
+      if (!beginConversationAction(id, "archive")) return false;
       const state = get();
       const conversation = [
         ...state.conversations,
         ...state.groupConversations,
         ...state.archivedConversations,
       ].find((item) => item.id === id);
-      if (!conversation) return;
+      if (!conversation) {
+        endConversationAction(id);
+        return false;
+      }
       try {
-        const updated = await api.updateConversation(id, { archived: !conversation.archived });
+        const updated = await api.updateConversation(
+          id,
+          { archived: !conversation.archived },
+          true,
+        );
         const current = get();
         const conversations = sortConversations([
           ...current.conversations.filter((item) => item.id !== id),
@@ -537,14 +613,19 @@ export const useChatStore = create<ChatState>((set, get) => {
         } else {
           set({ conversations, groupConversations, archivedConversations });
         }
+        return true;
       } catch (error) {
         logger.error("Failed to archive conversation", error);
+        return false;
+      } finally {
+        endConversationAction(id);
       }
     },
 
     deleteConversation: async (id) => {
+      if (!beginConversationAction(id, "delete")) return false;
       try {
-        await api.deleteConversation(id);
+        await api.deleteConversation(id, true);
         track("conversation_deleted", { conversationId: id });
         const state = get();
         const allConversations = [
@@ -594,13 +675,15 @@ export const useChatStore = create<ChatState>((set, get) => {
       } catch (e) {
         logger.error("Failed to delete conversation", e);
         return false;
+      } finally {
+        endConversationAction(id);
       }
     },
 
     deleteConversations: async (ids) => {
       if (ids.length === 0) return 0;
       try {
-        const { count } = await api.deleteConversations(ids);
+        const { count } = await api.deleteConversations(ids, true);
         const deletedIds = new Set(ids);
         const state = get();
         const conversations = state.conversations.filter((item) => !deletedIds.has(item.id));
@@ -637,7 +720,7 @@ export const useChatStore = create<ChatState>((set, get) => {
         return count;
       } catch (error) {
         logger.error("Failed to delete conversations", error);
-        return 0;
+        return null;
       }
     },
   };

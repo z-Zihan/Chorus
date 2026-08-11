@@ -9,11 +9,34 @@ export interface RoomCasResult extends RoomCasState {
   accepted: boolean;
 }
 
-/** Relay-generated plaintext confirmation of transport delivery. */
+/** Recipient-signed plaintext proof that an envelope was durably handled. */
 export interface TransportReceipt {
   messageId: string;
-  status: "delivered" | "failed";
+  recipientHubId: string;
+  status: "persisted";
   timestamp: number;
+  signature: string;
+}
+
+/** Relay-generated sender update. This never describes Agent execution. */
+export interface TransportStatusUpdate {
+  messageId: string;
+  status: "queued" | "delivered" | "failed";
+  timestamp: number;
+}
+
+export type RoomInvitationStatus = "pending" | "accepted" | "declined" | "revoked" | "expired";
+
+export interface RoomInvitation {
+  roomId: string;
+  roomName: string;
+  inviteeHubId: string;
+  invitedByHubId: string;
+  invitedByName?: string;
+  status: RoomInvitationStatus;
+  createdAt: number;
+  expiresAt: number;
+  respondedAt?: number;
 }
 
 /**
@@ -34,6 +57,7 @@ export type RelayClientMessage =
       newRevision: number;
       newKeyEpoch: number;
     }
+  | ({ type: "transport_receipt" } & TransportReceipt)
   | { type: "ping" };
 
 /**
@@ -48,6 +72,7 @@ export type RelayServerMessage =
       hubId: string;
       status: "online" | "offline";
       publicKey?: string;
+      displayName?: string;
     }
   | {
       type: "room:event";
@@ -57,6 +82,6 @@ export type RelayServerMessage =
     }
   | { type: "room:members"; roomId: string; members: RoomMember[] }
   | ({ type: "room_cas_result"; roomId: string } & RoomCasResult)
-  | ({ type: "transport_receipt" } & TransportReceipt)
+  | ({ type: "transport_status" } & TransportStatusUpdate)
   | { type: "contact_block_ack"; blockedHubId: string; success: boolean }
   | { type: "pong" };

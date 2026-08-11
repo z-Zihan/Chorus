@@ -1,7 +1,8 @@
 # Chorus 开发计划 / Development Plan
 
-> 最后更新：2026-08-05
+> 最后更新：2026-08-11
 > 规范来源：`docs/CROSS_DEVICE_DESIGN.md`
+> 当前发布门禁与证据以 `design/development-plan.md` 为准；本文件下半部“项目暂停总结”保留为 2026-08-05 历史快照，不代表当前发布完成度。
 
 ## 状态说明
 
@@ -14,18 +15,18 @@
 
 ## P1 — 发布阻断 / Release Blockers
 
-### 协议与安全（全部完成）
+### 协议与安全（实现推进中，真实设备门禁未关闭）
 
 | ID | 任务 | 状态 |
 |---|---|---|
-| XDEV-01~12 | TransportReceipt, Room CAS, KeyCommitment, JCS, Hub key keychain, SPAKE2, 32-hex fingerprint, Room revision, Resync, OwnerProof, contact_block, Block rekey | ✅ done |
+| XDEV-01~12 | Relay TransportReceipt、Room CAS、JCS、Hub key、Room revision/Resync 等 | ⏳ Relay receipt 已有真实 WS 证据；P2P/物理设备矩阵未关闭 |
 
-### 产品流程（全部完成）
+### 产品流程（确定性流程已实现，真实设备与故障矩阵未完成）
 
 | ID | 任务 | 状态 |
 |---|---|---|
-| FLOW-01 | Contact→Room→owner-only Agent | ✅ done |
-| UX-01~10 | Onboarding checklist, 路由可视化, Room Agent 入口, 首次引导, 连通性测试, Room 引导, 成员面板, Relay banner, A2A tooltip, 保存反馈 | ✅ done |
+| FLOW-01 | Contact→Room→owner-only Agent | ⏳ 两进程通过；两物理设备未验证 |
+| UX-01~10 | Onboarding、路由、Room、A2A 与反馈 | ⏳ 核心实现存在；完整 UI/故障矩阵未关闭 |
 
 ### P2P 产品化（已完成 3/4）
 
@@ -41,7 +42,15 @@
 | ID | 任务 | 状态 |
 |---|---|---|
 | TEST-01 | 真实双设备 E2E（Relay + P2P + Hybrid） | ⏳ 需物理设备 |
-| PKG-01 | Tauri 生产包验证 | ⏳ 需测试后打包 |
+| PKG-01 | Tauri 生产包验证 | ⏳ arm64 macOS 未签名 `.app` 与 `.dmg` 已生成；签名/公证、DMG 安装、Windows、干净机未完成 |
+| UX-LOAD-01 | 会话、消息、Agent 加载失败与重试 | ✅ loading/empty/error 分离；已有消息保留；桌面/375px、明暗、双语验证通过 |
+| UX-LOAD-02 | 搜索、设置/隐私、Agent 目录状态真实性 | ✅ 假空态已移除；跨页面依赖错误、重试和移动 44px 触控目标验证通过 |
+| UX-LOAD-03 | 定时任务与插件诊断产品入口 | ✅ Scheduler CRUD/回滚/确认/错误恢复和只读插件列表已实现；API 回归与桌面/375px 浏览器交互通过 |
+| UX-LOAD-04 | 群成员、联系人和 A2A 状态真实性 | ✅ 群聊崩溃已修复；加载失败/重试、成员增删确认、Room owner-proof 路径和 375px Header 已验证 |
+| UX-LOAD-05 | Onboarding、Updater 与会话变更恢复 | ✅ 未知/失败/重试、运行时真实性、安装/重启分离、创建/重命名/置顶/归档/删除失败保真已实现；API 回归与 375px 浏览器交互通过 |
+| UX-LOAD-06 | 设置写入与低频动作反馈 | ✅ 凭据清除确认/失败保真、Hub 保存、偏好持久化、导出与配对复制反馈已实现；375px 中文暗色与 English 浅色验证通过 |
+| UX-LOAD-07 | 全局状态视觉、响应式与焦点收口 | ✅ 语义状态 Token、Toast、中文导出、320/375/800/1440/极短视口、真实 Chrome 200% zoom、skip link、主键盘路径、Onboarding/设置/配对焦点循环及导出菜单已验证；屏幕阅读器保留人工门禁 |
+| UX-LOAD-08 | 全项目低频语义与移动触控矩阵 | ✅ 375px 下八个设置页、配对、搜索、建群、Agent 目录/设置、日志、确认框和群成员菜单均有稳定名称、无横向溢出且有效目标 ≥44px；屏幕阅读器保留人工门禁 |
 
 ---
 

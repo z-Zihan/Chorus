@@ -126,4 +126,23 @@ describe("AgentRuntime A2A permissions", () => {
       ]),
     );
   });
+
+  it("preserves a client message ID so optimistic UI state has exact correlation", async () => {
+    await runtime.handleUserMessage(
+      conversationId,
+      "correlated message",
+      [],
+      "caller",
+      "client-message-1",
+    );
+
+    expect(repository.listAllMessages(conversationId)).toContainEqual(
+      expect.objectContaining({
+        id: "client-message-1",
+        fromType: "user",
+        content: "correlated message",
+        status: "done",
+      }),
+    );
+  });
 });

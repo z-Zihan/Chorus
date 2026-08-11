@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { Button } from "@/components/ui/button";
+import { Button, type ButtonProps } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 
 interface ConfirmDialogProps {
@@ -8,7 +8,9 @@ interface ConfirmDialogProps {
   title: string;
   message: ReactNode;
   confirmLabel?: string;
+  confirmingLabel?: string;
   cancelLabel?: string;
+  confirmVariant?: ButtonProps["variant"];
   isConfirming?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
@@ -19,7 +21,9 @@ export function ConfirmDialog({
   title,
   message,
   confirmLabel,
+  confirmingLabel,
   cancelLabel,
+  confirmVariant = "danger",
   isConfirming = false,
   onConfirm,
   onCancel,
@@ -47,11 +51,23 @@ export function ConfirmDialog({
           <div className="mt-2">{message}</div>
         </DialogDescription>
         <div className="mt-6 flex justify-end gap-3">
-          <Button variant="secondary" onClick={onCancel} disabled={isConfirming}>
+          <Button
+            variant="secondary"
+            className="min-h-11 sm:min-h-10"
+            onClick={onCancel}
+            disabled={isConfirming}
+          >
             {cancelLabel ?? t("buttons.cancel")}
           </Button>
-          <Button variant="danger" onClick={onConfirm} disabled={isConfirming}>
-            {isConfirming ? t("buttons.deleting") : (confirmLabel ?? t("buttons.confirm"))}
+          <Button
+            variant={confirmVariant}
+            className="min-h-11 sm:min-h-10"
+            onClick={onConfirm}
+            disabled={isConfirming}
+          >
+            {isConfirming
+              ? (confirmingLabel ?? t("buttons.deleting"))
+              : (confirmLabel ?? t("buttons.confirm"))}
           </Button>
         </div>
       </DialogContent>

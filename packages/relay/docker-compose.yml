@@ -10,11 +10,14 @@ services:
       - relay-data:/data
     environment:
       RELAY_PORT: "3211"
-      RELAY_JWT_SECRET: ${RELAY_JWT_SECRET:-change-me}
+      RELAY_HOST: "0.0.0.0"
+      RELAY_JWT_SECRET: ${RELAY_JWT_SECRET:?Set a strong RELAY_JWT_SECRET of at least 32 characters}
+      RELAY_TOKEN_TTL_SECONDS: "86400"
       RELAY_OFFLINE_TTL_DAYS: "7"
       RELAY_MAX_HUBS: "1000"
       RELAY_DB_PATH: /data/relay.db
       RELAY_LOG_LEVEL: info
+      RELAY_CORS_ORIGINS: ${RELAY_CORS_ORIGINS:-}
     restart: unless-stopped
 
 volumes:

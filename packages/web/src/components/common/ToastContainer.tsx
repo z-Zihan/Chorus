@@ -11,9 +11,9 @@ import { cn } from "@/lib/cn";
 import { useUIStore, type ToastType } from "@/store/uiStore";
 
 const TOAST_STYLES: Record<ToastType, string> = {
-  error: "border-red-700 bg-red-950 text-red-100",
-  info: "border-blue-700 bg-[var(--bg-surface)] text-[var(--text-primary)]",
-  success: "border-green-700 bg-green-950 text-green-100",
+  error: "border-[var(--status-error)]/50 bg-[var(--danger-subtle)] text-[var(--text-primary)]",
+  info: "border-[var(--status-info)]/50 bg-[var(--info-subtle)] text-[var(--text-primary)]",
+  success: "border-[var(--status-online)]/50 bg-[var(--success-subtle)] text-[var(--text-primary)]",
 };
 
 const TOAST_ICONS = {
@@ -42,15 +42,15 @@ export function ToastContainer() {
               if (!open) removeToast(toast.id);
             }}
             className={cn(
-              "grid grid-cols-[auto_1fr_auto] items-start gap-3 rounded-lg border px-4 py-3 shadow-2xl backdrop-blur data-[state=closed]:animate-[toast-out_150ms_ease-in] data-[state=open]:animate-[toast-in_200ms_ease-out] data-[swipe=end]:translate-x-[var(--radix-toast-swipe-end-x)] data-[swipe=move]:translate-x-[var(--radix-toast-swipe-move-x)] data-[swipe=cancel]:translate-x-0 data-[swipe=move]:transition-none",
+              "pointer-events-auto grid grid-cols-[auto_1fr_auto] items-center gap-3 rounded-lg border px-4 py-2 shadow-2xl backdrop-blur data-[state=closed]:animate-[toast-out_150ms_ease-in] data-[state=open]:animate-[toast-in_200ms_ease-out] data-[swipe=end]:translate-x-[var(--radix-toast-swipe-end-x)] data-[swipe=move]:translate-x-[var(--radix-toast-swipe-move-x)] data-[swipe=cancel]:translate-x-0 data-[swipe=move]:transition-none",
               TOAST_STYLES[toast.type],
             )}
           >
-            <Icon aria-hidden="true" className="mt-0.5 h-5 w-5" />
+            <Icon aria-hidden="true" className="h-5 w-5" />
             <ToastDescription className="text-sm leading-5">{toast.message}</ToastDescription>
             <ToastClose
               aria-label={t("aria.closeNotification")}
-              className="rounded p-0.5 text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
+              className="-mr-2 flex h-11 w-11 items-center justify-center rounded-lg text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] sm:h-8 sm:w-8"
             >
               <X aria-hidden="true" className="h-4 w-4" />
             </ToastClose>

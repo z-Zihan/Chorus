@@ -33,6 +33,8 @@ export interface HubConfig {
 }
 
 export interface AppConfig {
+  /** Local HTTP server bind address. Defaults to loopback for desktop safety. */
+  host?: string;
   port: number;
   dbPath: string;
   cors: { origin: string[] };

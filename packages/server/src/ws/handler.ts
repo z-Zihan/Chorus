@@ -13,6 +13,7 @@ const eventSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("message"),
     conversationId: z.string().min(1),
+    clientMessageId: z.string().min(1).max(128).optional(),
     content: z.string().min(1).max(32_000),
     agentId: z.string().min(1).optional(),
     mentionedAgents: z.array(z.string()).optional(),
@@ -120,9 +121,7 @@ export function isWebSocketAuthorized(
   if (!auth.enabled || isLoopbackAddress(remoteAddress)) return true;
   const plaintext = new URL(requestUrl, "http://localhost").searchParams.get("token");
   const verified = plaintext ? verifyAuthToken(plaintext, auth, tokenStore) : null;
-  return Boolean(
-    verified && (verified === "configured" || tokenHasScope(verified, "ws:connect")),
-  );
+  return Boolean(verified && (verified === "configured" || tokenHasScope(verified, "ws:connect")));
 }
 
 function handleEvent(
@@ -140,12 +139,19 @@ function handleEvent(
     runtime.cancel(event.messageId);
   } else if (event.type === "message") {
     void runtime
-      .handleUserMessage(event.conversationId, event.content, event.mentionedAgents, event.agentId)
+      .handleUserMessage(
+        event.conversationId,
+        event.content,
+        event.mentionedAgents,
+        event.agentId,
+        event.clientMessageId,
+      )
       .catch((error: unknown) => {
         app.log.error({ err: error }, "Agent runtime failed while handling WebSocket message");
         events.sendDirect(socket, {
           type: "error",
           message: error instanceof Error ? error.message : "Unable to send message",
+          messageId: event.clientMessageId,
         });
       });
   }

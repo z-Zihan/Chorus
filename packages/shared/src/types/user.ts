@@ -13,7 +13,7 @@ export interface User {
 }
 
 export interface UserWithAgents extends User {
-  agents: import("./agent").Agent[];
+  agents: Agent[];
   agentCount: number;
 }
 
@@ -26,3 +26,4 @@ export interface UserHubBinding {
   userSignature: string;
   hubSignature: string;
 }
+import type { Agent } from "./agent";

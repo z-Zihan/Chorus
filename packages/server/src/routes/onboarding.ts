@@ -159,8 +159,7 @@ export function registerOnboardingRoutes(
   app.post("/api/onboarding/select-agent", async (request, reply) => {
     const parsed = selectAgentSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "INVALID_DETECTION" });
-    const state = await onboarding.selectAgent(parsed.data.detectionId);
-    return reply.code(state.step === "error" ? 409 : 200).send(state);
+    return onboarding.selectAgent(parsed.data.detectionId);
   });
   app.post("/api/onboarding/complete", async () => onboarding.complete());
   app.post("/api/onboarding/reset", async () => onboarding.reset());

@@ -16,10 +16,13 @@ import {
   announceUpdate,
   checkForUpdates,
   getUpdateChannel,
+  isUpdateConfigured,
+  isUpdateSupported,
   setUpdateChannel,
   type UpdateChannel,
 } from "@/services/updater";
 import { track } from "@/utils/analytics";
+import { useUIStore } from "@/store/uiStore";
 
 export function AgentSettingsExtras() {
   const { t } = useTranslation("settings");
@@ -28,8 +31,26 @@ export function AgentSettingsExtras() {
   const [updateChannel, setChannel] = useState<UpdateChannel>(getUpdateChannel);
   const [isCheckingForUpdates, setIsCheckingForUpdates] = useState(false);
   const [updateStatus, setUpdateStatus] = useState<string | null>(null);
+  const updateConfigured = isUpdateConfigured();
+  const updateSupported = isUpdateSupported();
+  const addToast = useUIStore((state) => state.addToast);
+
+  const handleThemeChange = (preference: ThemePreference) => {
+    setTheme(preference);
+    if (!setThemePreference(preference)) addToast(t("preferenceSaveFailed"), "error");
+    track("settings_changed", { section: "theme", value: preference });
+  };
+
+  const handleLanguageChange = async (language: AppLanguage) => {
+    track("settings_changed", { section: "language", value: language });
+    if (!(await changeLanguage(language))) addToast(t("preferenceSaveFailed"), "error");
+  };
 
   const handleCheckForUpdates = async () => {
+    if (!updateSupported) {
+      setUpdateStatus(t(updateConfigured ? "updates.notAvailableInWeb" : "updates.notConfigured"));
+      return;
+    }
     setIsCheckingForUpdates(true);
     setUpdateStatus(null);
     try {
@@ -57,12 +78,10 @@ export function AgentSettingsExtras() {
           <span className="mb-2 block text-sm font-medium text-[var(--text-primary)]">
             {t("theme")}
           </span>
-          <Select value={theme} onValueChange={(preference: ThemePreference) => {
-            setTheme(preference);
-            setThemePreference(preference);
-            track("settings_changed", { section: "theme", value: preference });
-          }}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
+          <Select value={theme} onValueChange={handleThemeChange}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="dark">{t("themeOptions.dark")}</SelectItem>
               <SelectItem value="light">{t("themeOptions.light")}</SelectItem>
@@ -74,11 +93,13 @@ export function AgentSettingsExtras() {
           <span className="mb-2 block text-sm font-medium text-[var(--text-primary)]">
             {t("language")}
           </span>
-          <Select value={currentLanguage()} onValueChange={(language: AppLanguage) => {
-            track("settings_changed", { section: "language", value: language });
-            void changeLanguage(language);
-          }}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
+          <Select
+            value={currentLanguage()}
+            onValueChange={(language: AppLanguage) => void handleLanguageChange(language)}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="zh-CN">{t("languageOptions.zh-CN")}</SelectItem>
               <SelectItem value="en">{t("languageOptions.en")}</SelectItem>
@@ -89,13 +110,22 @@ export function AgentSettingsExtras() {
           <span className="mb-2 block text-sm font-medium text-[var(--text-primary)]">
             {t("updates.channel")}
           </span>
-          <Select value={updateChannel} onValueChange={(channel: UpdateChannel) => {
-            setChannel(channel);
-            setUpdateChannel(channel);
-            setUpdateStatus(null);
-            track("settings_changed", { section: "updateChannel", value: channel });
-          }}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
+          <Select
+            disabled={!updateSupported}
+            value={updateChannel}
+            onValueChange={(channel: UpdateChannel) => {
+              if (setUpdateChannel(channel)) {
+                setChannel(channel);
+                setUpdateStatus(null);
+                track("settings_changed", { section: "updateChannel", value: channel });
+              } else {
+                setUpdateStatus(t("updates.channelSaveFailed"));
+              }
+            }}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="stable">{t("updates.channels.stable")}</SelectItem>
               <SelectItem value="beta">{t("updates.channels.beta")}</SelectItem>
@@ -114,14 +144,33 @@ export function AgentSettingsExtras() {
             <FileText aria-hidden="true" className="h-4 w-4" />
             {t("logs.view")}
           </Button>
-          <Button variant="secondary" onClick={() => void handleCheckForUpdates()} disabled={isCheckingForUpdates}>
-            <RefreshCw aria-hidden="true" className={`h-4 w-4 ${isCheckingForUpdates ? "animate-spin" : ""}`} />
+          <Button
+            variant="secondary"
+            onClick={() => void handleCheckForUpdates()}
+            disabled={isCheckingForUpdates || !updateSupported}
+          >
+            <RefreshCw
+              aria-hidden="true"
+              className={`h-4 w-4 ${isCheckingForUpdates ? "animate-spin" : ""}`}
+            />
             {isCheckingForUpdates ? t("updates.checking") : t("updates.check")}
           </Button>
         </div>
-        {updateStatus && <p className="mt-3 text-xs text-[var(--text-secondary)]" role="status">
-          {updateStatus}
-        </p>}
+        {updateStatus && (
+          <p className="mt-3 text-xs text-[var(--text-secondary)]" role="status">
+            {updateStatus}
+          </p>
+        )}
+        {!updateConfigured && (
+          <p className="mt-3 text-xs text-[var(--text-secondary)]" role="status">
+            {t("updates.notConfigured")}
+          </p>
+        )}
+        {updateConfigured && !updateSupported && (
+          <p className="mt-3 text-xs text-[var(--text-secondary)]" role="status">
+            {t("updates.notAvailableInWeb")}
+          </p>
+        )}
       </fieldset>
       <LogViewer open={isLogViewerOpen} onOpenChange={setIsLogViewerOpen} />
     </>

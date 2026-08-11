@@ -1,24 +1,12 @@
 import Fastify from "fastify";
 import request from "supertest";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { createDatabase, type DatabaseContext } from "../../db/index.js";
 import { Repository } from "../../db/repository.js";
 import { AgentRegistry } from "../../agent/registry.js";
-import { AgentRuntime } from "../../agent/runtime.js";
-import { EventHub } from "../../ws/events.js";
 import { registerAgentRoutes } from "../agents.js";
-import type { AppConfig } from "@chorus/shared";
 
 const databases: DatabaseContext[] = [];
-
-const testConfig: AppConfig = {
-  port: 0,
-  dbPath: ":memory:",
-  cors: { origin: [] },
-  auth: { enabled: false, tokens: {} },
-  history: { maxMessages: 20, maxTokens: 8_000 },
-  agents: [],
-};
 
 afterEach(() => {
   for (const database of databases.splice(0)) database.sqlite.close();
@@ -29,20 +17,23 @@ async function setupApp() {
   databases.push(database);
   const repository = new Repository(database);
   await repository.getOrCreateLocalUser("Test User");
-  repository.upsertAgent({
-    id: "local-agent",
-    name: "Local Agent",
-    description: "",
-    type: "mock",
-    config: {},
-    source: "user",
-    managed: false,
-    customizedFields: [],
-    disabled: false,
-    ownerId: "usr_local",
-    ownerType: "system",
-    capabilities: ["chat", "coding"],
-  }, null);
+  repository.upsertAgent(
+    {
+      id: "local-agent",
+      name: "Local Agent",
+      description: "",
+      type: "mock",
+      config: {},
+      source: "user",
+      managed: false,
+      customizedFields: [],
+      disabled: false,
+      ownerId: "usr_local",
+      ownerType: "system",
+      capabilities: ["chat", "coding"],
+    },
+    null,
+  );
   repository.upsertRemoteUser({
     id: "usr_remote",
     name: "Remote User",
@@ -53,25 +44,27 @@ async function setupApp() {
     updatedAt: 1000,
     lastSeenAt: 1000,
   });
-  repository.upsertAgent({
-    id: "remote_agent",
-    name: "Remote Agent",
-    description: "",
-    type: "mock",
-    config: {},
-    source: "user",
-    managed: false,
-    customizedFields: [],
-    disabled: false,
-    ownerId: "usr_remote",
-    ownerType: "remote",
-    capabilities: ["chat"],
-    stale: false,
-    homeHubId: "hub-remote",
-  }, null);
+  repository.upsertAgent(
+    {
+      id: "remote_agent",
+      name: "Remote Agent",
+      description: "",
+      type: "mock",
+      config: {},
+      source: "user",
+      managed: false,
+      customizedFields: [],
+      disabled: false,
+      ownerId: "usr_remote",
+      ownerType: "remote",
+      capabilities: ["chat"],
+      stale: false,
+      homeHubId: "hub-remote",
+    },
+    null,
+  );
   const registry = new AgentRegistry(repository);
   await registry.initialize([]);
-  const runtime = new AgentRuntime(repository, registry, new EventHub(), testConfig);
   const app = Fastify({ logger: false });
   registerAgentRoutes(app, registry, repository);
   await app.ready();

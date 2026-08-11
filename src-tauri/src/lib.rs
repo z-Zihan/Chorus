@@ -1,13 +1,14 @@
 // A Rust toolchain is required to compile and package the actual Tauri desktop build.
 use std::path::Path;
-use std::process::{Child, Command};
 use std::sync::{Arc, Mutex};
-use std::thread;
-use std::time::Duration;
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconEvent},
     Manager,
+};
+use tauri_plugin_shell::{
+    process::{CommandChild, CommandEvent},
+    ShellExt,
 };
 
 const MAIN_WINDOW_LABEL: &str = "main";
@@ -18,7 +19,7 @@ const QUIT_MENU_ID: &str = "quit";
 const SERVER_SCRIPT_RELATIVE_PATH: &str = "packages/server/dist/index.js";
 
 pub struct NodeSidecar {
-    child: Arc<Mutex<Option<Child>>>,
+    child: Arc<Mutex<Option<CommandChild>>>,
 }
 
 pub struct TracingState {
@@ -26,49 +27,54 @@ pub struct TracingState {
 }
 
 impl NodeSidecar {
-    pub fn spawn(server_path: &Path) -> std::io::Result<Self> {
-        let child = Command::new("node")
+    pub fn spawn(
+        app: &tauri::AppHandle,
+        server_path: &Path,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        let (mut events, child) = app
+            .shell()
+            .sidecar("chorus-node")?
             .arg(server_path)
             .spawn()?;
-        tracing::info!(pid = child.id(), path = %server_path.display(), "server sidecar spawned");
+        tracing::info!(pid = child.pid(), path = %server_path.display(), "server sidecar spawned");
         let shared_child = Arc::new(Mutex::new(Some(child)));
         let monitor_child = Arc::clone(&shared_child);
-        thread::spawn(move || loop {
-            thread::sleep(Duration::from_secs(1));
-            let mut guard = match monitor_child.lock() {
-                Ok(guard) => guard,
-                Err(_) => return,
-            };
-            let Some(child) = guard.as_mut() else {
-                return;
-            };
-            match child.try_wait() {
-                Ok(Some(status)) => {
-                    tracing::info!(%status, "server sidecar exited");
-                    *guard = None;
-                    return;
-                }
-                Ok(None) => {}
-                Err(error) => {
-                    tracing::error!(%error, "failed to query server sidecar status");
-                    return;
+        tauri::async_runtime::spawn(async move {
+            while let Some(event) = events.recv().await {
+                match event {
+                    CommandEvent::Stdout(line) => {
+                        tracing::debug!(output = %String::from_utf8_lossy(&line), "server sidecar stdout");
+                    }
+                    CommandEvent::Stderr(line) => {
+                        tracing::warn!(output = %String::from_utf8_lossy(&line), "server sidecar stderr");
+                    }
+                    CommandEvent::Error(error) => {
+                        tracing::error!(%error, "server sidecar process error");
+                    }
+                    CommandEvent::Terminated(payload) => {
+                        tracing::info!(code = ?payload.code, signal = ?payload.signal, "server sidecar exited");
+                        if let Ok(mut guard) = monitor_child.lock() {
+                            *guard = None;
+                        }
+                        break;
+                    }
+                    _ => {}
                 }
             }
         });
-        Ok(NodeSidecar { child: shared_child })
+        Ok(NodeSidecar {
+            child: shared_child,
+        })
     }
 
     pub fn kill(&self) {
         if let Ok(mut guard) = self.child.lock() {
-            if let Some(ref mut child) = *guard {
-                tracing::info!(pid = child.id(), "stopping server sidecar");
-                let _ = child.kill();
-                match child.wait() {
-                    Ok(status) => tracing::info!(%status, "server sidecar exited"),
-                    Err(error) => tracing::error!(%error, "failed to wait for server sidecar"),
+            if let Some(child) = guard.take() {
+                tracing::info!(pid = child.pid(), "stopping server sidecar");
+                if let Err(error) = child.kill() {
+                    tracing::error!(%error, "failed to stop server sidecar");
                 }
             }
-            *guard = None;
         }
     }
 }
@@ -128,13 +134,8 @@ pub fn run() {
             app.manage(TracingState { _guard: guard });
             tracing::info!("Chorus application started");
 
-            let show_window = MenuItem::with_id(
-                app,
-                SHOW_WINDOW_MENU_ID,
-                "显示窗口",
-                true,
-                None::<&str>,
-            )?;
+            let show_window =
+                MenuItem::with_id(app, SHOW_WINDOW_MENU_ID, "显示窗口", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, QUIT_MENU_ID, "退出", true, None::<&str>)?;
             let tray_menu = Menu::with_items(app, &[&show_window, &quit])?;
             let tray = app
@@ -145,11 +146,8 @@ pub fn run() {
             #[cfg(not(debug_assertions))]
             {
                 // The production bundle copies this relative path into Tauri's resource directory.
-                let server_path = app
-                    .path()
-                    .resource_dir()?
-                    .join(SERVER_SCRIPT_RELATIVE_PATH);
-                app.manage(NodeSidecar::spawn(&server_path)?);
+                let server_path = app.path().resource_dir()?.join(SERVER_SCRIPT_RELATIVE_PATH);
+                app.manage(NodeSidecar::spawn(app.handle(), &server_path)?);
             }
 
             Ok(())
@@ -179,23 +177,21 @@ pub fn run() {
                 }
             }
         })
-        .on_window_event(|window, event| {
-            match event {
-                tauri::WindowEvent::CloseRequested { api, .. }
-                    if !cfg!(debug_assertions) && window.label() == MAIN_WINDOW_LABEL =>
-                {
-                    api.prevent_close();
-                    tracing::info!(window = window.label(), "hiding application window");
-                    let _ = window.hide();
-                }
-                tauri::WindowEvent::Destroyed => {
-                    tracing::info!(window = window.label(), "application window destroyed");
-                    if let Some(sidecar) = window.app_handle().try_state::<NodeSidecar>() {
-                        sidecar.kill();
-                    }
-                }
-                _ => {}
+        .on_window_event(|window, event| match event {
+            tauri::WindowEvent::CloseRequested { api, .. }
+                if !cfg!(debug_assertions) && window.label() == MAIN_WINDOW_LABEL =>
+            {
+                api.prevent_close();
+                tracing::info!(window = window.label(), "hiding application window");
+                let _ = window.hide();
             }
+            tauri::WindowEvent::Destroyed => {
+                tracing::info!(window = window.label(), "application window destroyed");
+                if let Some(sidecar) = window.app_handle().try_state::<NodeSidecar>() {
+                    sidecar.kill();
+                }
+            }
+            _ => {}
         })
         .run(tauri::generate_context!())
         .expect("error while running Chorus");

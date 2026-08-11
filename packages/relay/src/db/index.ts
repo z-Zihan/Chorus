@@ -17,6 +17,7 @@ export function createDatabase(dbPath: string) {
       public_key TEXT NOT NULL,
       display_name TEXT NOT NULL,
       online INTEGER NOT NULL DEFAULT 0 CHECK (online IN (0, 1)),
+      auth_version INTEGER NOT NULL DEFAULT 1,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     );
@@ -47,7 +48,27 @@ export function createDatabase(dbPath: string) {
       joined_at INTEGER NOT NULL,
       PRIMARY KEY (room_id, hub_id)
     );
+
+    CREATE TABLE IF NOT EXISTS room_invitations (
+      room_id TEXT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+      invitee_hub_id TEXT NOT NULL REFERENCES hubs(hub_id) ON DELETE CASCADE,
+      invited_by_hub_id TEXT NOT NULL REFERENCES hubs(hub_id) ON DELETE CASCADE,
+      status TEXT NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending', 'accepted', 'declined', 'revoked', 'expired')),
+      created_at INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL,
+      responded_at INTEGER,
+      PRIMARY KEY (room_id, invitee_hub_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_room_invitations_invitee
+      ON room_invitations (invitee_hub_id, status, created_at);
   `);
+
+  const hubColumns = sqlite.prepare("PRAGMA table_info(hubs)").all() as Array<{ name: string }>;
+  if (!hubColumns.some(({ name }) => name === "auth_version")) {
+    sqlite.exec("ALTER TABLE hubs ADD COLUMN auth_version INTEGER NOT NULL DEFAULT 1");
+  }
 
   const db = drizzle(sqlite, { schema });
   return { sqlite, db };

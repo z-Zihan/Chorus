@@ -1,13 +1,27 @@
 import { useEffect, useMemo, useState } from "react";
-import { CalendarDays, LoaderCircle, Search, UserRound } from "lucide-react";
+import {
+  AlertCircle,
+  CalendarDays,
+  LoaderCircle,
+  RefreshCw,
+  Search,
+  UserRound,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useAgentStore } from "@/store/agentStore";
 import { useChatStore } from "@/store/chatStore";
 import { useSearchStore } from "@/store/searchStore";
 import type { MessageSearchResult } from "@/services/api";
+import { Button } from "@/components/ui/button";
 
 interface SearchPanelProps {
   open: boolean;
@@ -19,6 +33,7 @@ export function SearchPanel({ open, onOpenChange }: SearchPanelProps) {
   const query = useSearchStore((state) => state.query);
   const results = useSearchStore((state) => state.results);
   const isSearching = useSearchStore((state) => state.isSearching);
+  const error = useSearchStore((state) => state.error);
   const filters = useSearchStore((state) => state.filters);
   const setQuery = useSearchStore((state) => state.setQuery);
   const setFilters = useSearchStore((state) => state.setFilters);
@@ -56,41 +71,60 @@ export function SearchPanel({ open, onOpenChange }: SearchPanelProps) {
   };
 
   return (
-    <Dialog open={open} onOpenChange={(nextOpen) => nextOpen ? onOpenChange(true) : close()}>
+    <Dialog open={open} onOpenChange={(nextOpen) => (nextOpen ? onOpenChange(true) : close())}>
       <DialogContent className="top-[10vh] max-h-[80vh] max-w-3xl -translate-y-0 overflow-hidden p-0">
         <div className="border-b border-[var(--border-color)] p-4">
           <DialogTitle>{t("search.title")}</DialogTitle>
           <DialogDescription className="mt-1">{t("search.description")}</DialogDescription>
           <div className="relative mt-4">
-            <Search aria-hidden="true" className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-tertiary)]" />
+            <Search
+              aria-hidden="true"
+              className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-tertiary)]"
+            />
             <Input
               autoFocus
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder={t("search.placeholder")}
-              className="pl-9 pr-10"
+              aria-label={t("search.placeholder")}
+              className="h-11 pl-9 pr-10 sm:h-10"
             />
             {isSearching && (
-              <LoaderCircle aria-label={t("search.searching")} className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-[var(--accent-hover)]" />
+              <LoaderCircle
+                aria-label={t("search.searching")}
+                className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-[var(--accent-hover)]"
+              />
             )}
           </div>
           <div className="mt-3 grid gap-2 sm:grid-cols-3">
             <Select
               value={filters.agentId ?? "all"}
-              onValueChange={(value) => setFilters({ agentId: value === "all" ? undefined : value })}
+              onValueChange={(value) =>
+                setFilters({ agentId: value === "all" ? undefined : value })
+              }
             >
-              <SelectTrigger className="h-9">
-                <UserRound aria-hidden="true" className="mr-2 h-4 w-4 text-[var(--text-tertiary)]" />
+              <SelectTrigger className="h-11 sm:h-9">
+                <UserRound
+                  aria-hidden="true"
+                  className="mr-2 h-4 w-4 text-[var(--text-tertiary)]"
+                />
                 <SelectValue placeholder={t("search.allAgents")} />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">{t("search.allAgents")}</SelectItem>
-                {agents.map((agent) => <SelectItem key={agent.id} value={agent.id}>{agent.name}</SelectItem>)}
+                {agents.map((agent) => (
+                  <SelectItem key={agent.id} value={agent.id}>
+                    {agent.name}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
             <label className="relative">
               <span className="sr-only">{t("search.startDate")}</span>
-              <CalendarDays aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-tertiary)]" />
+              <CalendarDays
+                aria-hidden="true"
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-tertiary)]"
+              />
               <Input
                 type="date"
                 value={startDate}
@@ -98,14 +132,19 @@ export function SearchPanel({ open, onOpenChange }: SearchPanelProps) {
                 onChange={(event) => {
                   const value = event.target.value;
                   setStartDate(value);
-                  setFilters({ startDate: value ? new Date(`${value}T00:00:00`).getTime() : undefined });
+                  setFilters({
+                    startDate: value ? new Date(`${value}T00:00:00`).getTime() : undefined,
+                  });
                 }}
-                className="h-9 pl-9"
+                className="h-11 pl-9 sm:h-9"
               />
             </label>
             <label className="relative">
               <span className="sr-only">{t("search.endDate")}</span>
-              <CalendarDays aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-tertiary)]" />
+              <CalendarDays
+                aria-hidden="true"
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-tertiary)]"
+              />
               <Input
                 type="date"
                 value={endDate}
@@ -113,9 +152,11 @@ export function SearchPanel({ open, onOpenChange }: SearchPanelProps) {
                 onChange={(event) => {
                   const value = event.target.value;
                   setEndDate(value);
-                  setFilters({ endDate: value ? new Date(`${value}T23:59:59.999`).getTime() : undefined });
+                  setFilters({
+                    endDate: value ? new Date(`${value}T23:59:59.999`).getTime() : undefined,
+                  });
                 }}
-                className="h-9 pl-9"
+                className="h-11 pl-9 sm:h-9"
               />
             </label>
           </div>
@@ -123,9 +164,37 @@ export function SearchPanel({ open, onOpenChange }: SearchPanelProps) {
 
         <div className="max-h-[52vh] overflow-y-auto p-3">
           {!query.trim() ? (
-            <p className="px-3 py-10 text-center text-sm text-[var(--text-muted)]">{t("search.hint")}</p>
+            <p className="px-3 py-10 text-center text-sm text-[var(--text-muted)]">
+              {t("search.hint")}
+            </p>
+          ) : error ? (
+            <div
+              role="alert"
+              className="mx-auto flex max-w-md flex-col items-center px-3 py-10 text-center"
+            >
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--status-error)]/10 text-[var(--status-error)]">
+                <AlertCircle aria-hidden="true" className="h-5 w-5" />
+              </span>
+              <p className="mt-3 text-sm font-medium text-[var(--text-primary)]">
+                {t("search.loadFailedTitle")}
+              </p>
+              <p className="mt-1 text-xs leading-5 text-[var(--text-muted)]">
+                {t("search.loadFailed")}
+              </p>
+              <Button
+                variant="secondary"
+                size="sm"
+                className="mt-3 min-h-11 sm:min-h-8"
+                onClick={() => void searchMessages(query)}
+              >
+                <RefreshCw aria-hidden="true" className="h-3.5 w-3.5" />
+                {t("buttons.retry")}
+              </Button>
+            </div>
           ) : !isSearching && results.length === 0 ? (
-            <p className="px-3 py-10 text-center text-sm text-[var(--text-muted)]">{t("search.noResults")}</p>
+            <p className="px-3 py-10 text-center text-sm text-[var(--text-muted)]">
+              {t("search.noResults")}
+            </p>
           ) : (
             <div className="space-y-4">
               {groupedResults.map((group) => (
@@ -141,9 +210,14 @@ export function SearchPanel({ open, onOpenChange }: SearchPanelProps) {
                         onClick={() => handleResultClick(result)}
                         className="w-full rounded-lg px-3 py-2 text-left outline-none transition-colors hover:bg-[var(--bg-hover)] focus-visible:ring-2 focus-visible:ring-[var(--accent-color)]"
                       >
-                        <div className="line-clamp-2 text-sm text-[var(--text-primary)]">{result.message.content}</div>
+                        <div className="line-clamp-2 text-sm text-[var(--text-primary)]">
+                          {result.message.content}
+                        </div>
                         <div className="mt-1 text-xs text-[var(--text-tertiary)]">
-                          {new Intl.DateTimeFormat(i18n.language, { dateStyle: "medium", timeStyle: "short" }).format(result.message.timestamp)}
+                          {new Intl.DateTimeFormat(i18n.language, {
+                            dateStyle: "medium",
+                            timeStyle: "short",
+                          }).format(result.message.timestamp)}
                         </div>
                       </button>
                     ))}

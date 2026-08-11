@@ -5,22 +5,32 @@ import type {
   RelayServerMessage,
   RoomCasResult,
   RoomCasState,
+  RoomInvitation,
   RoomMember,
   RoomInfo,
+  TransportReceipt,
+  TransportStatusUpdate,
 } from "@chorus/shared";
 import WebSocket, { type RawData } from "ws";
 import { logger } from "../utils/logger.js";
 
 type MessageListener = (envelope: HubEnvelope) => void;
-type PresenceListener = (hubId: string, status: "online" | "offline") => void;
+type PresenceListener = (
+  hubId: string,
+  status: "online" | "offline",
+  publicKey?: string,
+  displayName?: string,
+) => void;
 type OfflineMessagesListener = (envelopes: HubEnvelope[]) => void;
 type StateListener = (state: HubConnectionState) => void;
+type TokenProvider = () => Promise<string>;
 type RoomEventListener = (
   roomId: string,
   event: "join" | "leave" | "invite",
   hubId: string,
 ) => void;
 type RoomMembersListener = (roomId: string, members: RoomMember[]) => void;
+type TransportStatusListener = (update: TransportStatusUpdate) => void;
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const PONG_TIMEOUT_MS = 10_000;
@@ -39,6 +49,8 @@ export class RelayClient {
   private url?: string;
   private hubId?: string;
   private token?: string;
+  private tokenProvider?: TokenProvider;
+  private tokenRefresh?: Promise<string>;
   private reconnectAttempts = 0;
   private reconnectTimer?: NodeJS.Timeout;
   private heartbeatTimer?: NodeJS.Timeout;
@@ -51,6 +63,7 @@ export class RelayClient {
   private readonly stateListeners = new Set<StateListener>();
   private readonly roomEventListeners = new Set<RoomEventListener>();
   private readonly roomMembersListeners = new Set<RoomMembersListener>();
+  private readonly transportStatusListeners = new Set<TransportStatusListener>();
   private readonly peerPublicKeys = new Map<string, string>();
   private readonly roomMembers = new Map<string, RoomMember[]>();
   private readonly pendingRoomCas = new Map<string, PendingRoomCas[]>();
@@ -63,11 +76,17 @@ export class RelayClient {
     return this.hubId;
   }
 
-  async connect(url: string, hubId: string, token: string): Promise<void> {
+  async connect(
+    url: string,
+    hubId: string,
+    token: string,
+    tokenProvider?: TokenProvider,
+  ): Promise<void> {
     if (!url || !hubId || !token) throw new Error("Relay URL, Hub ID, and token are required");
     this.url = url;
     this.hubId = hubId;
     this.token = token;
+    this.tokenProvider = tokenProvider;
     this.shouldReconnect = true;
     this.reconnectAttempts = 0;
     this.clearReconnectTimer();
@@ -77,6 +96,10 @@ export class RelayClient {
 
   sendEnvelope(envelope: HubEnvelope): void {
     this.send({ type: "message", envelope });
+  }
+
+  sendTransportReceipt(receipt: TransportReceipt): void {
+    this.send({ type: "transport_receipt", ...receipt });
   }
 
   joinRoom(roomId: string): void {
@@ -121,7 +144,7 @@ export class RelayClient {
   async createRoomRequest(relayUrl: string, name: string): Promise<RoomInfo> {
     const room = await this.roomRequest<RoomInfo>(relayUrl, "/api/rooms", {
       method: "POST",
-      body: JSON.stringify({ name, createdBy: this.hubId }),
+      body: JSON.stringify({ name }),
     });
     this.cacheRoomMembers(room.id, room.members);
     return room;
@@ -131,14 +154,39 @@ export class RelayClient {
     relayUrl: string,
     roomId: string,
     hubId: string,
-  ): Promise<RoomMember[]> {
-    const response = await this.roomRequest<{ members: RoomMember[] }>(
+  ): Promise<RoomInvitation> {
+    const response = await this.roomRequest<{ invitation: RoomInvitation }>(
       relayUrl,
       `/api/rooms/${encodeURIComponent(roomId)}/invite`,
       { method: "POST", body: JSON.stringify({ hubId }) },
     );
-    this.cacheRoomMembers(roomId, response.members);
-    return response.members;
+    return response.invitation;
+  }
+
+  async listRoomInvitationsRequest(relayUrl: string): Promise<RoomInvitation[]> {
+    const response = await this.roomRequest<{ invitations: RoomInvitation[] }>(
+      relayUrl,
+      "/api/room-invitations",
+    );
+    return response.invitations;
+  }
+
+  async respondToRoomInvitationRequest(
+    relayUrl: string,
+    roomId: string,
+    response: "accepted" | "declined",
+  ): Promise<{ invitation: RoomInvitation; room?: RoomInfo }> {
+    const result = await this.roomRequest<{
+      invitation: RoomInvitation;
+      room?: RoomInfo;
+      members?: RoomMember[];
+    }>(
+      relayUrl,
+      `/api/rooms/${encodeURIComponent(roomId)}/${response === "accepted" ? "join" : "decline"}`,
+      { method: "POST", body: JSON.stringify({}) },
+    );
+    if (result.members) this.cacheRoomMembers(roomId, result.members);
+    return { invitation: result.invitation, room: result.room };
   }
 
   async getRoomMembersRequest(relayUrl: string, roomId: string): Promise<RoomMember[]> {
@@ -211,14 +259,23 @@ export class RelayClient {
     return () => this.roomMembersListeners.delete(callback);
   }
 
-  private openSocket(reconnecting: boolean): Promise<void> {
+  onTransportStatus(callback: TransportStatusListener): () => void {
+    this.transportStatusListeners.add(callback);
+    return () => this.transportStatusListeners.delete(callback);
+  }
+
+  private async openSocket(reconnecting: boolean): Promise<void> {
+    if (reconnecting && this.tokenProvider && this.tokenExpiresSoon()) {
+      await this.refreshAuthenticationToken();
+    }
     const url = this.url;
     const hubId = this.hubId;
     const token = this.token;
-    if (!url || !hubId || !token) return Promise.reject(new Error("Relay connection is not configured"));
+    if (!url || !hubId || !token) throw new Error("Relay connection is not configured");
 
     const previous = this.socket;
-    if (previous && previous.readyState !== WebSocket.CLOSED) previous.close(1000, "Connection replaced");
+    if (previous && previous.readyState !== WebSocket.CLOSED)
+      previous.close(1000, "Connection replaced");
     this.stopHeartbeat();
     const generation = ++this.connectionGeneration;
     this.setState(reconnecting ? "reconnecting" : "connecting");
@@ -269,7 +326,11 @@ export class RelayClient {
         this.rejectPendingRoomCas(new Error("Relay connection closed before Room CAS completed"));
         if (!settled) {
           settled = true;
-          reject(new Error(`Relay connection closed before registration (${code}): ${reason.toString()}`));
+          reject(
+            new Error(
+              `Relay connection closed before registration (${code}): ${reason.toString()}`,
+            ),
+          );
         }
         if (this.shouldReconnect) this.scheduleReconnect();
         else this.setState("disconnected");
@@ -295,11 +356,18 @@ export class RelayClient {
       this.cachePeerPublicKey(message.hubId, message.publicKey ?? message.hubId);
       for (const [roomId, members] of this.roomMembers) {
         if (!members.some(({ hubId }) => hubId === message.hubId)) continue;
-        this.roomMembers.set(roomId, members.map((member) =>
-          member.hubId === message.hubId ? { ...member, online: message.status === "online" } : member
-        ));
+        this.roomMembers.set(
+          roomId,
+          members.map((member) =>
+            member.hubId === message.hubId
+              ? { ...member, online: message.status === "online" }
+              : member,
+          ),
+        );
       }
-      for (const listener of this.presenceListeners) listener(message.hubId, message.status);
+      for (const listener of this.presenceListeners) {
+        listener(message.hubId, message.status, message.publicKey, message.displayName);
+      }
     } else if (message.type === "room:event") {
       for (const listener of this.roomEventListeners) {
         listener(message.roomId, message.event, message.hubId);
@@ -318,13 +386,24 @@ export class RelayClient {
         revision: message.revision,
         keyEpoch: message.keyEpoch,
       });
+    } else if (message.type === "transport_status") {
+      for (const listener of this.transportStatusListeners) {
+        listener({
+          messageId: message.messageId,
+          status: message.status,
+          timestamp: message.timestamp,
+        });
+      }
     } else if (message.type === "pong") {
       this.receivedPong();
     }
   }
 
   private cacheRoomMembers(roomId: string, members: RoomMember[]): void {
-    this.roomMembers.set(roomId, members.map((member) => ({ ...member })));
+    this.roomMembers.set(
+      roomId,
+      members.map((member) => ({ ...member })),
+    );
     for (const member of members) this.cachePeerPublicKey(member.hubId, member.publicKey);
   }
 
@@ -332,7 +411,7 @@ export class RelayClient {
     try {
       const value = JSON.parse(data.toString()) as unknown;
       return typeof value === "object" && value !== null && "type" in value
-        ? value as RelayServerMessage
+        ? (value as RelayServerMessage)
         : null;
     } catch {
       return null;
@@ -346,11 +425,7 @@ export class RelayClient {
     this.socket.send(JSON.stringify(message));
   }
 
-  private async roomRequest<T>(
-    relayUrl: string,
-    path: string,
-    init: RequestInit = {},
-  ): Promise<T> {
+  private async roomRequest<T>(relayUrl: string, path: string, init: RequestInit = {}): Promise<T> {
     if (!this.hubId) throw new Error("Hub identity is not configured");
     if (!this.token) throw new Error("Relay authentication token is not configured");
     const url = new URL(relayUrl);
@@ -359,13 +434,17 @@ export class RelayClient {
     url.pathname = path;
     url.search = "";
     url.hash = "";
-    const headers = new Headers(init.headers);
-    headers.set("content-type", "application/json");
-    headers.set("authorization", `Bearer ${this.token}`);
-    const response = await fetch(url, {
-      ...init,
-      headers,
-    });
+    const send = async () => {
+      const headers = new Headers(init.headers);
+      if (init.body !== undefined) headers.set("content-type", "application/json");
+      headers.set("authorization", `Bearer ${this.token}`);
+      return fetch(url, { ...init, headers });
+    };
+    let response = await send();
+    if (response.status === 401 && this.tokenProvider) {
+      await this.refreshAuthenticationToken();
+      response = await send();
+    }
     if (!response.ok) {
       const detail = await response.text();
       throw new Error(detail || `Relay room request failed with HTTP ${response.status}`);
@@ -409,6 +488,7 @@ export class RelayClient {
       this.reconnectTimer = undefined;
       void this.openSocket(true).catch((error: unknown) => {
         logger.warn({ err: error }, "Relay reconnect attempt failed");
+        if (this.shouldReconnect) this.scheduleReconnect();
       });
     }, delay);
     this.reconnectTimer.unref();
@@ -417,6 +497,32 @@ export class RelayClient {
   private clearReconnectTimer(): void {
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.reconnectTimer = undefined;
+  }
+
+  private tokenExpiresSoon(nowSeconds = Math.floor(Date.now() / 1_000)): boolean {
+    if (!this.token) return true;
+    try {
+      const payload = JSON.parse(
+        Buffer.from(this.token.split(".")[1] ?? "", "base64url").toString("utf8"),
+      ) as { exp?: unknown };
+      return !Number.isInteger(payload.exp) || (payload.exp as number) <= nowSeconds + 60;
+    } catch {
+      return true;
+    }
+  }
+
+  private async refreshAuthenticationToken(): Promise<string> {
+    if (!this.tokenProvider) throw new Error("Relay authentication cannot be refreshed");
+    this.tokenRefresh ??= this.tokenProvider()
+      .then((token) => {
+        if (!token) throw new Error("Relay authentication refresh returned no token");
+        this.token = token;
+        return token;
+      })
+      .finally(() => {
+        this.tokenRefresh = undefined;
+      });
+    return this.tokenRefresh;
   }
 
   private setState(state: HubConnectionState): void {

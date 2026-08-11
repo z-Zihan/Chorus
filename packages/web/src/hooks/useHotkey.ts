@@ -6,7 +6,10 @@ export interface HotkeyBinding {
 }
 
 function matchesHotkey(event: KeyboardEvent, hotkey: string): boolean {
-  const parts = hotkey.toLowerCase().split("+").map((part) => part.trim());
+  const parts = hotkey
+    .toLowerCase()
+    .split("+")
+    .map((part) => part.trim());
   const key = parts.at(-1);
   const wantsPrimary = parts.includes("ctrl") || parts.includes("meta") || parts.includes("mod");
   const primaryPressed = event.ctrlKey || event.metaKey;
@@ -20,16 +23,13 @@ function matchesHotkey(event: KeyboardEvent, hotkey: string): boolean {
   );
 }
 
-export function useHotkey(
-  key: string,
-  callback: () => void,
-  deps: DependencyList = [],
-): void {
+export function useHotkey(key: string, callback: () => void, deps: DependencyList = []): void {
+  void deps;
   const callbackRef = useRef(callback);
 
   useEffect(() => {
     callbackRef.current = callback;
-  }, [callback, ...deps]);
+  }, [callback]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -43,11 +43,12 @@ export function useHotkey(
 }
 
 export function useHotkeys(bindings: HotkeyBinding[], deps: DependencyList = []): void {
+  void deps;
   const bindingsRef = useRef(bindings);
 
   useEffect(() => {
     bindingsRef.current = bindings;
-  }, [bindings, ...deps]);
+  }, [bindings]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {

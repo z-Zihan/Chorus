@@ -30,7 +30,9 @@ import { ConnectionManager } from "./hub/connection-manager.js";
 import { deriveUserId } from "./identity/user-keys.js";
 import { DirectoryService } from "./hub/directory.js";
 import { TrustStore } from "./hub/trust-store.js";
+import { PairingService } from "./hub/pairing-service.js";
 import { TokenStore } from "./auth/token-store.js";
+import { signEnvelope } from "./hub/crypto.js";
 
 process.on("uncaughtException", (error) => {
   logger.fatal({ err: error }, "Uncaught exception");
@@ -57,19 +59,18 @@ async function main(): Promise<void> {
     id: deriveUserId(localUser.publicKey),
     name: localUser.name,
   };
-  let hubIdentity: HubIdentity | undefined;
-  let relayClient: RelayClient | undefined;
+  const hubIdentity = new HubIdentity(resolve(rootDir, "data/hub-keypair.json"));
+  const relayClient = new RelayClient();
   let p2pDiscovery: P2PDiscovery | undefined;
   let p2pListener: P2PListener | undefined;
   let connectionManager: ConnectionManager | undefined;
   let messageRouter: HubMessageRouter | undefined;
+  let pairingService: PairingService | undefined;
   let relayToken = config.hub?.relay.token;
 
   // Always initialize Hub identity so routes are available
-  hubIdentity = new HubIdentity(resolve(rootDir, "data/hub-keypair.json"));
   await hubIdentity.getOrCreateKeypair();
   const trustStore = new TrustStore(repository, hubIdentity.hubId);
-  relayClient = new RelayClient();
 
   const registry = new AgentRegistry(repository, relayClient);
   await registry.initialize(config.agents);
@@ -95,6 +96,13 @@ async function main(): Promise<void> {
     const manager = new ConnectionManager(listener, client);
     connectionManager = manager;
     const directoryService = new DirectoryService(repository, registry, identity.hubId, trustStore);
+    pairingService = new PairingService(
+      identity,
+      client,
+      trustStore,
+      repository,
+      localProtocolUser.name,
+    );
     messageRouter = new HubMessageRouter(
       identity,
       registry,
@@ -105,6 +113,7 @@ async function main(): Promise<void> {
       directoryService,
       trustStore,
       repository,
+      pairingService,
     );
     runtime.setHubMessageRouter(messageRouter);
     if (hubConfig.p2p.enabled) {
@@ -137,12 +146,20 @@ async function main(): Promise<void> {
     }
     connectHub = async () => {
       if (!hubConfig.relay.url) throw new Error("Relay URL not configured");
-      relayToken ??= await registerHub(
+      relayToken = await registerHub(
         hubConfig.relay.url,
         identity.getPublicKey(),
         hubConfig.displayName,
+        await identity.getSecretKey(),
       );
-      await client.connect(hubConfig.relay.url, identity.hubId, relayToken);
+      await client.connect(hubConfig.relay.url, identity.hubId, relayToken, async () =>
+        registerHub(
+          hubConfig.relay.url,
+          identity.getPublicKey(),
+          hubConfig.displayName,
+          await identity.getSecretKey(),
+        ),
+      );
     };
   }
   const scheduler = new Scheduler(repository, runtime);
@@ -189,6 +206,7 @@ async function main(): Promise<void> {
         }
       : undefined,
     trustStore,
+    pairingService,
     tokenStore,
     config.auth,
   );
@@ -207,7 +225,11 @@ async function main(): Promise<void> {
   if (existsSync(webDist)) {
     await app.register(staticPlugin, { root: webDist, wildcard: false });
     app.setNotFoundHandler((request, reply) => {
-      if (request.raw.method === "GET" && !request.url.startsWith("/api/") && request.url !== "/ws") {
+      if (
+        request.raw.method === "GET" &&
+        !request.url.startsWith("/api/") &&
+        request.url !== "/ws"
+      ) {
         return reply.sendFile("index.html");
       }
       return reply.code(404).send({ error: "Not found" });
@@ -230,8 +252,9 @@ async function main(): Promise<void> {
   process.once("SIGINT", () => void close());
   process.once("SIGTERM", () => void close());
 
-  await app.listen({ host: "0.0.0.0", port: config.port });
-  app.log.info(`Chorus server running on http://localhost:${config.port}`);
+  const serverHost = config.host ?? "127.0.0.1";
+  await app.listen({ host: serverHost, port: config.port });
+  app.log.info(`Chorus server running on http://${serverHost}:${config.port}`);
   if (!hasAgentsAtStartup) {
     void onboarding.bootstrap().catch((error) => {
       app.log.error({ err: error }, "Automatic CLI detection failed");
@@ -243,19 +266,34 @@ async function registerHub(
   relayWebSocketUrl: string,
   publicKey: string,
   displayName: string,
+  secretKey: string,
 ): Promise<string> {
   const url = new URL(relayWebSocketUrl);
   url.protocol = url.protocol === "wss:" ? "https:" : "http:";
-  url.pathname = "/api/hubs/register";
+  url.pathname = "/api/hubs/challenge";
   url.search = "";
   url.hash = "";
-  const response = await fetch(url, {
+  const challengeResponse = await fetch(url, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ hubId: publicKey, publicKey, displayName }),
   });
+  if (!challengeResponse.ok) {
+    throw new Error(`Relay registration challenge failed with HTTP ${challengeResponse.status}`);
+  }
+  const challenge = (await challengeResponse.json()) as Record<string, unknown>;
+  if (typeof challenge.challengeId !== "string" || typeof challenge.nonce !== "string") {
+    throw new Error("Relay registration challenge is invalid");
+  }
+  const signature = await signEnvelope(challenge, secretKey);
+  url.pathname = "/api/hubs/register";
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ challengeId: challenge.challengeId, signature }),
+  });
   if (!response.ok) throw new Error(`Relay Hub registration failed with HTTP ${response.status}`);
-  const body = await response.json() as { token?: unknown };
+  const body = (await response.json()) as { token?: unknown };
   if (typeof body.token !== "string" || !body.token) {
     throw new Error("Relay Hub registration returned no token");
   }

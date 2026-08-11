@@ -8,7 +8,7 @@ import {
   Title as DialogTitlePrimitive,
   Trigger as DialogTriggerPrimitive,
 } from "@radix-ui/react-dialog";
-import { forwardRef, type ComponentPropsWithoutRef, type ComponentRef } from "react";
+import { forwardRef, useRef, type ComponentPropsWithoutRef, type ComponentRef } from "react";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/cn";
 
@@ -39,7 +39,7 @@ const dialogContentVariants = cva(
     variants: {
       variant: {
         centered:
-          "left-1/2 top-1/2 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-xl p-5",
+          "left-1/2 top-1/2 max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-xl p-5",
         drawer:
           "inset-y-0 right-0 flex h-full w-full max-w-md flex-col border-y-0 border-r-0 data-[state=closed]:translate-x-full data-[state=open]:translate-x-0 data-[state=closed]:duration-150 data-[state=open]:duration-200 data-[state=closed]:ease-in data-[state=open]:ease-out",
       },
@@ -58,22 +58,44 @@ interface DialogContentProps
 export const DialogContent = forwardRef<
   ComponentRef<typeof DialogContentPrimitive>,
   DialogContentProps
->(({ className, children, variant, overlayClassName, ...props }, ref) => (
-  <DialogPortalPrimitive>
-    <DialogOverlay className={overlayClassName} />
-    <DialogContentPrimitive
-      ref={ref}
-      className={cn(
-        dialogContentVariants({ variant }),
-        variant === "drawer" && "transition-transform",
-        className,
-      )}
-      {...props}
-    >
-      {children}
-    </DialogContentPrimitive>
-  </DialogPortalPrimitive>
-));
+>(
+  (
+    { className, children, variant, overlayClassName, onOpenAutoFocus, onCloseAutoFocus, ...props },
+    ref,
+  ) => {
+    const returnFocusRef = useRef<HTMLElement | null>(null);
+
+    return (
+      <DialogPortalPrimitive>
+        <DialogOverlay className={overlayClassName} />
+        <DialogContentPrimitive
+          ref={ref}
+          className={cn(
+            dialogContentVariants({ variant }),
+            variant === "drawer" && "transition-transform",
+            className,
+          )}
+          onOpenAutoFocus={(event) => {
+            if (document.activeElement instanceof HTMLElement) {
+              returnFocusRef.current = document.activeElement;
+            }
+            onOpenAutoFocus?.(event);
+          }}
+          onCloseAutoFocus={(event) => {
+            onCloseAutoFocus?.(event);
+            if (!event.defaultPrevented && returnFocusRef.current?.isConnected) {
+              event.preventDefault();
+              returnFocusRef.current.focus();
+            }
+          }}
+          {...props}
+        >
+          {children}
+        </DialogContentPrimitive>
+      </DialogPortalPrimitive>
+    );
+  },
+);
 
 DialogContent.displayName = "DialogContent";
 

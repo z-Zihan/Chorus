@@ -27,6 +27,12 @@ export interface A2AAuthorizationResult {
 }
 
 export type A2AAuthorizer = (request: A2AAuthorizationRequest) => Promise<A2AAuthorizationResult>;
+export type RemoteDeliveryListener = (update: {
+  threadId: string;
+  conversationId: string;
+  transport?: "queued" | "delivered" | "failed";
+  execution?: "accepted" | "denied" | "done" | "error";
+}) => void;
 
 export class A2ABus implements A2ABusLike {
   private readonly concurrency = new Map<string, number>();
@@ -50,6 +56,7 @@ export class A2ABus implements A2ABusLike {
     },
     private readonly relayClient?: RelayClient,
     private readonly authorize?: A2AAuthorizer,
+    private readonly onRemoteDelivery?: RemoteDeliveryListener,
   ) {}
 
   setHubMessageRouter(router: HubMessageRouter): void {
@@ -116,6 +123,12 @@ export class A2ABus implements A2ABusLike {
         remoteAgentId,
         message,
         { ...context, callStack: [...stack, toAgentId], a2aThreadId: threadId },
+        (update) =>
+          this.onRemoteDelivery?.({
+            ...update,
+            threadId,
+            conversationId: context.conversationId,
+          }),
       );
       yield { type: "text", content: response, threadId, sourceAgentId: toAgentId };
       yield { type: "done", content: "", threadId, sourceAgentId: toAgentId };

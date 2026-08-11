@@ -14,7 +14,7 @@ AI CLI 越来越强，但它们彼此隔离——切换工具靠开终端，协�
 **第二层：Agent 间通信（已实现）**
 这是 Chorus 的核心方向。三种 A2A 模式可切换：`@mention` 异步转发（Agent 回复中 @了其他 Agent → 自动转发）、`A2A_CALL` 同步调用（调用方拿到返回值继续推理）、`off` 关闭。也可以创建群聊，多个 Agent 在同一会话中协作。
 
-**第三层：跨设备、跨人的 Agent 协作（已实现）**
+**第三层：跨设备、跨人的 Agent 协作（进程级已实现，物理设备待验收）**
 你的 Agent 不仅能和本机其他 Agent 协作，还能和**同事电脑上的 Agent** 直接通信。通过自托管 Relay 服务器中转，端到端加密，数据不经第三方。
 
 **管理 CLI 只是手段，让 Agent 之间能交流、能协作、能跨设备跨人协作，才是 Chorus 要做的事。**
@@ -33,13 +33,13 @@ Chorus 坚持 local-first：聊天记录默认保存在本机，CLI 在本机运
 - 💬 **统一流式聊天**：在一个界面中使用不同 Agent，支持 Markdown、代码块、停止生成和错误提示。
 - 🧩 **Agent 目录**：添加本机 CLI，或配置 OpenAI-compatible API Connector。
 - 🗂️ **本地会话历史**：使用 SQLite 保存聊天记录，支持创建、切换和删除会话。
-- 🖥️ **跨平台桌面端**：基于 Tauri，面向 macOS、Windows 与 Linux 提供原生桌面体验。
+- 🖥️ **桌面端**：基于 Tauri；macOS arm64 本机未签名 `.app` 已验证，Windows、签名与干净机器安装仍是发布门禁。
 - 🏠 **可自托管 Relay**：提供 Hub 注册、消息转发、离线消息与房间管理能力。
 - 🔐 **系统级密钥存储**：使用操作系统钥匙串保护 API 凭据。
 - 🔎 **历史管理**：会话搜索、重命名、归档、导出与清理。
 - 📊 **Agent 健康检查**：60s 定时健康检查 + UI 状态指示器。
-- 🔌 **插件系统**：Agent 适配器插件加载与管理。
-- 🗓️ **定时任务**：cron 表达式定时触发 Agent 任务。
+- 🔌 **插件系统**：服务启动时加载并校验适配器/扩展 manifest，设置诊断页可只读核验版本、类型和权限；当前不提供安装管理 UI。
+- 🗓️ **定时任务**：在设置中用 cron 表达式创建、启停和删除 Agent 周期任务，并提供失败恢复。
 
 ### 已实现
 
@@ -220,4 +220,3 @@ Chorus 启动后暴露 `GET /api/skill` 端点，返回完整的 Platform Skill 
 ### Chorus 支持哪些标准协议？
 
 Agent 能力可映射到 Google A2A Agent Card（`/.well-known/agent-card.json`）、MCP Tool 列表（`/api/mcp/tools`）、ACP 服务列表（`/api/acp/services`）。
-

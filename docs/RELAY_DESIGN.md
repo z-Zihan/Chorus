@@ -102,20 +102,32 @@ interface UserHubBinding {
 ### Relay 注册
 
 ```
-POST /api/hubs/register
+POST /api/hubs/challenge
 {
   "hubId": "a1b2c3...",
   "publicKey": "full-ed25519-public-key-hex",
-  "displayName": "子涵的 Hub",
-  "signature": "<signed-challenge>"
+  "displayName": "子涵的 Hub"
+}
+
+Response: `{ challengeId, nonce, hubId, publicKey, displayName, expiresAt, purpose }`。
+Hub 用对应 Ed25519 私钥对完整响应做 JCS 签名，然后提交：
+
+```
+POST /api/hubs/register
+{
+  "challengeId": "...",
+  "signature": "<base64-ed25519-signature>"
 }
 
 Response:
 {
   "token": "relay-jwt-token",
+  "expiresInSeconds": 86400,
   "relayHubId": "relay-assigned-uuid"
 }
 ```
+
+挑战默认两分钟过期且只能消费一次。JWT 包含 `exp` 与持久化认证版本；重新注册会轮换版本并使旧 Token 失效。Relay 默认只监听 `127.0.0.1`；设置非 loopback `RELAY_HOST` 时必须显式提供至少 32 字符的 `RELAY_JWT_SECRET`。
 
 ### Hub 间互认证
 
@@ -239,8 +251,10 @@ Relay API 只管理 Hub 路由和加密 Room 信封，不能决定某个用户�
 |----------------|------|------------------|
 | `/api/hub/config` | PATCH | 验证并保存 Relay 配置，返回 `{ ok, config, connectionState }` 后异步连接 |
 | `/api/hub/status` | GET | 返回 `disconnected/connecting/connected/reconnecting/error` 和最近错误 |
-| `/api/contacts/pairing-requests` | POST | 按 Hub ID 创建一次性配对码；不请求 Agent 目录 |
-| `/api/contacts/pairing-requests/:id/confirm` | POST | 校验配对码/指纹并创建 Contact |
+| `/api/trust/pair` | POST | 按完整 Hub ID 创建目标绑定、10 分钟有效的一次性配对包；不请求 Agent 目录 |
+| `/api/trust/pairing-sessions/accept` | POST | 接收配对包并启动双端密钥确认 |
+| `/api/trust/pairing-sessions/:id/approve` | POST | SAS 核对后本端明确批准；双方批准才创建 Contact |
+| `/api/trust/pairing-sessions/:id/cancel` | POST | 取消未完成配对 |
 | `/api/contacts` | GET | 只列出联系人名片和 presence |
 | `/api/rooms` | POST | 创建 `direct` 或 `group` Room，并建立 `type=room` 本地会话 |
 | `/api/rooms/:id/invitations` | POST | 邀请已配对联系人 |

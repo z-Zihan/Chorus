@@ -200,13 +200,13 @@ Chorus 提供可信的本地 Agent 目录，用户可以从 UI 添加已检测 C
 
 ```text
 配置可外部访问的 Relay → 保存成功并自动连接 → 查看连接状态
-→ 输入 Hub ID → 交换配对码并核验指纹 → 联系人出现（不交换 Agent）
+→ 输入 Hub ID → 交换一次性配对包并核验 SAS/指纹 → 双方批准 → 联系人出现（不交换 Agent）
 → 创建 Room / 打开双人 Room → 邀请联系人并等待接受
 → 每位成员各自加入自己的 room/public Agent → Room 内出现 Owner / Agent
 → 人类消息或选择已入房 Agent → 检查 mention/call/off → 投递与回执
 ```
 
-失败必须可解释：Relay 地址不可达、配对码错误、邀请待接受、Agent 未入房、等待所有者确认、目标离线、消息过期分别使用不同状态，不统一显示为“发送失败”。
+失败必须可解释：Relay 地址不可达、配对包无效/过期、邀请待接受、Agent 未入房、等待所有者确认、目标离线、消息过期分别使用不同状态，不统一显示为“发送失败”。
 
 **English:** Configure and connect to a reachable Relay, pair into a contact without exchanging agents, create or open a room, invite contacts, and let each participant bring only their own agents. Delivery and authorization states remain separate and explainable.
 
@@ -326,7 +326,7 @@ i18n、主题、动画、埋点供应商、更多 UI 基础组件不是当前发
 | A2A 调用 | 自有 Agent 可 `auto`；可信远程调用默认 `confirm`；陌生来源 `deny` | 会话级与 Agent 级 `auto` / `confirm` / `deny` |
 | 内容 | 只发送当前消息和明确构造的 ContextPacket | 是否包含文件、路径、历史摘要和工具结果 |
 
-- 信任建立使用邀请/配对码并核验 User 与 Hub 公钥指纹；Relay 登录成功不等于用户之间互信。
+- 信任建立使用目标绑定的一次性配对包、双方签名与 SAS，并核验 User 与 Hub 公钥指纹；Relay 登录成功不等于用户之间互信。
 - 配对完成只创建 Contact，不触发 `directory_request` 或 `directory_announce`。联系人可以互发人类消息和 Room 邀请，不能据此调用 Agent。
 - `room` 表示 Agent 只在**所有者明确将它加入的 Room**中可见；它不会自动出现在所有共同 Room。`public` 表示可向已配对联系人发送最小 Agent Card，但不进入 Relay 全局搜索，也不代表允许调用。
 - 添加 Room Agent 时必须同时验证操作者是所有者、Agent 可见性为 `room|public`、操作者是 Room 成员；任何远程成员都不能替所有者添加 Agent。

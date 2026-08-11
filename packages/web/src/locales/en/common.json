@@ -1,6 +1,9 @@
 {
   "appName": "Chorus",
   "loading": "Loading…",
+  "errors": {
+    "copyFailed": "Could not copy to the clipboard. Select the code and copy it manually."
+  },
   "buttons": {
     "save": "Save",
     "saving": "Saving…",
@@ -70,6 +73,7 @@
     "selectAgents": "Select at least two online agents"
   },
   "aria": {
+    "skipToContent": "Skip to main content",
     "openSidebar": "Open sidebar",
     "closeSidebar": "Close sidebar",
     "closeNotification": "Close notification"
@@ -83,12 +87,16 @@
     "startDate": "Start date",
     "endDate": "End date",
     "hint": "Enter a keyword to search your messages.",
-    "noResults": "No matching messages found."
+    "noResults": "No matching messages found.",
+    "loadFailedTitle": "Search is unavailable",
+    "loadFailed": "Messages could not be searched. Check the connection and try again."
   },
   "export": {
     "title": "Export",
     "markdown": "Export as Markdown",
-    "json": "Export as JSON"
+    "json": "Export as JSON",
+    "success": "Conversation exported.",
+    "failed": "The conversation could not be exported. Try again."
   },
   "settings": {
     "title": "Settings",
@@ -125,6 +133,12 @@
     "success": "Agent installed successfully",
     "added": "Agent added",
     "verificationFailed": "The Agent was added, but Chorus could not confirm it. Please refresh and try again.",
+    "loadFailedTitle": "Agent Catalog is unavailable",
+    "loadFailed": "Catalog entries could not be loaded. No installation state has been changed.",
+    "installedLoadFailed": "Installed Agents could not be loaded. Chorus will not treat this as an empty list.",
+    "noMatches": "No Agents match this filter.",
+    "updateFailed": "The Agent state could not be changed. Try again.",
+    "deleteFailed": "The Agent could not be deleted. It remains installed.",
     "permissions": "Permissions",
     "homepage": "Homepage",
     "apiKey": "API key",
@@ -164,10 +178,18 @@
     },
     "notDetected": "CLI not detected, please install first",
     "detectedReady": "CLI detected, ready to add",
+    "detected": "Detected",
     "add": "Add"
   },
   "onboarding": {
     "bootstrapping": "Initializing…",
+    "loadingSetup": "Checking your setup…",
+    "loadFailed": "Chorus could not load the setup status. Check that the local service is running, then try again.",
+    "rescanFailed": "The scan could not be completed. Your previous results are still here.",
+    "startFailed": "Chorus could not start this Agent. Your selection was not lost; try again.",
+    "retrySetup": "Retry setup check",
+    "rescanning": "Scanning…",
+    "startingAgent": "Starting…",
     "scanning": "Detecting installed AI CLIs…",
     "chooseAgent": "Choose an Agent to start",
     "useAgent": "Use this Agent",

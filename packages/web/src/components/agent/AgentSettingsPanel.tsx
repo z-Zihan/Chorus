@@ -45,7 +45,7 @@ export function AgentSettingsPanel() {
         {displayedAgent && (
           <>
             <div className="flex items-center justify-between border-b border-[var(--border-color)] px-5 py-4">
-              <DialogTitle id="agent-settings-title">{t("settings:title")}</DialogTitle>
+              <DialogTitle>{t("settings:title")}</DialogTitle>
               <Button
                 variant="ghost"
                 size="icon"
@@ -143,7 +143,7 @@ export function AgentSettingsPanel() {
                 {error && (
                   <div
                     role="alert"
-                    className="rounded-lg border border-red-900 bg-red-950/50 px-3 py-2.5 text-sm text-red-300"
+                    className="rounded-lg border border-[var(--status-error)]/40 bg-[var(--danger-subtle)] px-3 py-2.5 text-sm text-[var(--status-error)]"
                   >
                     {error}
                   </div>

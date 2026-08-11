@@ -179,9 +179,13 @@ web/src/
 │   │   ├── ToastContainer.tsx
 │   │   ├── ConfirmDialog.tsx
 │   │   ├── PasswordInput.tsx
-│   │   ├── SettingsPanel.tsx    # 全局设置（主题/语言/安全/Hub/日志/插件/定时任务）
+│   │   ├── SettingsPanel.tsx    # 全局设置容器（主题/语言/安全/Hub/定时任务/诊断）
 │   │   ├── LogViewer.tsx
 │   │   └── UpdateBanner.tsx
+│   ├── settings/         # 设置功能页
+│   │   ├── PrivacySettings.tsx
+│   │   ├── ScheduledTasksSettings.tsx # 定时任务 CRUD + 完整异步状态
+│   │   └── PluginDiagnostics.tsx      # 已加载运行时插件（只读）
 │   ├── layout/           # 布局组件
 │   │   ├── Sidebar.tsx          # 侧边栏（会话列表 + Agent 列表 + 添加 Agent）
 │   │   ├── ChatArea.tsx         # 聊天主区域
@@ -272,6 +276,8 @@ relay/src/
 └── utils/logger.ts       # pino 日志
 ```
 
+跨 Hub 状态分两层，禁止合并解释：Relay 先持久化 envelope 并回 `transport_status=queued`；目标 Hub 完成持久处理后发送包含 `recipientHubId/status=persisted/timestamp` 的 Ed25519/JCS 签名 `transport_receipt`，Relay 验签后按 envelope + 收件人删除并回 `delivered`。E2E 加密的 `delivery_ack` 只表达业务侧 `accepted/denied/done/error`，不得驱动 Relay 删除密文。
+
 ### src-tauri/ — 桌面端
 
 Rust + Tauri 2.x，管理 Node.js sidecar 和系统集成。
@@ -286,6 +292,13 @@ src-tauri/
 ├── capabilities/         # 权限配置
 └── icons/                # 应用图标（PNG + ICO + SVG）
 ```
+
+### 生产 sidecar 与发布包
+
+- `pnpm tauri:build` 会先运行 `pnpm build` 和 `pnpm tauri:prepare-sidecar`，把当前目标的 Node 可执行文件、Server bundle、迁移及原生 SQLite 运行时放入 Tauri 包。
+- 本机目标默认使用当前 `process.execPath`。交叉构建必须同时提供目标平台的 `CHORUS_NODE_BINARY` 与 `CHORUS_BETTER_SQLITE3_DIR`，禁止把宿主机原生模块误装进目标包。
+- 未设置 `VITE_CHORUS_UPDATE_ENDPOINT` 时更新检查保持禁用且不会访问网络；Web 运行时即使存在 endpoint 也不会被误报为“已是最新版”。启用发布更新前，还要配置 Tauri updater endpoint、公钥、`TAURI_SIGNING_PRIVATE_KEY`，并生成签名 updater artifact。安装完成与重启是两个独立状态，自动重启失败时必须允许用户手动退出并重新打开。
+- 本地成功生成 `.app` 或未签名 `.dmg` 只证明可打包；发布门禁还包括 DMG 安装、macOS 签名/公证、Windows 签名、干净机器安装、升级、卸载和恢复测试。
 
 ## 开发注意事项
 
@@ -330,6 +343,9 @@ src-tauri/
 - 测试文件放在 `__tests__/` 目录，文件名 `*.test.ts`
 - 后端集成测试用内存 SQLite（`:memory:`）
 - 运行：`pnpm test`
+- 开发模式可用 `?fixture=message-status` 检查消息投递/执行状态，用 `?fixture=load-error` 与 `?fixture=load-error&preserved=1` 检查消息加载失败和保留历史状态；这些 fixture 不进入生产主包。
+- 导出响应必须同时提供 ASCII `filename` 回退与 RFC 5987 `filename*`；测试至少覆盖中文等非 ASCII 会话标题，避免 Node 因非法响应头返回 500。
+- UI 发布检查至少覆盖 320×812、375×812、800×600、1440×900、真实 200% zoom、Light/Dark、中文/English、仅键盘焦点顺序、Dialog Escape/焦点循环/焦点返回及屏幕阅读器；短视口或 640px 等效重排只能作为布局压力测试，不能替代真实 zoom。
 
 ### Git 提交
 - husky pre-commit 自动运行 lint-staged
@@ -345,8 +361,11 @@ src-tauri/
 | `VITE_DEFAULT_THEME` | `dark` | 默认主题 |
 | `VITE_DEFAULT_LANG` | `zh-CN` | 默认语言 |
 | `SERVER_PORT` | `3210` | 后端端口 |
+| `SERVER_HOST` | `127.0.0.1` | 后端监听地址；非 loopback 地址必须同时启用认证 |
 | `SERVER_LOG_LEVEL` | `info` | 后端日志级别 |
 | `SERVER_DB_PATH` | 应用数据目录 | SQLite 路径 |
 | `RELAY_PORT` | `3211` | Relay 端口 |
 | `RELAY_JWT_SECRET` | — | Relay JWT 密钥 |
+| `RELAY_HOST` | `127.0.0.1` | Relay 监听地址；非 loopback 时强制配置至少 32 字符的 JWT 密钥 |
+| `RELAY_TOKEN_TTL_SECONDS` | `86400` | Relay Hub Token 有效期；客户端通过私钥证明自动续期 |
 | `RELAY_OFFLINE_TTL_DAYS` | `7` | 离线消息保留天数 |

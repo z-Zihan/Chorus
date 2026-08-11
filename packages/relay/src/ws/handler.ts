@@ -2,10 +2,10 @@ import type {
   HubEnvelope,
   RelayClientMessage,
   RelayServerMessage,
-  TransportReceipt,
+  TransportStatusUpdate,
 } from "@chorus/shared";
 import type { FastifyInstance } from "fastify";
-import { verifyHubToken } from "../auth.js";
+import { verifyHubToken, verifyTransportReceipt } from "../auth.js";
 import type { HubRegistry } from "../hub-registry.js";
 import type { MessageRouter } from "../message-router.js";
 import type { OfflineStore } from "../offline-store.js";
@@ -35,7 +35,12 @@ interface RateWindow {
 function parseMessage(data: { toString(): string }): RelayClientMessage | null {
   try {
     const value = JSON.parse(data.toString()) as unknown;
-    if (typeof value !== "object" || value === null || !("type" in value) || typeof value.type !== "string") {
+    if (
+      typeof value !== "object" ||
+      value === null ||
+      !("type" in value) ||
+      typeof value.type !== "string"
+    ) {
       return null;
     }
     return value as RelayClientMessage;
@@ -44,21 +49,47 @@ function parseMessage(data: { toString(): string }): RelayClientMessage | null {
   }
 }
 
-function broadcastPresence(registry: HubRegistry, hubId: string, status: "online" | "offline"): void {
-  const message: RelayServerMessage = { type: "presence", hubId, status };
+function presenceMessage(
+  registry: HubRegistry,
+  hubId: string,
+  status: "online" | "offline",
+): RelayServerMessage {
+  const hub = registry.get(hubId);
+  return {
+    type: "presence",
+    hubId,
+    status,
+    publicKey: hub?.publicKey,
+    displayName: hub?.displayName,
+  };
+}
+
+function broadcastPresence(
+  registry: HubRegistry,
+  hubId: string,
+  status: "online" | "offline",
+): void {
+  const message = presenceMessage(registry, hubId, status);
   for (const hub of registry.listOnline()) sendJson(hub.socket, message);
+}
+
+function sendPresenceSnapshot(registry: HubRegistry, socket: RelaySocket, ownHubId: string): void {
+  for (const hub of registry.listOnline()) {
+    if (hub.hubId === ownHubId) continue;
+    sendJson(socket, presenceMessage(registry, hub.hubId, "online"));
+  }
 }
 
 function notifyEnvelopeSender(
   registry: HubRegistry,
   envelope: HubEnvelope,
-  status: TransportReceipt["status"],
+  status: TransportStatusUpdate["status"],
   fallbackSocket?: RelaySocket,
 ): void {
   const socket = fallbackSocket ?? registry.getSocket(envelope.from);
   if (!socket) return;
   sendJson(socket, {
-    type: "transport_receipt",
+    type: "transport_status",
     messageId: envelope.id,
     status,
     timestamp: Date.now(),
@@ -82,18 +113,21 @@ function broadcastRoomEvent(
 function validEnvelope(value: unknown): value is HubEnvelope {
   if (typeof value !== "object" || value === null) return false;
   const envelope = value as Partial<HubEnvelope>;
-  return typeof envelope.id === "string"
-    && typeof envelope.from === "string"
-    && typeof envelope.to === "string"
-    && typeof envelope.type === "string"
-    && typeof envelope.timestamp === "number"
-    && typeof envelope.nonce === "string"
-    && typeof envelope.ciphertext === "string"
-    && typeof envelope.signature === "string";
+  return (
+    typeof envelope.id === "string" &&
+    typeof envelope.from === "string" &&
+    typeof envelope.to === "string" &&
+    typeof envelope.type === "string" &&
+    typeof envelope.timestamp === "number" &&
+    typeof envelope.nonce === "string" &&
+    typeof envelope.ciphertext === "string" &&
+    typeof envelope.signature === "string"
+  );
 }
 
 export function registerWebSocket(app: FastifyInstance, dependencies: WebSocketDependencies): void {
-  const { registry, offlineStore, roomManager, roomCasStore, messageRouter, jwtSecret } = dependencies;
+  const { registry, offlineStore, roomManager, roomCasStore, messageRouter, jwtSecret } =
+    dependencies;
   const maxMessagesPerMinute = dependencies.maxMessagesPerMinute ?? DEFAULT_MAX_MESSAGES_PER_MINUTE;
   const rateWindows = new Map<string, RateWindow>();
 
@@ -138,31 +172,39 @@ export function registerWebSocket(app: FastifyInstance, dependencies: WebSocketD
       }
 
       if (!hubId) {
-        if (message.type !== "register"
-          || !registry.get(message.hubId)
-          || !verifyHubToken(message.token, message.hubId, jwtSecret)) {
+        if (
+          message.type !== "register" ||
+          !registry.get(message.hubId) ||
+          !verifyHubToken(
+            message.token,
+            message.hubId,
+            jwtSecret,
+            undefined,
+            registry.get(message.hubId)?.authVersion,
+          )
+        ) {
           socket.close(1008, "Invalid registration");
           return;
         }
         const previous = registry.getSocket(message.hubId);
         if (previous && previous !== socket) previous.close(1000, "Connection replaced");
         hubId = message.hubId;
+        const registeredHubId = hubId;
         clearTimeout(registrationTimeout);
-        registry.setOnline(hubId, socket);
-        sendJson(socket, { type: "registered", relayHubId: hubId } satisfies RelayServerMessage);
-        const envelopes = offlineStore.getForHub(hubId)
-          .filter((envelope) => !registry.isBlocked(envelope.from, hubId!));
-        const delivered = sendJson(socket, {
+        registry.setOnline(registeredHubId, socket);
+        sendJson(socket, {
+          type: "registered",
+          relayHubId: registeredHubId,
+        } satisfies RelayServerMessage);
+        sendPresenceSnapshot(registry, socket, registeredHubId);
+        const envelopes = offlineStore
+          .getForHub(registeredHubId)
+          .filter((envelope) => !registry.isBlocked(envelope.from, registeredHubId));
+        sendJson(socket, {
           type: "offline_messages",
           envelopes,
         } satisfies RelayServerMessage);
-        if (delivered) {
-          for (const envelope of envelopes) {
-            offlineStore.ackMessage(envelope.id);
-            notifyEnvelopeSender(registry, envelope, "delivered");
-          }
-        }
-        broadcastPresence(registry, hubId, "online");
+        broadcastPresence(registry, registeredHubId, "online");
         return;
       }
 
@@ -182,26 +224,47 @@ export function registerWebSocket(app: FastifyInstance, dependencies: WebSocketD
             return;
           }
           if (exceedsRateLimit(hubId)) {
-            app.log.warn(
-              { hubId, maxMessagesPerMinute },
-              "Relay message rate limit exceeded",
-            );
+            app.log.warn({ hubId, maxMessagesPerMinute }, "Relay message rate limit exceeded");
             socket.close(1008, "Message rate limit exceeded");
             return;
           }
           const result = messageRouter.routeMessage(message.envelope, registry, offlineStore);
-          if (result === "delivered") {
-            notifyEnvelopeSender(registry, message.envelope, "delivered", socket);
-          } else if (result === "blocked") {
+          if (result === "blocked") {
             notifyEnvelopeSender(registry, message.envelope, "failed", socket);
+          } else {
+            notifyEnvelopeSender(registry, message.envelope, "queued", socket);
+          }
+        } else if (message.type === "transport_receipt") {
+          const receipt = {
+            messageId: message.messageId,
+            recipientHubId: message.recipientHubId,
+            status: message.status,
+            timestamp: message.timestamp,
+            signature: message.signature,
+          };
+          const registered = registry.get(hubId);
+          if (
+            receipt.recipientHubId !== hubId ||
+            receipt.status !== "persisted" ||
+            !registered ||
+            !verifyTransportReceipt(receipt, registered.publicKey)
+          ) {
+            socket.close(1008, "Invalid transport receipt");
+            return;
+          }
+          const envelope = offlineStore.getEnvelope(receipt.messageId, hubId);
+          if (!envelope) return;
+          offlineStore.ackMessage(receipt.messageId, hubId);
+          if (!offlineStore.hasMessage(receipt.messageId)) {
+            notifyEnvelopeSender(registry, envelope, "delivered");
           }
         } else if (message.type === "contact_block") {
-          const blockedHubId = typeof message.blockedHubId === "string"
-            ? message.blockedHubId.trim()
-            : "";
-          const success = blockedHubId.length > 0
-            && blockedHubId !== hubId
-            && registry.get(blockedHubId) !== null;
+          const blockedHubId =
+            typeof message.blockedHubId === "string" ? message.blockedHubId.trim() : "";
+          const success =
+            blockedHubId.length > 0 &&
+            blockedHubId !== hubId &&
+            registry.get(blockedHubId) !== null;
           if (success) registry.blockHub(hubId, blockedHubId);
           sendJson(socket, {
             type: "contact_block_ack",
@@ -209,8 +272,11 @@ export function registerWebSocket(app: FastifyInstance, dependencies: WebSocketD
             success,
           } satisfies RelayServerMessage);
         } else if (message.type === "room:join" && typeof message.roomId === "string") {
-          roomManager.joinRoom(message.roomId, hubId);
-          broadcastRoomEvent(registry, roomManager, message.roomId, "join", hubId);
+          const wasAlreadyMember = roomManager.isMember(message.roomId, hubId);
+          if (!wasAlreadyMember) {
+            roomManager.respondToInvitation(message.roomId, hubId, "accepted");
+            broadcastRoomEvent(registry, roomManager, message.roomId, "join", hubId);
+          }
           sendJson(socket, {
             type: "room:members",
             roomId: message.roomId,
@@ -265,16 +331,16 @@ export function registerWebSocket(app: FastifyInstance, dependencies: WebSocketD
   });
 }
 
-function validRoomCasMessage(
-  message: Extract<RelayClientMessage, { type: "room_cas" }>,
-): boolean {
-  return message.roomId.length > 0
-    && Number.isSafeInteger(message.expectedRevision)
-    && message.expectedRevision >= 0
-    && Number.isSafeInteger(message.expectedKeyEpoch)
-    && message.expectedKeyEpoch >= 0
-    && Number.isSafeInteger(message.newRevision)
-    && message.newRevision >= 0
-    && Number.isSafeInteger(message.newKeyEpoch)
-    && message.newKeyEpoch >= 0;
+function validRoomCasMessage(message: Extract<RelayClientMessage, { type: "room_cas" }>): boolean {
+  return (
+    message.roomId.length > 0 &&
+    Number.isSafeInteger(message.expectedRevision) &&
+    message.expectedRevision >= 0 &&
+    Number.isSafeInteger(message.expectedKeyEpoch) &&
+    message.expectedKeyEpoch >= 0 &&
+    Number.isSafeInteger(message.newRevision) &&
+    message.newRevision >= 0 &&
+    Number.isSafeInteger(message.newKeyEpoch) &&
+    message.newKeyEpoch >= 0
+  );
 }

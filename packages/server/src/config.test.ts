@@ -10,7 +10,12 @@ vi.mock("node:fs", async (importOriginal) => {
   return { ...original, existsSync: vi.fn(original.existsSync) };
 });
 
-import { hasExistingConfig, loadConfig, resolveAppDataDir } from "./config.js";
+import {
+  assertSafeNetworkConfig,
+  hasExistingConfig,
+  loadConfig,
+  resolveAppDataDir,
+} from "./config.js";
 
 const mockedExistsSync = vi.mocked(existsSync);
 const originalCwd = process.cwd();
@@ -38,8 +43,13 @@ describe("config migration", () => {
     const loaded = await loadConfig();
 
     expect(loaded.source).toBe("defaults");
-    expect(loaded.rootDir).toBe(process.cwd());
-    expect(loaded.config).toMatchObject({ port: 3210, agents: [], auth: { enabled: false } });
+    expect(loaded.rootDir).toBe(resolveAppDataDir());
+    expect(loaded.config).toMatchObject({
+      host: "127.0.0.1",
+      port: 3210,
+      agents: [],
+      auth: { enabled: false },
+    });
     expect(hasExistingConfig()).toBe(false);
   });
 
@@ -68,6 +78,40 @@ describe("config migration", () => {
       { id: "legacy", name: "Legacy", type: "mock", config: {} },
     ]);
     expect(loaded.config.history).toEqual({ maxMessages: 20, maxTokens: 8_000 });
+  });
+});
+
+describe("network safety", () => {
+  const baseConfig = {
+    port: 3210,
+    dbPath: ":memory:",
+    cors: { origin: [] },
+    auth: { enabled: false, tokens: {} },
+    history: { maxMessages: 20, maxTokens: 8_000 },
+    agents: [],
+  };
+
+  it.each(["127.0.0.1", "127.0.0.2", "localhost", "::1", "[::1]"])(
+    "allows an unauthenticated loopback bind on %s",
+    (host) => {
+      expect(() => assertSafeNetworkConfig({ ...baseConfig, host })).not.toThrow();
+    },
+  );
+
+  it("rejects an unauthenticated non-loopback bind", () => {
+    expect(() => assertSafeNetworkConfig({ ...baseConfig, host: "0.0.0.0" })).toThrow(
+      /authentication is disabled/u,
+    );
+  });
+
+  it("allows an authenticated non-loopback bind", () => {
+    expect(() =>
+      assertSafeNetworkConfig({
+        ...baseConfig,
+        host: "0.0.0.0",
+        auth: { enabled: true, tokens: { desktop: "secret" } },
+      }),
+    ).not.toThrow();
   });
 });
 

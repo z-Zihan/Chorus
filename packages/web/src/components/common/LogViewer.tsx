@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select";
 import { api, type ServerLogEntry } from "@/services/api";
 import { getLogs, type LogLevel } from "@/utils/logger";
+import { useUIStore } from "@/store/uiStore";
 
 type LogFilter = "all" | LogLevel;
 interface LogViewerProps {
@@ -27,13 +28,15 @@ export function LogViewer({ open, onOpenChange }: LogViewerProps) {
   const [backendLogs, setBackendLogs] = useState<ServerLogEntry[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
+  const addToast = useUIStore((state) => state.addToast);
 
   useEffect(() => {
     if (!open) return;
     let active = true;
     setIsLoading(true);
     setLoadFailed(false);
-    void api.getLogs(level, 500)
+    void api
+      .getLogs(level, 500)
       .then((logs) => {
         if (active) setBackendLogs(logs);
       })
@@ -58,16 +61,22 @@ export function LogViewer({ open, onOpenChange }: LogViewerProps) {
         if (!keyword) return true;
         return JSON.stringify(entry).toLowerCase().includes(keyword);
       });
-  }, [backendLogs, level, search, open]);
+  }, [backendLogs, level, search]);
 
   const exportVisibleLogs = () => {
-    const blob = new Blob([JSON.stringify(visibleLogs, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `chorus-logs-${new Date().toISOString().replaceAll(":", "-")}.json`;
-    anchor.click();
-    URL.revokeObjectURL(url);
+    let url: string | null = null;
+    try {
+      const blob = new Blob([JSON.stringify(visibleLogs, null, 2)], { type: "application/json" });
+      url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `chorus-logs-${new Date().toISOString().replaceAll(":", "-")}.json`;
+      anchor.click();
+    } catch {
+      addToast(t("settings:logs.exportFailed"), "error");
+    } finally {
+      if (url) URL.revokeObjectURL(url);
+    }
   };
 
   return (
@@ -107,13 +116,20 @@ export function LogViewer({ open, onOpenChange }: LogViewerProps) {
             placeholder={t("settings:logs.searchPlaceholder")}
             aria-label={t("settings:logs.searchLabel")}
           />
-          <Button variant="secondary" onClick={exportVisibleLogs} disabled={visibleLogs.length === 0}>
+          <Button
+            variant="secondary"
+            onClick={exportVisibleLogs}
+            disabled={visibleLogs.length === 0}
+          >
             <Download aria-hidden="true" className="h-4 w-4" />
             {t("settings:logs.export")}
           </Button>
         </div>
 
-        <div className="min-h-64 flex-1 overflow-y-auto bg-[var(--bg-base)] p-4 font-mono text-xs" role="log">
+        <div
+          className="min-h-64 flex-1 overflow-y-auto bg-[var(--bg-base)] p-4 font-mono text-xs"
+          role="log"
+        >
           {isLoading && <p className="text-[var(--text-muted)]">{t("common:loading")}</p>}
           {loadFailed && (
             <p role="alert" className="mb-3 text-[var(--text-secondary)]">

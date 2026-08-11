@@ -3,7 +3,12 @@
 ## 1. 安装
 
 ### 桌面端（推荐）
-1. 从 [GitHub Releases](https://github.com/z-Zihan/Chorus/releases) 下载对应平台的安装包
+
+> 当前尚未发布经过签名、公证和干净机器验收的正式安装包。请勿把本地构建的 `.app` 当作正式发行版。
+
+正式发布后：
+
+1. 从 [GitHub Releases](https://github.com/z-Zihan/Chorus/releases) 下载对应平台的签名安装包
 2. macOS: 双击 `.dmg` 拖拽安装
 3. Windows: 双击 `.msi` 或 `.exe` 安装
 4. 首次打开会自动检测本机已安装的 AI CLI
@@ -55,7 +60,7 @@ export default {
 ## 4. 多 Agent 协作
 
 ### 创建群聊
-1. 侧边栏 **群聊** 区域 → 点 **"+"** 创建
+1. 点击侧边栏顶部的 **群聊** 主操作
 2. 选择至少 2 个 Agent
 3. 在输入框左侧的 AgentSelector 选择目标 Agent
 4. 输入消息 → 只有选中的 Agent 接收并回复
@@ -100,7 +105,7 @@ Chorus 使用三层身份模型：
 | **Agent** | 可执行的 AI 实例 | `agentId` + `homeHubId` |
 
 - 一个 User 可以拥有多个 Agent
-- 侧边栏按 User 分组显示 Agent（"我的 Agent" + 远程 User 分组）
+- 侧边栏以最近会话为主；Agent 目录用于筛选、添加和管理参与者，不再把会话历史嵌套在 User → Agent 三层树中
 - 同名 Agent 通过 `Owner / Agent` 格式消歧
 - 远程 Agent 标记为 `[远程]`，stale Agent 灰色显示
 
@@ -154,35 +159,35 @@ docker run -d -p 3211:3211 \
 
 ### 连接中继服务器
 
-1. 打开 **设置 → 跨设备协作**，填写可被其他设备访问的 Relay 地址，例如 `wss://your-relay.example.com/ws` 或局域网内的 `ws://192.168.1.20:3211/ws`。
+1. 打开 **设置 → Hub**，填写可被其他设备访问的 Relay 地址，例如 `wss://your-relay.example.com/ws` 或局域网内的 `ws://192.168.1.20:3211/ws`。
 2. 不要填写 `localhost`、`127.0.0.1` 或 `::1`；这些地址只指向当前设备，不能用于跨设备协作。公网环境推荐 `wss://`，`ws://` 仅用于可信局域网或开发环境。
 3. 设置显示名并点击 **保存**。保存成功后会显示 Toast“保存成功，正在连接”；保存失败会保留输入并显示可操作的错误原因。
 4. 查看独立的连接状态：**连接中 / 已连接 / 未连接 / 正在重连 / 连接错误**。配置保存成功不代表 Relay 已连接。
 
-**English:** Open **Settings → Cross-device Collaboration**, enter an externally reachable URL such as `wss://your-relay.example.com/ws` or `ws://192.168.1.20:3211/ws`, and save. Loopback hosts (`localhost`, `127.0.0.1`, `::1`) are rejected outside explicit development mode. A successful save triggers a connection attempt; persistence and connection results are shown separately.
+**English:** Open **Settings → Hub**, enter an externally reachable URL such as `wss://your-relay.example.com/ws` or `ws://192.168.1.20:3211/ws`, and save. Loopback hosts (`localhost`, `127.0.0.1`, `::1`) are rejected outside explicit development mode. A successful save triggers a connection attempt; persistence and connection results are shown separately.
 
 ### P2P 局域网直连 / P2P Direct Connection
 
 同一局域网内的设备可以不通过 Relay 直接通信：
 
-1. 在 **设置 → 跨设备协作** 中开启 **P2P 直连** 开关
+1. 在 **设置 → Hub** 中开启 **P2P 直连** 开关
 2. Chorus 会通过 mDNS 自动发现同一局域网内的其他 Chorus 设备
 3. 发现设备后会弹出确认提示，**不会自动连接**——需要你手动确认
 4. 确认后设备间建立加密 WebSocket 连接，消息直接传输，不经过第三方
-5. 在设置页可查看 P2P 连接状态（端口、已连接设备、延迟）
+5. 在聊天区顶部的 Hub 状态入口查看当前路径、已连接设备和延迟；设置页只负责 P2P 开关与 Hub 配置
 
 > P2P 仅适用于同一局域网。跨网络仍需 Relay。
 
-**English:** Devices on the same LAN can communicate without a Relay via P2P. Enable in Settings → Cross-device Collaboration. mDNS discovery is passive — you must manually approve each device. View P2P status (port, connected devices, latency) in settings.
+**English:** Devices on the same LAN can communicate without a Relay via P2P. Enable it in **Settings → Hub**. mDNS discovery is passive — you must manually approve each device. View the active path, peers, and latency from the Hub status control in the conversation header.
 
 ### 添加好友 / Add a contact
 
 1. 在侧边栏点击 **添加好友**，输入对方的 Hub ID。
-2. 发送配对请求并把一次性配对码通过可信渠道告诉对方。
-3. 对方输入配对码并核对 Hub 指纹后确认。
+2. 生成一次性配对包并通过可信渠道交给对方；配对包是秘密且 10 分钟后过期。
+3. 对方粘贴配对包；双方核对完全一致的 6 位验证码，并分别点击批准。
 4. 配对成功后，对方出现在 **联系人** 中，只显示头像、名称和在线状态；双方的 Agent 仍保持私有。
 
-**English:** Enter the other person's Hub ID, exchange the one-time pairing code over a trusted channel, and verify the Hub fingerprint. A successful pairing creates a contact card only; no agent directory is exchanged.
+**English:** Enter the peer's full Hub ID, exchange the target-bound one-time package through a trusted channel, compare the same six-digit verification code, and approve on both devices. A successful pairing creates a contact card only; no agent directory is exchanged.
 
 ### 创建聊天室 / Create a room
 
@@ -200,8 +205,9 @@ docker run -d -p 3211:3211 \
 - 当双方都主动加入自己的 Agent 后，这些 Agent 才能在当前房间进行 A2A 协作；远程调用仍遵循 `auto / confirm / deny` 权限。
 - 所有者移除 Agent、将其改回 `private`、离开房间或解除联系人关系后，新的调用立即停止；历史消息保留身份快照。
 - 对方离线时，密文可由 Relay 暂存并在上线后投递。Relay 无法读取正文，但仍能看到 Hub ID、房间、时间、密文大小和在线状态等元数据。
+- A2A 调用链中的 **传输** 与 **执行** 是两个状态：`Relay 已排队/目标设备已接收` 只说明密文投递；`已接受/已完成/已拒绝/执行失败` 才说明目标 Hub 的业务处理。目标设备已接收不等于 Agent 已完成。
 
-**English:** Agents are room-scoped participants, never implicit capabilities of a contact. A remote agent becomes addressable only after its owner adds it to that room. Removal or visibility revocation blocks new calls immediately while preserving historical identity snapshots.
+**English:** Agents are room-scoped participants, never implicit capabilities of a contact. A remote agent becomes addressable only after its owner adds it to that room. Removal or visibility revocation blocks new calls immediately while preserving historical identity snapshots. Transport (`queued/delivered`) is shown separately from execution (`accepted/denied/done/error`); device delivery never claims that an Agent completed.
 
 ## 7. 设置
 
@@ -214,9 +220,11 @@ docker run -d -p 3211:3211 \
 | A2A 模式 | 设置 → 隐私与权限 | 每个会话 mention/call/off |
 | 信任管理 | 设置 → 隐私与权限 | 配对 Hub、阻止/移除、披露预览 |
 | Agent 可见性 | Agent 设置 → 可见性 | 默认 private；可选 room / public，公开不等于授权调用 |
-| Relay | 设置 → 跨设备协作 | 外部可访问地址、保存反馈和实时连接状态 |
+| Relay | 设置 → Hub | 外部可访问地址、保存反馈和实时连接状态 |
+| 定时任务 | 设置 → 定时任务 | 选择 Agent、填写 Cron 和提示词；支持启停与删除 |
 | 日志 | 设置 → 诊断 | 查看前端 + 后端日志，支持导出 |
-| 检查更新 | 设置 → 诊断 | 检查新版本 |
+| 运行时插件 | 设置 → 诊断 | 只读查看服务启动时加载的插件、版本和权限；不提供安装管理 |
+| 检查更新 | 设置 → 诊断 | 仅桌面应用可用；未配置签名更新服务的构建会明确保持禁用 |
 
 ## 8. 快捷键
 
@@ -245,7 +253,7 @@ docker run -d -p 3211:3211 \
 三种：`mention`（异步转发，默认）、`call`（同步调用，调用方拿到返回值继续推理）、`off`（关闭）。每个会话可独立设置。
 
 ### 跨设备通信安全吗？
-端到端加密，Relay 服务器无法解密内容。Hub 间需配对码认证（SPAKE2 + 6 位 SAS），支持 block/remove。群组消息使用群组密钥加密。P2P 直连同样使用 Ed25519 握手 + 消息签名验证。
+端到端加密，Relay 服务器无法解密内容。Hub 间通过目标绑定的一次性高熵配对包、双方 Hub/User 签名与 6 位 SAS 建立信任，支持 block/remove。群组消息使用群组密钥加密。P2P 直连同样使用 Ed25519 握手 + 消息签名验证。
 
 添加好友会看到我的 Agent 吗？不会。配对只交换最小联系人资料。你的 Agent 默认 `private`；只有你能把自己的 `room` 或 `public` Agent 加入聊天室。No. Pairing exchanges only minimal contact information, and only you can add your agents to a room.
 

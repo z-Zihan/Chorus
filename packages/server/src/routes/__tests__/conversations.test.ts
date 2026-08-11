@@ -60,6 +60,22 @@ describe("conversation routes", () => {
     expect(response.body).toEqual(expect.any(Array));
   });
 
+  it("exports conversations with non-ASCII titles using a valid encoded filename", async () => {
+    const created = await request(app.server)
+      .post("/api/conversations")
+      .send({ title: "中文 会话", agentId: "test-agent" });
+
+    const response = await request(app.server).get(
+      `/api/conversations/${created.body.id}/export?format=markdown`,
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers["content-disposition"]).toBe(
+      "attachment; filename=\"conversation.md\"; filename*=UTF-8''%E4%B8%AD%E6%96%87-%E4%BC%9A%E8%AF%9D.md",
+    );
+    expect(response.text).toContain("# 中文 会话");
+  });
+
   it("routes a group message without mentions only to the first online agent", async () => {
     const created = await request(app.server)
       .post("/api/conversations")

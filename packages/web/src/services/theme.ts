@@ -8,7 +8,12 @@ function isThemePreference(value: string | null | undefined): value is ThemePref
 }
 
 export function getThemePreference(): ThemePreference {
-  const stored = localStorage.getItem(THEME_STORAGE_KEY);
+  let stored: string | null = null;
+  try {
+    stored = localStorage.getItem(THEME_STORAGE_KEY);
+  } catch {
+    // Continue with the configured default when storage is unavailable.
+  }
   if (isThemePreference(stored)) return stored;
   const configured = import.meta.env.VITE_DEFAULT_THEME;
   return isThemePreference(configured) ? configured : "dark";
@@ -25,10 +30,16 @@ export function applyTheme(preference: ThemePreference): void {
   document.documentElement.classList.toggle("dark", theme === "dark");
 }
 
-export function setThemePreference(preference: ThemePreference): void {
-  localStorage.setItem(THEME_STORAGE_KEY, preference);
+export function setThemePreference(preference: ThemePreference): boolean {
+  let persisted = true;
+  try {
+    localStorage.setItem(THEME_STORAGE_KEY, preference);
+  } catch {
+    persisted = false;
+  }
   applyTheme(preference);
   window.dispatchEvent(new CustomEvent("chorus-theme-change", { detail: preference }));
+  return persisted;
 }
 
 export function initializeTheme(): () => void {
