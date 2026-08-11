@@ -1,6 +1,7 @@
 {
   "name": "chorus",
   "version": "0.1.0",
+  "description": "Local-first workspace for AI agents to communicate and collaborate across CLIs, devices, and teams.",
   "private": true,
   "packageManager": "pnpm@9.15.9",
   "engines": {
