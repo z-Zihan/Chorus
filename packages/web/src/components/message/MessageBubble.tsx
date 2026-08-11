@@ -181,7 +181,7 @@ export function MessageBubble({ message, agentName, agentAvatar, isGroup = false
             onClick={() => setIsExpanded((expanded) => !expanded)}
             className={`mt-2 text-xs font-medium transition-colors ${
               isUser && !isError
-                ? "text-[var(--accent-foreground)] opacity-80 hover:opacity-100"
+                ? "text-[var(--accent-foreground)] opacity-90 hover:opacity-100"
                 : "text-[var(--accent-hover)] hover:opacity-80"
             }`}
           >
@@ -204,7 +204,7 @@ export function MessageBubble({ message, agentName, agentAvatar, isGroup = false
 
         {isSending && (
           <div
-            className="mt-2 flex items-center justify-end gap-1.5 text-xs text-[var(--accent-foreground)] opacity-75"
+            className="mt-2 flex items-center justify-end gap-1.5 text-xs text-[var(--accent-foreground)] opacity-90"
             aria-live="polite"
           >
             <LoaderCircle aria-hidden="true" className="h-3.5 w-3.5 animate-spin" />
@@ -226,7 +226,7 @@ export function MessageBubble({ message, agentName, agentAvatar, isGroup = false
         <div
           className={`mt-1 text-right text-[10px] ${
             isUser && !isError
-              ? "text-[var(--accent-foreground)] opacity-65"
+              ? "text-[var(--accent-foreground)] opacity-90"
               : "text-[var(--text-tertiary)]"
           }`}
         >

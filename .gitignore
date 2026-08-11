@@ -19,3 +19,4 @@ src-tauri/binaries/chorus-node-*
 src-tauri/runtime/
 packages/relay/data/
 data/hub-keypair.json
+artifacts/playwright/

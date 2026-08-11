@@ -2,7 +2,11 @@ const js = require("@eslint/js");
 const react = require("eslint-plugin-react");
 const reactHooks = require("eslint-plugin-react-hooks");
 let reactRefresh;
-try { reactRefresh = require("eslint-plugin-react-refresh").default; } catch { reactRefresh = null; }
+try {
+  reactRefresh = require("eslint-plugin-react-refresh").default;
+} catch {
+  reactRefresh = null;
+}
 const tseslint = require("typescript-eslint");
 
 module.exports = tseslint.config(
@@ -12,6 +16,7 @@ module.exports = tseslint.config(
       "**/dist/**",
       "**/target/**",
       "**/.tauri/**",
+      "artifacts/**",
       "**/*.tsbuildinfo",
       ".husky/_/**",
     ],
