@@ -1,10 +1,5 @@
 import { useTranslation } from "react-i18next";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAgentStore, type AgentHealthState } from "@/store/agentStore";
 
 const HEALTH_COLORS: Record<AgentHealthState, string> = {
@@ -43,7 +38,11 @@ export function AgentHealthBadge({ agentId }: AgentHealthBadgeProps) {
         </TooltipTrigger>
         <TooltipContent side="right" className="max-w-64 space-y-1">
           <p className="font-medium">{statusLabel}</p>
-          {lastCheck && <p className="text-[var(--text-secondary)]">{t("health.lastCheck", { time: lastCheck })}</p>}
+          {lastCheck && (
+            <p className="text-[var(--text-secondary)]">
+              {t("health.lastCheck", { time: lastCheck })}
+            </p>
+          )}
           {status === "unhealthy" && (
             <p className="text-[var(--status-error)]">
               {health?.reason || t("health.unavailableReason")}

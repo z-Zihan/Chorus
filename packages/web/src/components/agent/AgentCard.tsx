@@ -26,16 +26,10 @@ export function AgentCard({ agent, onClick, selected }: Props) {
           <span className="truncate text-sm font-medium text-[var(--text-primary)]">
             {agent.name}
           </span>
-          <span
-            className={`h-2 w-2 flex-shrink-0 rounded-full ${
-              STATUS_COLORS[agent.status]
-            }`}
-          />
+          <span className={`h-2 w-2 flex-shrink-0 rounded-full ${STATUS_COLORS[agent.status]}`} />
         </div>
         {agent.description && (
-          <p className="truncate text-xs text-[var(--text-tertiary)]">
-            {agent.description}
-          </p>
+          <p className="truncate text-xs text-[var(--text-tertiary)]">{agent.description}</p>
         )}
         <div className="mt-1 flex items-center gap-2 text-xs text-[var(--text-muted)]">
           <span>{t(`status.${agent.status}`, { defaultValue: t("status.unknown") })}</span>

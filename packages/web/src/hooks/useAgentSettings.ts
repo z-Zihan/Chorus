@@ -51,12 +51,12 @@ export function useAgentSettings(agentId: string | null) {
     setError(null);
   }, [agent]);
 
-  const setField = useCallback(<K extends keyof AgentSettingsFields>(
-    field: K,
-    value: AgentSettingsFields[K],
-  ) => {
-    setFields((current) => ({ ...current, [field]: value }));
-  }, []);
+  const setField = useCallback(
+    <K extends keyof AgentSettingsFields>(field: K, value: AgentSettingsFields[K]) => {
+      setFields((current) => ({ ...current, [field]: value }));
+    },
+    [],
+  );
 
   const cancel = useCallback(() => {
     clearSelectedAgent();

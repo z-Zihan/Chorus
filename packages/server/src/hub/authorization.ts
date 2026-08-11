@@ -2,9 +2,7 @@ import type { HubPayload } from "@chorus/shared";
 import type { Repository } from "../db/repository.js";
 import type { TrustStore } from "./trust-store.js";
 
-export type AuthorizationResult =
-  | { allowed: true }
-  | { allowed: false; reason: string };
+export type AuthorizationResult = { allowed: true } | { allowed: false; reason: string };
 
 export class AuthorizationService {
   constructor(
@@ -26,8 +24,7 @@ export class AuthorizationService {
     }
 
     if (payload.messageType === "a2a_call" || payload.messageType === "chat") {
-      const targetAgentId = payload.toAgentId
-        ?? stringMetadata(payload.metadata, "targetAgentId");
+      const targetAgentId = payload.toAgentId ?? stringMetadata(payload.metadata, "targetAgentId");
       if (targetAgentId) {
         const agent = this.repository.getAgentRow(targetAgentId);
         if (!agent) {

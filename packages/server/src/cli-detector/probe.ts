@@ -116,10 +116,7 @@ export function readinessFromProbe(probe: ProbeResult, output: string): CliReadi
   return "error";
 }
 
-export function diagnosticsFromProbe(
-  probe: ProbeResult,
-  status: CliReadiness,
-): string | undefined {
+export function diagnosticsFromProbe(probe: ProbeResult, status: CliReadiness): string | undefined {
   if (probe.timedOut) return "PROBE_TIMEOUT";
   if (probe.errorCode === "EACCES" || probe.errorCode === "EPERM") return "PERMISSION_DENIED";
   if (probe.errorCode === "ENOENT") return "CLI_NOT_FOUND";

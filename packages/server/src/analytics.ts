@@ -37,10 +37,7 @@ export function registerAnalyticsProvider(name: string, provider: AnalyticsProvi
   if (configuredProvider === normalizedName) activeProvider = provider;
 }
 
-export function track(
-  name: string,
-  props?: Record<string, string | number | boolean>,
-): void {
+export function track(name: string, props?: Record<string, string | number | boolean>): void {
   const event: AnalyticsEvent = { name, props, timestamp: Date.now() };
   eventQueue.push(event);
   if (eventQueue.length > MAX_EVENTS) eventQueue.splice(0, eventQueue.length - MAX_EVENTS);

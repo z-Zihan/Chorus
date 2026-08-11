@@ -2,13 +2,18 @@ import { randomUUID } from "node:crypto";
 import type { ConversationContext, StreamChunk } from "@chorus/shared";
 import { BaseAdapter } from "../adapter";
 
-const sleep = (ms: number, signal?: AbortSignal) => new Promise<void>((resolve, reject) => {
-  const timer = setTimeout(resolve, ms);
-  signal?.addEventListener("abort", () => {
-    clearTimeout(timer);
-    reject(new DOMException("Request cancelled", "AbortError"));
-  }, { once: true });
-});
+const sleep = (ms: number, signal?: AbortSignal) =>
+  new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(resolve, ms);
+    signal?.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(timer);
+        reject(new DOMException("Request cancelled", "AbortError"));
+      },
+      { once: true },
+    );
+  });
 
 export class MockAdapter extends BaseAdapter {
   readonly id: string;
@@ -101,7 +106,8 @@ export class MockAdapter extends BaseAdapter {
       };
     }
 
-    const summary = "\n\n### 汇总结论\n\n共得到 **4 条建议**，当前没有阻塞发布的高危项。优先补上输入校验和异常路径测试。";
+    const summary =
+      "\n\n### 汇总结论\n\n共得到 **4 条建议**，当前没有阻塞发布的高危项。优先补上输入校验和异常路径测试。";
     for (const token of tokenize(summary)) {
       await sleep(delay, context.signal);
       yield { type: "text", content: token };

@@ -90,7 +90,11 @@ export class Repository {
   }
 
   getClientTokenByHash(hash: string): ClientToken | undefined {
-    const row = this.context.db.select().from(clientTokens).where(eq(clientTokens.hash, hash)).get();
+    const row = this.context.db
+      .select()
+      .from(clientTokens)
+      .where(eq(clientTokens.hash, hash))
+      .get();
     return row ? toClientToken(row) : undefined;
   }
 
@@ -104,23 +108,25 @@ export class Repository {
   }
 
   updateClientTokenLastUsed(id: string, lastUsedAt: number): boolean {
-    return this.context.db
-      .update(clientTokens)
-      .set({ lastUsedAt })
-      .where(eq(clientTokens.id, id))
-      .run().changes > 0;
+    return (
+      this.context.db.update(clientTokens).set({ lastUsedAt }).where(eq(clientTokens.id, id)).run()
+        .changes > 0
+    );
   }
 
   revokeClientToken(id: string): boolean {
-    return this.context.db
-      .update(clientTokens)
-      .set({ revoked: true })
-      .where(eq(clientTokens.id, id))
-      .run().changes > 0;
+    return (
+      this.context.db
+        .update(clientTokens)
+        .set({ revoked: true })
+        .where(eq(clientTokens.id, id))
+        .run().changes > 0
+    );
   }
 
   purgeExpiredClientTokens(now = Date.now()): number {
-    return this.context.db.delete(clientTokens).where(lt(clientTokens.expiresAt, now)).run().changes;
+    return this.context.db.delete(clientTokens).where(lt(clientTokens.expiresAt, now)).run()
+      .changes;
   }
 
   upsertAgent(
@@ -137,7 +143,8 @@ export class Repository {
     const current = this.getAgentRow(persisted.id);
     const ownerId = agent.ownerId ?? current?.ownerId ?? "usr_local";
     const ownerType = agent.ownerType ?? current?.ownerType ?? "system";
-    const capabilities = agent.capabilities ?? safeJson<string[]>(current?.capabilities ?? null, []);
+    const capabilities =
+      agent.capabilities ?? safeJson<string[]>(current?.capabilities ?? null, []);
     const stale = agent.stale ?? current?.stale ?? false;
     const homeHubId = agent.homeHubId ?? current?.homeHubId ?? null;
     const storedConfig = ownerType === "remote" ? {} : persisted.config;
@@ -242,9 +249,7 @@ export class Repository {
 
   listUsers(filter: UserListFilter = {}): User[] {
     const rows = this.context.db.select().from(users).orderBy(asc(users.createdAt)).all();
-    return rows
-      .filter((row) => !filter.kind || row.kind === filter.kind)
-      .map(toUser);
+    return rows.filter((row) => !filter.kind || row.kind === filter.kind).map(toUser);
   }
 
   getUser(id: string): User | undefined {
@@ -340,7 +345,9 @@ export class Repository {
       .filter((row) => !filter.ownerId || row.ownerId === filter.ownerId)
       .filter((row) => !filter.ownerType || row.ownerType === filter.ownerType)
       .filter((row) => filter.includeRemote !== false || row.ownerType !== "remote")
-      .filter((row) => filter.includeDisabled === true || row.ownerType === "remote" || !row.disabled)
+      .filter(
+        (row) => filter.includeDisabled === true || row.ownerType === "remote" || !row.disabled,
+      )
       .map((row) => this.toAgent(row))
       .filter((agent) => !filter.status || agent.status === filter.status)
       .filter((agent) => !filter.capability || agent.capabilities?.includes(filter.capability));
@@ -392,7 +399,11 @@ export class Repository {
   }
 
   getTrustedHub(hubId: string): TrustedHub | undefined {
-    const row = this.context.db.select().from(trustedHubs).where(eq(trustedHubs.hubId, hubId)).get();
+    const row = this.context.db
+      .select()
+      .from(trustedHubs)
+      .where(eq(trustedHubs.hubId, hubId))
+      .get();
     return row ? toTrustedHub(row) : undefined;
   }
 
@@ -770,7 +781,7 @@ export class Repository {
       .from(conversations)
       .where(isNotNull(conversations.relayRoomId))
       .all()
-      .flatMap(({ roomId }) => roomId ? [roomId] : []);
+      .flatMap(({ roomId }) => (roomId ? [roomId] : []));
   }
 
   setRoomState(roomId: string, state: PersistedRoomState): PersistedRoomState | undefined {
@@ -792,7 +803,12 @@ export class Repository {
     return this.context.db
       .select()
       .from(roomStateEvents)
-      .where(and(eq(roomStateEvents.roomId, roomId), sql`${roomStateEvents.revision} > ${afterRevision}`))
+      .where(
+        and(
+          eq(roomStateEvents.roomId, roomId),
+          sql`${roomStateEvents.revision} > ${afterRevision}`,
+        ),
+      )
       .orderBy(asc(roomStateEvents.revision))
       .limit(limit)
       .all()
@@ -912,25 +928,33 @@ export class Repository {
     agentId: string,
     ownerProof: string,
   ): boolean {
-    return this.context.db
-      .update(conversationAgents)
-      .set({ ownerProof })
-      .where(and(
-        eq(conversationAgents.conversationId, conversationId),
-        eq(conversationAgents.agentId, agentId),
-      ))
-      .run().changes > 0;
+    return (
+      this.context.db
+        .update(conversationAgents)
+        .set({ ownerProof })
+        .where(
+          and(
+            eq(conversationAgents.conversationId, conversationId),
+            eq(conversationAgents.agentId, agentId),
+          ),
+        )
+        .run().changes > 0
+    );
   }
 
   getConversationAgentOwnerProof(conversationId: string, agentId: string): string | undefined {
-    return this.context.db
-      .select({ ownerProof: conversationAgents.ownerProof })
-      .from(conversationAgents)
-      .where(and(
-        eq(conversationAgents.conversationId, conversationId),
-        eq(conversationAgents.agentId, agentId),
-      ))
-      .get()?.ownerProof ?? undefined;
+    return (
+      this.context.db
+        .select({ ownerProof: conversationAgents.ownerProof })
+        .from(conversationAgents)
+        .where(
+          and(
+            eq(conversationAgents.conversationId, conversationId),
+            eq(conversationAgents.agentId, agentId),
+          ),
+        )
+        .get()?.ownerProof ?? undefined
+    );
   }
 
   removeAgentsFromConversation(
@@ -1170,11 +1194,13 @@ export class Repository {
 }
 
 function isPersistedRoomState(value: PersistedRoomState): boolean {
-  return Number.isSafeInteger(value.revision)
-    && value.revision >= 0
-    && Number.isSafeInteger(value.keyEpoch)
-    && value.keyEpoch >= 1
-    && (value.managementState === "managed" || value.managementState === "unmanaged");
+  return (
+    Number.isSafeInteger(value.revision) &&
+    value.revision >= 0 &&
+    Number.isSafeInteger(value.keyEpoch) &&
+    value.keyEpoch >= 1 &&
+    (value.managementState === "managed" || value.managementState === "unmanaged")
+  );
 }
 
 function toPersistedAgent(agent: AgentConfig | PersistedAgentConfig): PersistedAgentConfig {

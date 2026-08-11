@@ -159,17 +159,21 @@ function pathString(value: unknown, path: string): string {
 }
 
 function getPath(value: unknown, path: string): unknown {
-  const normalized = path.trim().replace(/^\$\.?/u, "").replace(/\[(\d+)\]/gu, ".$1");
+  const normalized = path
+    .trim()
+    .replace(/^\$\.?/u, "")
+    .replace(/\[(\d+)\]/gu, ".$1");
   if (!normalized) return value;
-  return normalized.split(".").filter(Boolean).reduce<unknown>((current, key) => {
-    if (current === null || typeof current !== "object") return undefined;
-    return (current as Record<string, unknown>)[key];
-  }, value);
+  return normalized
+    .split(".")
+    .filter(Boolean)
+    .reduce<unknown>((current, key) => {
+      if (current === null || typeof current !== "object") return undefined;
+      return (current as Record<string, unknown>)[key];
+    }, value);
 }
 
 function stringRecord(value: unknown): Record<string, string> {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-  return Object.fromEntries(
-    Object.entries(value).map(([key, item]) => [key, String(item)]),
-  );
+  return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, String(item)]));
 }

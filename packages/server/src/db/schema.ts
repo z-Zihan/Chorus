@@ -130,7 +130,9 @@ export const roomStateEvents = sqliteTable(
     timestamp: integer("timestamp").notNull(),
     data: text("data").notNull(),
   },
-  (table) => ({ roomRevisionIdx: index("idx_room_state_events_room_revision").on(table.roomId, table.revision) }),
+  (table) => ({
+    roomRevisionIdx: index("idx_room_state_events_room_revision").on(table.roomId, table.revision),
+  }),
 );
 
 export const agentFriends = sqliteTable(

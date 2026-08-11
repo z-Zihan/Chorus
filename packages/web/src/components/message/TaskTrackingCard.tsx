@@ -73,7 +73,9 @@ export function TaskTrackingCard({ thread }: Props) {
           <div className="h-5 w-5 [&>*]:h-5 [&>*]:w-5">
             <AgentAvatar name={fromName} src={fromAgent?.avatar} size="xs" />
           </div>
-          <span aria-hidden="true" className="text-[10px] text-[var(--text-muted)]">→</span>
+          <span aria-hidden="true" className="text-[10px] text-[var(--text-muted)]">
+            →
+          </span>
           <div className="h-5 w-5 [&>*]:h-5 [&>*]:w-5">
             <AgentAvatar name={toName} src={toAgent?.avatar} size="xs" />
           </div>
@@ -94,7 +96,10 @@ export function TaskTrackingCard({ thread }: Props) {
           />
         )}
         {thread.status === "error" && (
-          <CircleAlert aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-[var(--status-error)]" />
+          <CircleAlert
+            aria-hidden="true"
+            className="h-3.5 w-3.5 shrink-0 text-[var(--status-error)]"
+          />
         )}
         <span className="shrink-0 font-mono text-xs tabular-nums text-[var(--text-tertiary)]">
           {duration}
@@ -123,8 +128,6 @@ export function TaskTrackingCard({ thread }: Props) {
             </span>
             <span className="text-[var(--text-tertiary)]">{t("taskDuration", { duration })}</span>
           </div>
-
-
 
           <div className="whitespace-pre-wrap rounded-lg bg-[var(--bg-elevated)] px-3 py-2 text-sm text-[var(--text-primary)]">
             {thread.message}

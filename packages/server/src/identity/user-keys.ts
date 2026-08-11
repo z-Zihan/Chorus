@@ -20,9 +20,7 @@ export function generateUserKeyPair(): UserKeyPair {
 
   return {
     publicKey: Buffer.from(publicJwk.x, "base64url").toString("hex"),
-    privateKey: keyPair.privateKey
-      .export({ format: "der", type: "pkcs8" })
-      .toString("base64"),
+    privateKey: keyPair.privateKey.export({ format: "der", type: "pkcs8" }).toString("base64"),
   };
 }
 

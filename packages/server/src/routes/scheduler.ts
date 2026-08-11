@@ -15,14 +15,16 @@ export function registerSchedulerRoutes(app: FastifyInstance, scheduler: Schedul
   app.post("/api/scheduler/tasks", async (request, reply) => {
     const parsed = createTaskSchema.safeParse(request.body);
     if (!parsed.success) {
-      return reply.code(400).send({ error: "Invalid scheduled task", issues: parsed.error.flatten() });
+      return reply
+        .code(400)
+        .send({ error: "Invalid scheduled task", issues: parsed.error.flatten() });
     }
     try {
-      return reply.code(201).send(scheduler.schedule(
-        parsed.data.agentId,
-        parsed.data.cronExpression,
-        parsed.data.prompt,
-      ));
+      return reply
+        .code(201)
+        .send(
+          scheduler.schedule(parsed.data.agentId, parsed.data.cronExpression, parsed.data.prompt),
+        );
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to schedule task";
       return reply.code(message === "Agent not found" ? 404 : 400).send({ error: message });

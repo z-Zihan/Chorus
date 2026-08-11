@@ -41,9 +41,10 @@ export class DifyAdapter extends BaseAdapter {
 
   async *handleMessage(message: string, context: ConversationContext): AsyncGenerator<StreamChunk> {
     const config = this.config as unknown as DifyAdapterConfig;
-    const conversationId = this.conversations.get(context.conversationId)
-      ?? context.difyConversationId
-      ?? config.conversationId;
+    const conversationId =
+      this.conversations.get(context.conversationId) ??
+      context.difyConversationId ??
+      config.conversationId;
     const response = await fetch(`${config.apiUrl}/v1/chat-messages`, {
       method: "POST",
       headers: {

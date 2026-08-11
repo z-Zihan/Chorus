@@ -102,7 +102,10 @@ export class P2PListener {
 
     await new Promise<void>((resolve, reject) => {
       let settled = false;
-      const timer = setTimeout(() => socket.close(1008, "P2P handshake timed out"), HANDSHAKE_TIMEOUT_MS);
+      const timer = setTimeout(
+        () => socket.close(1008, "P2P handshake timed out"),
+        HANDSHAKE_TIMEOUT_MS,
+      );
       timer.unref();
       const finish = (error?: Error) => {
         if (settled) return;
@@ -120,13 +123,15 @@ export class P2PListener {
         });
       });
       socket.on("message", (data) => {
-        void this.handleOutgoingMessage(socket, state, data).then(() => {
-          if (state.authenticated) finish();
-        }).catch((error: unknown) => {
-          const reason = error instanceof Error ? error : new Error(String(error));
-          socket.close(1008, reason.message);
-          finish(reason);
-        });
+        void this.handleOutgoingMessage(socket, state, data)
+          .then(() => {
+            if (state.authenticated) finish();
+          })
+          .catch((error: unknown) => {
+            const reason = error instanceof Error ? error : new Error(String(error));
+            socket.close(1008, reason.message);
+            finish(reason);
+          });
       });
       socket.on("error", (error) => {
         if (!state.authenticated) finish(error);
@@ -142,7 +147,8 @@ export class P2PListener {
     const socket = this.connections.get(hubId);
     if (socket?.readyState !== WebSocket.OPEN) return false;
     const signature = await signEnvelope(data, await this.requiredIdentity().getSecretKey());
-    if (this.connections.get(hubId) !== socket || socket.readyState !== WebSocket.OPEN) return false;
+    if (this.connections.get(hubId) !== socket || socket.readyState !== WebSocket.OPEN)
+      return false;
     this.send(socket, { type: "p2p_message", envelope: data, signature });
     return true;
   }
@@ -206,15 +212,20 @@ export class P2PListener {
       localNonce: this.handshake.createChallenge(),
     };
     this.socketStates.set(socket, state);
-    const timer = setTimeout(() => socket.close(1008, "P2P registration required"), HANDSHAKE_TIMEOUT_MS);
+    const timer = setTimeout(
+      () => socket.close(1008, "P2P registration required"),
+      HANDSHAKE_TIMEOUT_MS,
+    );
     timer.unref();
     socket.on("message", (data) => {
-      void this.handleIncomingMessage(socket, state, data).then(() => {
-        if (state.authenticated) clearTimeout(timer);
-      }).catch((error: unknown) => {
-        const reason = error instanceof Error ? error : new Error(String(error));
-        socket.close(1008, reason.message);
-      });
+      void this.handleIncomingMessage(socket, state, data)
+        .then(() => {
+          if (state.authenticated) clearTimeout(timer);
+        })
+        .catch((error: unknown) => {
+          const reason = error instanceof Error ? error : new Error(String(error));
+          socket.close(1008, reason.message);
+        });
     });
     socket.on("error", (error) => logger.warn({ err: error }, "P2P peer socket error"));
     socket.on("close", () => {
@@ -250,8 +261,10 @@ export class P2PListener {
       throw new Error("P2P challenge response required");
     }
     const publicKey = this.peerPublicKeys.get(state.hubId);
-    if (!publicKey
-      || !await this.handshake.verifyChallenge(state.localNonce, message.signature, publicKey)) {
+    if (
+      !publicKey ||
+      !(await this.handshake.verifyChallenge(state.localNonce, message.signature, publicKey))
+    ) {
       throw new Error("Invalid P2P challenge signature");
     }
     const signature = await this.handshake.signChallenge(
@@ -289,8 +302,10 @@ export class P2PListener {
       throw new Error("P2P confirmation required");
     }
     const publicKey = this.peerPublicKeys.get(state.hubId);
-    if (!publicKey
-      || !await this.handshake.verifyChallenge(state.localNonce, message.signature, publicKey)) {
+    if (
+      !publicKey ||
+      !(await this.handshake.verifyChallenge(state.localNonce, message.signature, publicKey))
+    ) {
       throw new Error("Invalid P2P confirmation signature");
     }
     this.authenticate(socket, state);
@@ -325,8 +340,7 @@ export class P2PListener {
     }
     if (message.type === "p2p_message") {
       const publicKey = this.peerPublicKeys.get(state.hubId);
-      if (!publicKey
-        || !await verifySignature(message.envelope, message.signature, publicKey)) {
+      if (!publicKey || !(await verifySignature(message.envelope, message.signature, publicKey))) {
         throw new Error("Invalid P2P message signature");
       }
       for (const listener of this.messageListeners) listener(state.hubId, message.envelope);
@@ -435,7 +449,7 @@ function parseMessage(data: RawData): P2PMessage | null {
   try {
     const value = JSON.parse(data.toString()) as unknown;
     return typeof value === "object" && value !== null && "type" in value
-      ? value as P2PMessage
+      ? (value as P2PMessage)
       : null;
   } catch {
     return null;

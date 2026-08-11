@@ -30,25 +30,17 @@ export async function generateHubKeypair(): Promise<{
 /**
  * Convert Ed25519 public key → X25519 public key for crypto_box encryption.
  */
-export async function ed25519ToX25519PublicKey(
-  ed25519PubHex: string,
-): Promise<Uint8Array> {
+export async function ed25519ToX25519PublicKey(ed25519PubHex: string): Promise<Uint8Array> {
   const sodium = await ensureInit();
-  return sodium.crypto_sign_ed25519_pk_to_curve25519(
-    sodium.from_hex(ed25519PubHex),
-  );
+  return sodium.crypto_sign_ed25519_pk_to_curve25519(sodium.from_hex(ed25519PubHex));
 }
 
 /**
  * Convert Ed25519 secret key → X25519 secret key for crypto_box decryption.
  */
-export async function ed25519ToX25519SecretKey(
-  ed25519SecHex: string,
-): Promise<Uint8Array> {
+export async function ed25519ToX25519SecretKey(ed25519SecHex: string): Promise<Uint8Array> {
   const sodium = await ensureInit();
-  return sodium.crypto_sign_ed25519_sk_to_curve25519(
-    sodium.from_hex(ed25519SecHex),
-  );
+  return sodium.crypto_sign_ed25519_sk_to_curve25519(sodium.from_hex(ed25519SecHex));
 }
 
 /**
@@ -67,12 +59,7 @@ export async function encryptPayload(
   const recipientX25519 = await ed25519ToX25519PublicKey(recipientEd25519PubHex);
   const senderX25519 = await ed25519ToX25519SecretKey(senderEd25519SecHex);
   const message = new TextEncoder().encode(JSON.stringify(payload));
-  const encrypted = sodium.crypto_box_easy(
-    message,
-    nonce,
-    recipientX25519,
-    senderX25519,
-  );
+  const encrypted = sodium.crypto_box_easy(message, nonce, recipientX25519, senderX25519);
   return {
     ciphertext: sodium.to_base64(encrypted),
     nonce: sodium.to_base64(nonce),
@@ -103,10 +90,7 @@ export async function decryptPayload<T = unknown>(
 /**
  * Sign data with Ed25519 private key.
  */
-export async function signEnvelope(
-  data: unknown,
-  ed25519SecHex: string,
-): Promise<string> {
+export async function signEnvelope(data: unknown, ed25519SecHex: string): Promise<string> {
   const sodium = await ensureInit();
   const sig = sodium.crypto_sign_detached(
     new TextEncoder().encode(canonicalize(data)),

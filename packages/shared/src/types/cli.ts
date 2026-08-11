@@ -1,15 +1,6 @@
-export type CliReadiness =
-  | "ready"
-  | "installed"
-  | "needs_auth"
-  | "unsupported"
-  | "error";
+export type CliReadiness = "ready" | "installed" | "needs_auth" | "unsupported" | "error";
 
-export type CliDetectionSource =
-  | "process_path"
-  | "login_shell"
-  | "known_dir"
-  | "user_selected";
+export type CliDetectionSource = "process_path" | "login_shell" | "known_dir" | "user_selected";
 
 export interface CliDetection {
   id: string;

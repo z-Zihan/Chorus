@@ -244,7 +244,6 @@ export class CliAdapter extends BaseAdapter {
     this.status = "online";
   }
 
-
   /** Quick pre-flight check: can we find and execute the command? */
   async preflightCheck(): Promise<{ ok: boolean; detail?: string }> {
     const config = this.config as unknown as CliAdapterConfig;
@@ -494,7 +493,9 @@ ${message}`;
       if (result.error) {
         const err = result.error as NodeJS.ErrnoException;
         if (err.code === "ENOENT") {
-          throw new Error(`Command not found: "${cfg.command}". Please ensure it is installed and in your PATH.`);
+          throw new Error(
+            `Command not found: "${cfg.command}". Please ensure it is installed and in your PATH.`,
+          );
         }
         throw result.error;
       }

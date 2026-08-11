@@ -65,7 +65,8 @@ export async function collectSearchDirectories(signal?: AbortSignal): Promise<Se
   const userHome = homedir();
   const known = new Set<string>();
   for (const descriptor of CLI_DESCRIPTORS) {
-    for (const directory of descriptor.knownInstallDirs[process.platform] ?? []) known.add(directory);
+    for (const directory of descriptor.knownInstallDirs[process.platform] ?? [])
+      known.add(directory);
   }
   if (process.platform === "darwin") {
     known.add("/opt/homebrew/bin");
@@ -142,6 +143,7 @@ export function executableFilenames(name: string): string[] {
     .split(";")
     .map((extension) => extension.trim().toLowerCase())
     .filter((extension) => [".exe", ".cmd", ".bat"].includes(extension));
-  return [...new Set(extensions.length ? extensions : [".exe", ".cmd", ".bat"])]
-    .map((extension) => `${name}${extension}`);
+  return [...new Set(extensions.length ? extensions : [".exe", ".cmd", ".bat"])].map(
+    (extension) => `${name}${extension}`,
+  );
 }

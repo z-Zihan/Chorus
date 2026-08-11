@@ -19,10 +19,11 @@ export class RoomCasStore {
     newKeyEpoch: number,
   ): RoomCasResult {
     const current = this.get(roomId);
-    const accepted = current.revision === expectedRevision
-      && current.keyEpoch === expectedKeyEpoch
-      && newRevision === expectedRevision + 1
-      && newKeyEpoch === expectedKeyEpoch + 1;
+    const accepted =
+      current.revision === expectedRevision &&
+      current.keyEpoch === expectedKeyEpoch &&
+      newRevision === expectedRevision + 1 &&
+      newKeyEpoch === expectedKeyEpoch + 1;
 
     if (!accepted) return { accepted: false, ...current };
 

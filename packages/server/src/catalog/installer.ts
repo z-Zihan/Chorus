@@ -13,12 +13,7 @@ import type { CatalogEntry, InstallRecipe } from "./schema.js";
 import { setCredential } from "../credential-store.js";
 
 export type InstallationStage =
-  | "checking"
-  | "downloading"
-  | "installing"
-  | "verifying"
-  | "done"
-  | "error";
+  "checking" | "downloading" | "installing" | "verifying" | "done" | "error";
 
 export interface InstallOptions {
   recipeMethod?: InstallRecipe["method"];
@@ -113,9 +108,8 @@ export class InstallExecutor extends EventEmitter {
   }
 
   validateEntry(entry: CatalogEntry, options: InstallOptions = {}): void {
-    const platform = process.platform === "darwin" || process.platform === "win32"
-      ? process.platform
-      : "linux";
+    const platform =
+      process.platform === "darwin" || process.platform === "win32" ? process.platform : "linux";
     if (!entry.platforms.includes(platform)) {
       logger.error({ entryId: entry.id, platform }, "Platform not supported");
       throw new Error("PLATFORM_NOT_SUPPORTED");
@@ -231,8 +225,10 @@ export class InstallExecutor extends EventEmitter {
       new URL(recipe.executable);
       return;
     }
-    if (recipe.method === "brew" && process.platform === "win32") throw new Error("METHOD_NOT_SUPPORTED");
-    if (recipe.method === "winget" && process.platform !== "win32") throw new Error("METHOD_NOT_SUPPORTED");
+    if (recipe.method === "brew" && process.platform === "win32")
+      throw new Error("METHOD_NOT_SUPPORTED");
+    if (recipe.method === "winget" && process.platform !== "win32")
+      throw new Error("METHOD_NOT_SUPPORTED");
     if (recipe.method === "pip" && recipe.executable !== "pip" && recipe.executable !== "pip3") {
       throw new Error("METHOD_NOT_SUPPORTED");
     }
@@ -246,7 +242,8 @@ export class InstallExecutor extends EventEmitter {
     }
     const response = await fetch(recipe.executable, { signal });
     if (!response.ok) throw new Error(`DOWNLOAD_FAILED_${response.status}`);
-    const destination = recipe.args[0] || join(tmpdir(), basename(new URL(recipe.executable).pathname));
+    const destination =
+      recipe.args[0] || join(tmpdir(), basename(new URL(recipe.executable).pathname));
     await writeFile(destination, Buffer.from(await response.arrayBuffer()));
     if (process.platform !== "win32") await chmod(destination, 0o755);
   }
@@ -292,11 +289,13 @@ export class InstallExecutor extends EventEmitter {
 function selectRecipe(entry: CatalogEntry, requested?: InstallRecipe["method"]): InstallRecipe {
   const recipe = requested
     ? entry.installRecipes.find((candidate) => candidate.method === requested)
-    : entry.installRecipes.find((candidate) =>
-        process.platform === "darwin" ? candidate.method === "brew" :
-          process.platform === "win32" ? candidate.method === "winget" :
-            candidate.method === "npm",
-      ) ?? entry.installRecipes[0];
+    : (entry.installRecipes.find((candidate) =>
+        process.platform === "darwin"
+          ? candidate.method === "brew"
+          : process.platform === "win32"
+            ? candidate.method === "winget"
+            : candidate.method === "npm",
+      ) ?? entry.installRecipes[0]);
   if (!recipe) throw new Error("INSTALL_RECIPE_NOT_FOUND");
   return recipe;
 }

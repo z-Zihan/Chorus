@@ -19,7 +19,10 @@ function loadSkillContent(): string {
     // from source: packages/server/src/routes/skill.ts -> ../../../../skills/
     resolve(dirname(fileURLToPath(import.meta.url)), "../../skills/chorus-platform/SKILL.md"),
     // tauri resources (production)
-    resolve((process as typeof process & { resourcesPath?: string }).resourcesPath ?? "", "skills/chorus-platform/SKILL.md"),
+    resolve(
+      (process as typeof process & { resourcesPath?: string }).resourcesPath ?? "",
+      "skills/chorus-platform/SKILL.md",
+    ),
   ];
 
   for (const path of candidates) {

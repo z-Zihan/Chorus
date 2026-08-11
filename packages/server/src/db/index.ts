@@ -109,7 +109,8 @@ export function ensureUserHubsTable(sqlite: Database.Database): void {
   )`);
 
   sqlite
-    .prepare(`INSERT INTO user_hubs (
+    .prepare(
+      `INSERT INTO user_hubs (
       id, user_id, hub_id, hub_display_name, bound, created_at, updated_at, last_seen_at
     )
     SELECT 'legacy:' || id || ':' || hub_id, id, hub_id, NULL, 1, created_at, updated_at, last_seen_at
@@ -118,7 +119,8 @@ export function ensureUserHubsTable(sqlite: Database.Database): void {
       AND NOT EXISTS (
         SELECT 1 FROM user_hubs
         WHERE user_hubs.user_id = users.id AND user_hubs.hub_id = users.hub_id
-      )`)
+      )`,
+    )
     .run();
 }
 

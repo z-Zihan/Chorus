@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AlertCircle, ExternalLink, Loader2, RefreshCw, Search, Terminal } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useOnboardingStore } from "@/store/onboardingStore";
@@ -38,6 +38,7 @@ export function OnboardingFlow() {
   const rescan = useOnboardingStore((s) => s.rescan);
   const selectAgent = useOnboardingStore((s) => s.selectAgent);
   const [showTerminalInstructions, setShowTerminalInstructions] = useState(false);
+  const retrySetupRef = useRef<HTMLButtonElement>(null);
 
   const handleOpenTerminal = async () => {
     try {
@@ -63,6 +64,10 @@ export function OnboardingFlow() {
     const timer = window.setTimeout(() => void checkStatus(), 800);
     return () => window.clearTimeout(timer);
   }, [status?.step, loadError, isLoading, checkStatus]);
+
+  useEffect(() => {
+    if (loadError && !isLoading) retrySetupRef.current?.focus();
+  }, [loadError, isLoading]);
 
   if (status?.step === "completed") return null;
 
@@ -104,6 +109,7 @@ export function OnboardingFlow() {
                 {loadError}
               </p>
               <Button
+                ref={retrySetupRef}
                 className="mt-5 min-h-11 w-full"
                 onClick={() => void checkStatus()}
                 disabled={isLoading}

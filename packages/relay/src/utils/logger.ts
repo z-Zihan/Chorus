@@ -11,10 +11,16 @@ class PrettyLogStream extends Writable {
   ): void {
     try {
       const record = JSON.parse(chunk.toString()) as Record<string, unknown>;
-      const time = typeof record.time === "number" ? new Date(record.time).toISOString() : new Date().toISOString();
-      const level = typeof record.level === "number"
-        ? ({ 10: "TRACE", 20: "DEBUG", 30: "INFO", 40: "WARN", 50: "ERROR", 60: "FATAL" }[record.level] ?? "INFO")
-        : "INFO";
+      const time =
+        typeof record.time === "number"
+          ? new Date(record.time).toISOString()
+          : new Date().toISOString();
+      const level =
+        typeof record.level === "number"
+          ? ({ 10: "TRACE", 20: "DEBUG", 30: "INFO", 40: "WARN", 50: "ERROR", 60: "FATAL" }[
+              record.level
+            ] ?? "INFO")
+          : "INFO";
       const message = typeof record.msg === "string" ? record.msg : "";
       const details = { ...record };
       delete details.level;

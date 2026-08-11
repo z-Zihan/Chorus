@@ -1,11 +1,4 @@
-import {
-  appendFileSync,
-  existsSync,
-  mkdirSync,
-  renameSync,
-  statSync,
-  unlinkSync,
-} from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, renameSync, statSync, unlinkSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { Writable } from "node:stream";
 import pino from "pino";
@@ -102,7 +95,9 @@ class StructuredLogStream extends Writable {
       } else {
         const color = levelColors[entry.level];
         const details = entry.data === undefined ? "" : ` ${JSON.stringify(entry.data)}`;
-        process.stdout.write(`${color}[${new Date(entry.timestamp).toISOString()}] ${entry.level.toUpperCase()}\u001b[0m ${entry.message}${details}\n`);
+        process.stdout.write(
+          `${color}[${new Date(entry.timestamp).toISOString()}] ${entry.level.toUpperCase()}\u001b[0m ${entry.message}${details}\n`,
+        );
       }
       callback();
     } catch (error) {

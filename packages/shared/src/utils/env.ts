@@ -37,7 +37,6 @@ export function isTest(): boolean {
 export function isTauri(): boolean {
   const runtimeWindow = (globalThis as RuntimeGlobal).window;
   return Boolean(
-    runtimeWindow?.__TAURI_INTERNALS__ !== undefined ||
-      runtimeWindow?.__TAURI__ !== undefined
+    runtimeWindow?.__TAURI_INTERNALS__ !== undefined || runtimeWindow?.__TAURI__ !== undefined,
   );
 }

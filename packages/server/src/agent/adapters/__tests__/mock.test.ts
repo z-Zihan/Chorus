@@ -46,9 +46,7 @@ describe("MockAdapter", () => {
     const adapter = new MockAdapter("mock", "Mock");
     await adapter.init({ delayMs: 0 });
 
-    const chunks = await collect(
-      adapter.handleA2ACall("reviewer", "check this change", context()),
-    );
+    const chunks = await collect(adapter.handleA2ACall("reviewer", "check this change", context()));
 
     expect(chunks).toEqual([
       { type: "thinking", content: "正在处理来自 reviewer 的请求" },

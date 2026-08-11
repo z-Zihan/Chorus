@@ -19,7 +19,12 @@ export type { ProbeResult } from "./probe.js";
 
 export async function detect(signal?: AbortSignal): Promise<CliDetection[]> {
   const candidates = await scanPath(signal);
-  return mapWithConcurrency(candidates, 3, (candidate) => probeCandidate(candidate, signal), signal);
+  return mapWithConcurrency(
+    candidates,
+    3,
+    (candidate) => probeCandidate(candidate, signal),
+    signal,
+  );
 }
 
 export async function detectSelectedExecutable(
@@ -37,7 +42,9 @@ export async function detectSelectedExecutable(
 }
 
 export function descriptorForExecutablePath(executablePath: string): CliDescriptor | undefined {
-  const filename = basename(executablePath).toLowerCase().replace(/\.(exe|cmd|bat)$/u, "");
+  const filename = basename(executablePath)
+    .toLowerCase()
+    .replace(/\.(exe|cmd|bat)$/u, "");
   return CLI_DESCRIPTORS.find((descriptor) => {
     const names = descriptor.executableNames[process.platform] ?? [descriptor.executable];
     return names.some((name) => name.toLowerCase() === filename);

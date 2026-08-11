@@ -1,10 +1,4 @@
-export type MessageStatus =
-  | "sending"
-  | "thinking"
-  | "streaming"
-  | "done"
-  | "partial"
-  | "error";
+export type MessageStatus = "sending" | "thinking" | "streaming" | "done" | "partial" | "error";
 
 export type StreamChunkType =
   | "text"

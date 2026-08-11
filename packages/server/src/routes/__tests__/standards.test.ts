@@ -22,16 +22,20 @@ describe("standard protocol routes", () => {
     ]);
 
     expect(cards.status).toBe(200);
-    expect(cards.body).toContainEqual(expect.objectContaining({
-      name: "Test Agent",
-      url: expect.stringMatching(/\/api\/agents\/test-agent$/),
-    }));
+    expect(cards.body).toContainEqual(
+      expect.objectContaining({
+        name: "Test Agent",
+        url: expect.stringMatching(/\/api\/agents\/test-agent$/),
+      }),
+    );
     expect(tools.status).toBe(200);
     expect(tools.body).toContainEqual(expect.objectContaining({ name: "test-agent" }));
     expect(services.status).toBe(200);
-    expect(services.body).toContainEqual(expect.objectContaining({
-      serviceId: "test-agent",
-      serviceEndpoint: expect.stringMatching(/\/api\/conversations$/),
-    }));
+    expect(services.body).toContainEqual(
+      expect.objectContaining({
+        serviceId: "test-agent",
+        serviceEndpoint: expect.stringMatching(/\/api\/conversations$/),
+      }),
+    );
   });
 });

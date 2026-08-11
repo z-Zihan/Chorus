@@ -18,16 +18,40 @@ export const defaultCatalog: CatalogFile = {
       license: "Proprietary",
       descriptorId: "claude-code",
       installRecipes: [
-        { method: "brew", executable: "brew", args: ["install", "claude"], requiresElevation: false },
-        { method: "npm", executable: "npm", args: ["install", "-g", "@anthropic-ai/claude-code"], requiresElevation: false },
+        {
+          method: "brew",
+          executable: "brew",
+          args: ["install", "claude"],
+          requiresElevation: false,
+        },
+        {
+          method: "npm",
+          executable: "npm",
+          args: ["install", "-g", "@anthropic-ai/claude-code"],
+          requiresElevation: false,
+        },
       ],
       uninstallRecipes: [
-        { method: "brew", executable: "brew", args: ["uninstall", "claude"], requiresElevation: false },
-        { method: "npm", executable: "npm", args: ["uninstall", "-g", "@anthropic-ai/claude-code"], requiresElevation: false },
+        {
+          method: "brew",
+          executable: "brew",
+          args: ["uninstall", "claude"],
+          requiresElevation: false,
+        },
+        {
+          method: "npm",
+          executable: "npm",
+          args: ["uninstall", "-g", "@anthropic-ai/claude-code"],
+          requiresElevation: false,
+        },
       ],
       adapterTemplate: {
         type: "cli",
-        config: { input: "argument", output: "jsonl", args: ["-p", "--output-format", "stream-json", "--verbose", "--no-session-persistence"] },
+        config: {
+          input: "argument",
+          output: "jsonl",
+          args: ["-p", "--output-format", "stream-json", "--verbose", "--no-session-persistence"],
+        },
       },
     },
     {
@@ -43,12 +67,25 @@ export const defaultCatalog: CatalogFile = {
       license: "Apache-2.0",
       descriptorId: "codex",
       installRecipes: [
-        { method: "npm", executable: "npm", args: ["install", "-g", "@openai/codex"], requiresElevation: false },
+        {
+          method: "npm",
+          executable: "npm",
+          args: ["install", "-g", "@openai/codex"],
+          requiresElevation: false,
+        },
       ],
       uninstallRecipes: [
-        { method: "npm", executable: "npm", args: ["uninstall", "-g", "@openai/codex"], requiresElevation: false },
+        {
+          method: "npm",
+          executable: "npm",
+          args: ["uninstall", "-g", "@openai/codex"],
+          requiresElevation: false,
+        },
       ],
-      adapterTemplate: { type: "cli", config: { input: "argument", output: "codex-json", args: ["exec", "--json"] } },
+      adapterTemplate: {
+        type: "cli",
+        config: { input: "argument", output: "codex-json", args: ["exec", "--json"] },
+      },
     },
     {
       id: "copilot-cli",
@@ -63,12 +100,25 @@ export const defaultCatalog: CatalogFile = {
       license: "Proprietary",
       descriptorId: "copilot-cli",
       installRecipes: [
-        { method: "npm", executable: "npm", args: ["install", "-g", "@github/copilot-cli"], requiresElevation: false },
+        {
+          method: "npm",
+          executable: "npm",
+          args: ["install", "-g", "@github/copilot-cli"],
+          requiresElevation: false,
+        },
       ],
       uninstallRecipes: [
-        { method: "npm", executable: "npm", args: ["uninstall", "-g", "@github/copilot-cli"], requiresElevation: false },
+        {
+          method: "npm",
+          executable: "npm",
+          args: ["uninstall", "-g", "@github/copilot-cli"],
+          requiresElevation: false,
+        },
       ],
-      adapterTemplate: { type: "cli", config: { input: "argument", output: "plain", args: ["-p"] } },
+      adapterTemplate: {
+        type: "cli",
+        config: { input: "argument", output: "plain", args: ["-p"] },
+      },
     },
     {
       id: "gemini-cli",
@@ -83,12 +133,25 @@ export const defaultCatalog: CatalogFile = {
       license: "Apache-2.0",
       descriptorId: "gemini-cli",
       installRecipes: [
-        { method: "npm", executable: "npm", args: ["i", "-g", "@google/gemini-cli"], requiresElevation: false },
+        {
+          method: "npm",
+          executable: "npm",
+          args: ["i", "-g", "@google/gemini-cli"],
+          requiresElevation: false,
+        },
       ],
       uninstallRecipes: [
-        { method: "npm", executable: "npm", args: ["uninstall", "-g", "@google/gemini-cli"], requiresElevation: false },
+        {
+          method: "npm",
+          executable: "npm",
+          args: ["uninstall", "-g", "@google/gemini-cli"],
+          requiresElevation: false,
+        },
       ],
-      adapterTemplate: { type: "cli", config: { input: "argument", output: "jsonl", args: ["--json"] } },
+      adapterTemplate: {
+        type: "cli",
+        config: { input: "argument", output: "jsonl", args: ["--json"] },
+      },
     },
     {
       id: "aider",
@@ -103,12 +166,25 @@ export const defaultCatalog: CatalogFile = {
       license: "Apache-2.0",
       descriptorId: "aider",
       installRecipes: [
-        { method: "pip", executable: "pip", args: ["install", "aider-chat"], requiresElevation: false },
+        {
+          method: "pip",
+          executable: "pip",
+          args: ["install", "aider-chat"],
+          requiresElevation: false,
+        },
       ],
       uninstallRecipes: [
-        { method: "pip", executable: "pip", args: ["uninstall", "-y", "aider-chat"], requiresElevation: false },
+        {
+          method: "pip",
+          executable: "pip",
+          args: ["uninstall", "-y", "aider-chat"],
+          requiresElevation: false,
+        },
       ],
-      adapterTemplate: { type: "cli", config: { input: "stdin", output: "plain", args: ["--no-auto-commits", "--stream"] } },
+      adapterTemplate: {
+        type: "cli",
+        config: { input: "stdin", output: "plain", args: ["--no-auto-commits", "--stream"] },
+      },
     },
     {
       id: "qwen-code",
@@ -123,12 +199,25 @@ export const defaultCatalog: CatalogFile = {
       license: "Apache-2.0",
       descriptorId: "qwen-code",
       installRecipes: [
-        { method: "pip", executable: "pip", args: ["install", "qwen-code"], requiresElevation: false },
+        {
+          method: "pip",
+          executable: "pip",
+          args: ["install", "qwen-code"],
+          requiresElevation: false,
+        },
       ],
       uninstallRecipes: [
-        { method: "pip", executable: "pip", args: ["uninstall", "-y", "qwen-code"], requiresElevation: false },
+        {
+          method: "pip",
+          executable: "pip",
+          args: ["uninstall", "-y", "qwen-code"],
+          requiresElevation: false,
+        },
       ],
-      adapterTemplate: { type: "cli", config: { input: "argument", output: "plain", args: ["--no-stream"] } },
+      adapterTemplate: {
+        type: "cli",
+        config: { input: "argument", output: "plain", args: ["--no-stream"] },
+      },
     },
     {
       id: "cursor-cli",
@@ -143,12 +232,25 @@ export const defaultCatalog: CatalogFile = {
       license: "Proprietary",
       descriptorId: "cursor-cli",
       installRecipes: [
-        { method: "npm", executable: "npm", args: ["i", "-g", "@cursor-ai/cli"], requiresElevation: false },
+        {
+          method: "npm",
+          executable: "npm",
+          args: ["i", "-g", "@cursor-ai/cli"],
+          requiresElevation: false,
+        },
       ],
       uninstallRecipes: [
-        { method: "npm", executable: "npm", args: ["uninstall", "-g", "@cursor-ai/cli"], requiresElevation: false },
+        {
+          method: "npm",
+          executable: "npm",
+          args: ["uninstall", "-g", "@cursor-ai/cli"],
+          requiresElevation: false,
+        },
       ],
-      adapterTemplate: { type: "cli", config: { input: "argument", output: "jsonl", args: ["--json"] } },
+      adapterTemplate: {
+        type: "cli",
+        config: { input: "argument", output: "jsonl", args: ["--json"] },
+      },
     },
     {
       id: "kilo-cli",
@@ -163,12 +265,25 @@ export const defaultCatalog: CatalogFile = {
       license: "MIT",
       descriptorId: "kilo-cli",
       installRecipes: [
-        { method: "npm", executable: "npm", args: ["i", "-g", "@kilo-ai/kilo-cli"], requiresElevation: false },
+        {
+          method: "npm",
+          executable: "npm",
+          args: ["i", "-g", "@kilo-ai/kilo-cli"],
+          requiresElevation: false,
+        },
       ],
       uninstallRecipes: [
-        { method: "npm", executable: "npm", args: ["uninstall", "-g", "@kilo-ai/kilo-cli"], requiresElevation: false },
+        {
+          method: "npm",
+          executable: "npm",
+          args: ["uninstall", "-g", "@kilo-ai/kilo-cli"],
+          requiresElevation: false,
+        },
       ],
-      adapterTemplate: { type: "cli", config: { input: "argument", output: "jsonl", args: ["--json"] } },
+      adapterTemplate: {
+        type: "cli",
+        config: { input: "argument", output: "jsonl", args: ["--json"] },
+      },
     },
     {
       id: "opencode",
@@ -183,12 +298,25 @@ export const defaultCatalog: CatalogFile = {
       license: "MIT",
       descriptorId: "opencode",
       installRecipes: [
-        { method: "npm", executable: "npm", args: ["i", "-g", "opencode-ai"], requiresElevation: false },
+        {
+          method: "npm",
+          executable: "npm",
+          args: ["i", "-g", "opencode-ai"],
+          requiresElevation: false,
+        },
       ],
       uninstallRecipes: [
-        { method: "npm", executable: "npm", args: ["uninstall", "-g", "opencode-ai"], requiresElevation: false },
+        {
+          method: "npm",
+          executable: "npm",
+          args: ["uninstall", "-g", "opencode-ai"],
+          requiresElevation: false,
+        },
       ],
-      adapterTemplate: { type: "cli", config: { input: "argument", output: "plain", args: ["run"] } },
+      adapterTemplate: {
+        type: "cli",
+        config: { input: "argument", output: "plain", args: ["run"] },
+      },
     },
     {
       id: "hermes-agent",
@@ -203,12 +331,25 @@ export const defaultCatalog: CatalogFile = {
       license: "MIT",
       descriptorId: "hermes-agent",
       installRecipes: [
-        { method: "npm", executable: "npm", args: ["i", "-g", "@nousresearch/hermes-agent"], requiresElevation: false },
+        {
+          method: "npm",
+          executable: "npm",
+          args: ["i", "-g", "@nousresearch/hermes-agent"],
+          requiresElevation: false,
+        },
       ],
       uninstallRecipes: [
-        { method: "npm", executable: "npm", args: ["uninstall", "-g", "@nousresearch/hermes-agent"], requiresElevation: false },
+        {
+          method: "npm",
+          executable: "npm",
+          args: ["uninstall", "-g", "@nousresearch/hermes-agent"],
+          requiresElevation: false,
+        },
       ],
-      adapterTemplate: { type: "cli", config: { input: "argument", output: "jsonl", args: ["--json"] } },
+      adapterTemplate: {
+        type: "cli",
+        config: { input: "argument", output: "jsonl", args: ["--json"] },
+      },
     },
     {
       id: "cline",
@@ -226,9 +367,17 @@ export const defaultCatalog: CatalogFile = {
         { method: "npm", executable: "npm", args: ["i", "-g", "cline"], requiresElevation: false },
       ],
       uninstallRecipes: [
-        { method: "npm", executable: "npm", args: ["uninstall", "-g", "cline"], requiresElevation: false },
+        {
+          method: "npm",
+          executable: "npm",
+          args: ["uninstall", "-g", "cline"],
+          requiresElevation: false,
+        },
       ],
-      adapterTemplate: { type: "cli", config: { input: "argument", output: "jsonl", args: ["--json"] } },
+      adapterTemplate: {
+        type: "cli",
+        config: { input: "argument", output: "jsonl", args: ["--json"] },
+      },
     },
     {
       id: "codebuff",
@@ -243,10 +392,20 @@ export const defaultCatalog: CatalogFile = {
       license: "MIT",
       descriptorId: "codebuff",
       installRecipes: [
-        { method: "npm", executable: "npm", args: ["i", "-g", "codebuff"], requiresElevation: false },
+        {
+          method: "npm",
+          executable: "npm",
+          args: ["i", "-g", "codebuff"],
+          requiresElevation: false,
+        },
       ],
       uninstallRecipes: [
-        { method: "npm", executable: "npm", args: ["uninstall", "-g", "codebuff"], requiresElevation: false },
+        {
+          method: "npm",
+          executable: "npm",
+          args: ["uninstall", "-g", "codebuff"],
+          requiresElevation: false,
+        },
       ],
       adapterTemplate: { type: "cli", config: { input: "argument", output: "plain", args: [] } },
     },
@@ -263,12 +422,25 @@ export const defaultCatalog: CatalogFile = {
       license: "MIT",
       descriptorId: "trae-agent",
       installRecipes: [
-        { method: "pip", executable: "pip", args: ["install", "trae-agent"], requiresElevation: false },
+        {
+          method: "pip",
+          executable: "pip",
+          args: ["install", "trae-agent"],
+          requiresElevation: false,
+        },
       ],
       uninstallRecipes: [
-        { method: "pip", executable: "pip", args: ["uninstall", "-y", "trae-agent"], requiresElevation: false },
+        {
+          method: "pip",
+          executable: "pip",
+          args: ["uninstall", "-y", "trae-agent"],
+          requiresElevation: false,
+        },
       ],
-      adapterTemplate: { type: "cli", config: { input: "argument", output: "plain", args: ["run"] } },
+      adapterTemplate: {
+        type: "cli",
+        config: { input: "argument", output: "plain", args: ["run"] },
+      },
     },
     {
       id: "iflow-cli",
@@ -283,10 +455,20 @@ export const defaultCatalog: CatalogFile = {
       license: "MIT",
       descriptorId: "iflow-cli",
       installRecipes: [
-        { method: "npm", executable: "npm", args: ["i", "-g", "@iflow-ai/iflow-cli"], requiresElevation: false },
+        {
+          method: "npm",
+          executable: "npm",
+          args: ["i", "-g", "@iflow-ai/iflow-cli"],
+          requiresElevation: false,
+        },
       ],
       uninstallRecipes: [
-        { method: "npm", executable: "npm", args: ["uninstall", "-g", "@iflow-ai/iflow-cli"], requiresElevation: false },
+        {
+          method: "npm",
+          executable: "npm",
+          args: ["uninstall", "-g", "@iflow-ai/iflow-cli"],
+          requiresElevation: false,
+        },
       ],
       adapterTemplate: { type: "cli", config: { input: "argument", output: "plain", args: [] } },
     },
@@ -303,7 +485,10 @@ export const defaultCatalog: CatalogFile = {
       license: "Commercial",
       installRecipes: [],
       uninstallRecipes: [],
-      adapterTemplate: { type: "openai", config: { endpoint: "https://api.openai.com/v1", model: "gpt-4o-mini" } },
+      adapterTemplate: {
+        type: "openai",
+        config: { endpoint: "https://api.openai.com/v1", model: "gpt-4o-mini" },
+      },
     },
     {
       id: "deepseek-api",
@@ -313,12 +498,18 @@ export const defaultCatalog: CatalogFile = {
       kind: "api-connector",
       platforms: [...allPlatforms],
       capabilities: ["chat", "streaming"],
-      permissions: ["Connect to api.deepseek.com", "Store the API key in the local Chorus database"],
+      permissions: [
+        "Connect to api.deepseek.com",
+        "Store the API key in the local Chorus database",
+      ],
       homepage: "https://api-docs.deepseek.com",
       license: "Commercial",
       installRecipes: [],
       uninstallRecipes: [],
-      adapterTemplate: { type: "openai", config: { endpoint: "https://api.deepseek.com/v1", model: "deepseek-chat" } },
+      adapterTemplate: {
+        type: "openai",
+        config: { endpoint: "https://api.deepseek.com/v1", model: "deepseek-chat" },
+      },
     },
     {
       id: "glm-api",
@@ -328,12 +519,18 @@ export const defaultCatalog: CatalogFile = {
       kind: "api-connector",
       platforms: [...allPlatforms],
       capabilities: ["chat", "streaming"],
-      permissions: ["Connect to open.bigmodel.cn", "Store the API key in the local Chorus database"],
+      permissions: [
+        "Connect to open.bigmodel.cn",
+        "Store the API key in the local Chorus database",
+      ],
       homepage: "https://docs.bigmodel.cn",
       license: "Commercial",
       installRecipes: [],
       uninstallRecipes: [],
-      adapterTemplate: { type: "openai", config: { endpoint: "https://open.bigmodel.cn/api/paas/v4", model: "glm-4-flash" } },
+      adapterTemplate: {
+        type: "openai",
+        config: { endpoint: "https://open.bigmodel.cn/api/paas/v4", model: "glm-4-flash" },
+      },
     },
   ],
 };

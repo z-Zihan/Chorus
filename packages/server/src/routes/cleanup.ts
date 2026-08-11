@@ -10,7 +10,9 @@ export function registerCleanupRoutes(app: FastifyInstance, repository: Reposito
   app.delete("/api/conversations/batch", async (request, reply) => {
     const parsed = batchDeleteSchema.safeParse(request.body);
     if (!parsed.success) {
-      return reply.code(400).send({ error: "Invalid conversation IDs", issues: parsed.error.flatten() });
+      return reply
+        .code(400)
+        .send({ error: "Invalid conversation IDs", issues: parsed.error.flatten() });
     }
     return { count: repository.deleteConversations(parsed.data.ids) };
   });

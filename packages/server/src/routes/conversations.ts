@@ -104,14 +104,11 @@ export function registerConversationRoutes(
     },
   );
 
-  app.get<{ Params: { id: string } }>(
-    "/api/conversations/:id/a2a-mode",
-    async (request, reply) => {
-      const conversation = repository.getConversation(request.params.id);
-      if (!conversation) return reply.code(404).send({ error: "Conversation not found" });
-      return { mode: conversation.a2aMode ?? "mention" };
-    },
-  );
+  app.get<{ Params: { id: string } }>("/api/conversations/:id/a2a-mode", async (request, reply) => {
+    const conversation = repository.getConversation(request.params.id);
+    if (!conversation) return reply.code(404).send({ error: "Conversation not found" });
+    return { mode: conversation.a2aMode ?? "mention" };
+  });
 
   app.patch<{ Params: { id: string } }>(
     "/api/conversations/:id/a2a-mode",

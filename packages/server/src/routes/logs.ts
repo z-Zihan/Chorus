@@ -8,9 +8,12 @@ const logQuerySchema = z.object({
 });
 
 export function registerLogRoutes(app: FastifyInstance): void {
-  app.get<{ Querystring: { level?: string; limit?: string } }>("/api/logs", async (request, reply) => {
-    const parsed = logQuerySchema.safeParse(request.query);
-    if (!parsed.success) return reply.code(400).send({ error: "Invalid log query" });
-    return getServerLogs(parsed.data.level, parsed.data.limit);
-  });
+  app.get<{ Querystring: { level?: string; limit?: string } }>(
+    "/api/logs",
+    async (request, reply) => {
+      const parsed = logQuerySchema.safeParse(request.query);
+      if (!parsed.success) return reply.code(400).send({ error: "Invalid log query" });
+      return getServerLogs(parsed.data.level, parsed.data.limit);
+    },
+  );
 }

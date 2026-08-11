@@ -37,18 +37,15 @@ providers.set("noop", noopProvider);
 providers.set("sentry", new SentryAnalyticsProvider());
 
 const configuredProvider = import.meta.env.VITE_ANALYTICS_PROVIDER?.trim().toLowerCase();
-let activeProvider: AnalyticsProvider = providers.get(configuredProvider || (import.meta.env.DEV ? "console" : "noop"))
-  ?? noopProvider;
+let activeProvider: AnalyticsProvider =
+  providers.get(configuredProvider || (import.meta.env.DEV ? "console" : "noop")) ?? noopProvider;
 
 export function registerAnalyticsProvider(name: string, provider: AnalyticsProvider): void {
   providers.set(name.trim().toLowerCase(), provider);
   if (configuredProvider === name.trim().toLowerCase()) activeProvider = provider;
 }
 
-export function track(
-  name: string,
-  props?: Record<string, string | number | boolean>,
-): void {
+export function track(name: string, props?: Record<string, string | number | boolean>): void {
   const event: AnalyticsEvent = { name, props, timestamp: Date.now() };
   eventQueue.push(event);
   if (eventQueue.length > MAX_EVENTS) eventQueue.splice(0, eventQueue.length - MAX_EVENTS);

@@ -35,11 +35,7 @@ describe("truncateHistory", () => {
   });
 
   it("drops the oldest messages when content exceeds maxTokens", () => {
-    const history = [
-      message("1", "123456"),
-      message("2", "abcdef"),
-      message("3", "latest"),
-    ];
+    const history = [message("1", "123456"), message("2", "abcdef"), message("3", "latest")];
 
     expect(truncateHistory(history, { maxMessages: 10, maxTokens: 2 })).toEqual([history[2]]);
   });
@@ -53,27 +49,26 @@ describe("truncateHistory", () => {
 
 describe("parseMentions", () => {
   it("extracts unique agent ids", () => {
-    expect(parseMentions("Please ask @code-reviewer and @security then @code-reviewer again"))
-      .toEqual({
-        mentionedAgents: ["code-reviewer", "security"],
-        mentionedAgentNames: [],
-      });
+    expect(
+      parseMentions("Please ask @code-reviewer and @security then @code-reviewer again"),
+    ).toEqual({
+      mentionedAgents: ["code-reviewer", "security"],
+      mentionedAgentNames: [],
+    });
   });
 
   it("separates known agent ids from mention-safe agent names", () => {
-    expect(parseMentions("Ask @reviewer-id and @Security-Reviewer", ["reviewer-id"]))
-      .toEqual({
-        mentionedAgents: ["reviewer-id"],
-        mentionedAgentNames: ["Security-Reviewer"],
-      });
+    expect(parseMentions("Ask @reviewer-id and @Security-Reviewer", ["reviewer-id"])).toEqual({
+      mentionedAgents: ["reviewer-id"],
+      mentionedAgentNames: ["Security-Reviewer"],
+    });
   });
 
   it("supports alphanumeric and hyphenated IDs but not underscores", () => {
-    expect(parseMentions("@agent-42 @Agent7 @not_an_id"))
-      .toEqual({
-        mentionedAgents: ["agent-42", "Agent7"],
-        mentionedAgentNames: [],
-      });
+    expect(parseMentions("@agent-42 @Agent7 @not_an_id")).toEqual({
+      mentionedAgents: ["agent-42", "Agent7"],
+      mentionedAgentNames: [],
+    });
   });
 
   it("returns the original text when there are no mentions", () => {

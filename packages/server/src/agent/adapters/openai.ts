@@ -42,7 +42,8 @@ const CALL_AGENT_TOOL = {
   type: "function",
   function: {
     name: "call_agent",
-    description: "Call another AI agent for assistance. Use this when you need help from a different AI tool.",
+    description:
+      "Call another AI agent for assistance. Use this when you need help from a different AI tool.",
     parameters: {
       type: "object",
       properties: {
@@ -111,21 +112,19 @@ export class OpenAIAdapter extends BaseAdapter {
     context: ConversationContext,
     a2aSystemPrompt?: string,
   ): AsyncGenerator<StreamChunk> {
-    const availableAgentIds = [...new Set(
-      context.availableAgentIds ?? context.mentionedAgents ?? [],
-    )];
+    const availableAgentIds = [
+      ...new Set(context.availableAgentIds ?? context.mentionedAgents ?? []),
+    ];
     const callableAgentIds = availableAgentIds.filter((agentId) => agentId !== this.id);
     const toolsEnabled = availableAgentIds.length > 1 && callableAgentIds.length > 0;
-    const directory = toolsEnabled
-      ? buildOpenAIA2APrompt(callableAgentIds)
-      : "";
+    const directory = toolsEnabled ? buildOpenAIA2APrompt(callableAgentIds) : "";
     const messages: OpenAIMessage[] = [
       {
         role: "system",
-        content: [
-          String(this.config.systemPrompt ?? "You are a helpful assistant."),
-          a2aSystemPrompt,
-        ].filter(Boolean).join("\n\n") + directory,
+        content:
+          [String(this.config.systemPrompt ?? "You are a helpful assistant."), a2aSystemPrompt]
+            .filter(Boolean)
+            .join("\n\n") + directory,
       },
       ...context.history.map((item): OpenAIMessage => ({
         role: item.fromType === "user" ? "user" : "assistant",
@@ -307,7 +306,8 @@ export class OpenAIAdapter extends BaseAdapter {
         };
       }
 
-      const output = result || (failed ? "Agent call failed" : "Agent completed without a text response");
+      const output =
+        result || (failed ? "Agent call failed" : "Agent completed without a text response");
       return JSON.stringify({ output, threadId, success: !failed });
     } catch (error) {
       const detail = messageFromError(error);

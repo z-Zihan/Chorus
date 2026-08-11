@@ -20,9 +20,10 @@ const hostKey = `${platform()}-${arch()}`;
 const hostTarget = hostTargets[hostKey];
 if (!hostTarget) throw new Error(`Unsupported sidecar build host: ${hostKey}`);
 
-const target = process.env.TAURI_ENV_TARGET_TRIPLE?.trim()
-  || process.env.CARGO_BUILD_TARGET?.trim()
-  || hostTarget;
+const target =
+  process.env.TAURI_ENV_TARGET_TRIPLE?.trim() ||
+  process.env.CARGO_BUILD_TARGET?.trim() ||
+  hostTarget;
 const configuredBinary = process.env.CHORUS_NODE_BINARY?.trim();
 if (target !== hostTarget && !configuredBinary) {
   throw new Error(`Cross-building ${target} requires CHORUS_NODE_BINARY for that target`);
@@ -40,9 +41,7 @@ console.log(`Prepared bundled Node sidecar: ${destination}`);
 
 const configuredSqliteDirectory = process.env.CHORUS_BETTER_SQLITE3_DIR?.trim();
 if (target !== hostTarget && !configuredSqliteDirectory) {
-  throw new Error(
-    `Cross-building ${target} requires CHORUS_BETTER_SQLITE3_DIR for that target`,
-  );
+  throw new Error(`Cross-building ${target} requires CHORUS_BETTER_SQLITE3_DIR for that target`);
 }
 
 const findPackageDirectory = async (
@@ -79,9 +78,7 @@ await cp(sqliteDirectory, join(runtimeRoot, "better-sqlite3"), {
   dereference: true,
 });
 const bindingsDirectory = await findPackageDirectory("bindings", [sqliteDirectory]);
-const fileUriDirectory = await findPackageDirectory("file-uri-to-path", [
-  bindingsDirectory,
-]);
+const fileUriDirectory = await findPackageDirectory("file-uri-to-path", [bindingsDirectory]);
 for (const [packageName, packageDirectory] of [
   ["bindings", bindingsDirectory],
   ["file-uri-to-path", fileUriDirectory],

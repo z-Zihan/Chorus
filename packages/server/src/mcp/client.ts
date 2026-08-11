@@ -54,7 +54,7 @@ export class MCPClient {
   }
 
   async listTools(): Promise<MCPTool[]> {
-    const result = await this.request("tools/list", {}) as { tools?: MCPTool[] };
+    const result = (await this.request("tools/list", {})) as { tools?: MCPTool[] };
     return Array.isArray(result.tools) ? result.tools : [];
   }
 
@@ -71,7 +71,8 @@ export class MCPClient {
 
   private request(method: string, params: Record<string, unknown>): Promise<unknown> {
     const child = this.child;
-    if (!child || !this.isConnected) return Promise.reject(new Error("MCP client is not connected"));
+    if (!child || !this.isConnected)
+      return Promise.reject(new Error("MCP client is not connected"));
     const id = this.nextRequestId;
     this.nextRequestId += 1;
     return new Promise((resolve, reject) => {
@@ -108,7 +109,9 @@ export class MCPClient {
       clearTimeout(pending.timer);
       this.pending.delete(response.id);
       if (response.error) {
-        pending.reject(new Error(response.error.message ?? `MCP error ${response.error.code ?? "unknown"}`));
+        pending.reject(
+          new Error(response.error.message ?? `MCP error ${response.error.code ?? "unknown"}`),
+        );
       } else {
         pending.resolve(response.result);
       }

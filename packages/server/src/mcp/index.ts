@@ -71,10 +71,12 @@ function mcpResultText(value: unknown): string {
   if (typeof value === "string") return value;
   if (!isRecord(value)) return value === undefined ? "" : JSON.stringify(value);
   if (Array.isArray(value.content)) {
-    return value.content.map((item) => {
-      if (isRecord(item) && typeof item.text === "string") return item.text;
-      return typeof item === "string" ? item : "";
-    }).join("");
+    return value.content
+      .map((item) => {
+        if (isRecord(item) && typeof item.text === "string") return item.text;
+        return typeof item === "string" ? item : "";
+      })
+      .join("");
   }
   return JSON.stringify(value);
 }

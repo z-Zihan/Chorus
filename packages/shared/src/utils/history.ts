@@ -1,9 +1,6 @@
 import type { HistoryTruncationConfig, Message } from "../types";
 
-export function truncateHistory(
-  history: Message[],
-  config: HistoryTruncationConfig,
-): Message[] {
+export function truncateHistory(history: Message[], config: HistoryTruncationConfig): Message[] {
   let result = history.slice(-Math.max(1, config.maxMessages));
   const maxChars = Math.max(1, config.maxTokens) * 4;
   let totalChars = result.reduce((sum, message) => sum + message.content.length, 0);
@@ -27,7 +24,9 @@ export interface ParsedMentions {
  * the only unambiguous way to tell them apart.
  */
 export function parseMentions(content: string, agentIds?: readonly string[]): ParsedMentions {
-  const mentions = [...content.matchAll(/(?<![A-Za-z0-9_])@([A-Za-z0-9][A-Za-z0-9-]*)(?![A-Za-z0-9_-])/g)]
+  const mentions = [
+    ...content.matchAll(/(?<![A-Za-z0-9_])@([A-Za-z0-9][A-Za-z0-9-]*)(?![A-Za-z0-9_-])/g),
+  ]
     .map((match) => match[1] ?? "")
     .filter(Boolean);
   const uniqueMentions = [...new Set(mentions)];

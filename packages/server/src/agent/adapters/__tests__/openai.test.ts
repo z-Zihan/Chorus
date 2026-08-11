@@ -4,7 +4,9 @@ import { OpenAIAdapter } from "../openai";
 
 function streamResponse(events: unknown[]): Response {
   const body = events
-    .map((event) => event === "[DONE]" ? "data: [DONE]\n\n" : `data: ${JSON.stringify(event)}\n\n`)
+    .map((event) =>
+      event === "[DONE]" ? "data: [DONE]\n\n" : `data: ${JSON.stringify(event)}\n\n`,
+    )
     .join("");
   return new Response(body, {
     status: 200,
@@ -37,31 +39,34 @@ describe("OpenAIAdapter tool calling", () => {
       if (requests.length === 1) {
         return streamResponse([
           {
-            choices: [{
-              delta: {
-                tool_calls: [{
-                  index: 0,
-                  id: "call_1",
-                  type: "function",
-                  function: { name: "call_agent", arguments: '{"agent_id":"reviewer",' },
-                }],
+            choices: [
+              {
+                delta: {
+                  tool_calls: [
+                    {
+                      index: 0,
+                      id: "call_1",
+                      type: "function",
+                      function: { name: "call_agent", arguments: '{"agent_id":"reviewer",' },
+                    },
+                  ],
+                },
               },
-            }],
+            ],
           },
           {
-            choices: [{
-              delta: {
-                tool_calls: [{ index: 0, function: { arguments: '"message":"Review this"}' } }],
+            choices: [
+              {
+                delta: {
+                  tool_calls: [{ index: 0, function: { arguments: '"message":"Review this"}' } }],
+                },
               },
-            }],
+            ],
           },
           "[DONE]",
         ]);
       }
-      return streamResponse([
-        { choices: [{ delta: { content: "Review complete" } }] },
-        "[DONE]",
-      ]);
+      return streamResponse([{ choices: [{ delta: { content: "Review complete" } }] }, "[DONE]"]);
     });
     vi.stubGlobal("fetch", fetchMock);
 
@@ -76,28 +81,37 @@ describe("OpenAIAdapter tool calling", () => {
     const adapter = new OpenAIAdapter("writer", "Writer");
     await adapter.init({ apiKey: "test-key", model: "test-model" });
 
-    const chunks = await collect(adapter.handleMessage("Please review", context({
-      availableAgentIds: ["writer", "reviewer"],
-      a2aBus,
-      callStack: ["writer"],
-    })));
+    const chunks = await collect(
+      adapter.handleMessage(
+        "Please review",
+        context({
+          availableAgentIds: ["writer", "reviewer"],
+          a2aBus,
+          callStack: ["writer"],
+        }),
+      ),
+    );
 
     const toolCall = chunks.find((chunk) => chunk.type === "tool_call");
     expect(toolCall?.metadata).toMatchObject({ to: "reviewer", request: "Review this" });
     expect(toolCall?.threadId).toBeTruthy();
     expect(busThreadId).toBe(toolCall?.threadId);
-    expect(chunks).toContainEqual(expect.objectContaining({
-      type: "a2a_response",
-      content: "No blockers",
-      sourceAgentId: "reviewer",
-    }));
+    expect(chunks).toContainEqual(
+      expect.objectContaining({
+        type: "a2a_response",
+        content: "No blockers",
+        sourceAgentId: "reviewer",
+      }),
+    );
     expect(chunks).toContainEqual({ type: "text", content: "Review complete" });
     expect(chunks.at(-1)).toEqual({ type: "done", content: "" });
 
     expect(requests).toHaveLength(2);
-    expect(requests[0]?.tools).toEqual(expect.arrayContaining([
-      expect.objectContaining({ function: expect.objectContaining({ name: "call_agent" }) }),
-    ]));
+    expect(requests[0]?.tools).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ function: expect.objectContaining({ name: "call_agent" }) }),
+      ]),
+    );
     const continuationMessages = requests[1]?.messages as Array<Record<string, unknown>>;
     const toolResult = continuationMessages.find((message) => message.role === "tool");
     expect(JSON.parse(String(toolResult?.content))).toMatchObject({
@@ -109,19 +123,26 @@ describe("OpenAIAdapter tool calling", () => {
 
   it("does not inject tools into a single-agent conversation", async () => {
     let request: Record<string, unknown> = {};
-    vi.stubGlobal("fetch", vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
-      request = JSON.parse(String(init?.body)) as Record<string, unknown>;
-      return streamResponse([
-        { choices: [{ delta: { content: "Hello" } }] },
-        "[DONE]",
-      ]);
-    }));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
+        request = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        return streamResponse([{ choices: [{ delta: { content: "Hello" } }] }, "[DONE]"]);
+      }),
+    );
     const adapter = new OpenAIAdapter("solo", "Solo");
     await adapter.init({ apiKey: "test-key" });
 
-    expect(await collect(adapter.handleMessage("Hi", context({
-      availableAgentIds: ["solo"],
-    })))).toEqual([
+    expect(
+      await collect(
+        adapter.handleMessage(
+          "Hi",
+          context({
+            availableAgentIds: ["solo"],
+          }),
+        ),
+      ),
+    ).toEqual([
       { type: "text", content: "Hello" },
       { type: "done", content: "" },
     ]);

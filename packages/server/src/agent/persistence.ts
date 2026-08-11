@@ -27,9 +27,8 @@ export async function persistAgent(
 ): Promise<PersistedAgentConfig> {
   const persisted = withDefaults(config);
   const storedConfig = { ...persisted.config };
-  const suppliedApiKey = typeof storedConfig.apiKey === "string"
-    ? storedConfig.apiKey.trim()
-    : undefined;
+  const suppliedApiKey =
+    typeof storedConfig.apiKey === "string" ? storedConfig.apiKey.trim() : undefined;
   delete storedConfig.apiKey;
 
   const current = repository.getAgentRow(persisted.id);
@@ -53,9 +52,8 @@ export async function loadPersistedAgents(repository: Repository): Promise<Persi
   const agents: PersistedAgentConfig[] = [];
   for (const row of repository.listAgentRows()) {
     const stored = rowToPersistedAgent(row);
-    const plaintextApiKey = typeof stored.config.apiKey === "string"
-      ? stored.config.apiKey.trim()
-      : undefined;
+    const plaintextApiKey =
+      typeof stored.config.apiKey === "string" ? stored.config.apiKey.trim() : undefined;
     const safeConfig = { ...stored.config };
     delete safeConfig.apiKey;
 
@@ -136,7 +134,7 @@ export class AgentPersistence {
   async getCredentialStatus(): Promise<CredentialStatus> {
     const agents: StoredCredentialStatus[] = [];
     for (const row of this.repository.listAgentRows()) {
-      if (row.credentialRef && await hasCredential(row.id)) {
+      if (row.credentialRef && (await hasCredential(row.id))) {
         agents.push({ id: row.id, name: row.name });
       }
     }

@@ -73,10 +73,12 @@ describe("WebSocket authentication", () => {
     const allowed = store.create("ws-client", ["ws:connect"], 60_000);
     const denied = store.create("http-client", ["agents:read"], 60_000);
 
-    expect(isWebSocketAuthorized("203.0.113.10", `/ws?token=${allowed.token}`, enabledAuth, store))
-      .toBe(true);
-    expect(isWebSocketAuthorized("203.0.113.10", `/ws?token=${denied.token}`, enabledAuth, store))
-      .toBe(false);
+    expect(
+      isWebSocketAuthorized("203.0.113.10", `/ws?token=${allowed.token}`, enabledAuth, store),
+    ).toBe(true);
+    expect(
+      isWebSocketAuthorized("203.0.113.10", `/ws?token=${denied.token}`, enabledAuth, store),
+    ).toBe(false);
     expect(isWebSocketAuthorized("203.0.113.10", "/ws", enabledAuth, store)).toBe(false);
     expect(isWebSocketAuthorized("::1", "/ws", enabledAuth, store)).toBe(true);
   });

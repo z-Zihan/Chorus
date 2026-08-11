@@ -30,9 +30,8 @@ export class LangChainAdapter extends BaseAdapter {
 
   async init(config: Record<string, unknown>): Promise<void> {
     const endpoint = typeof config.endpoint === "string" ? config.endpoint.trim() : "";
-    const runnableScript = typeof config.runnableScript === "string"
-      ? config.runnableScript.trim()
-      : "";
+    const runnableScript =
+      typeof config.runnableScript === "string" ? config.runnableScript.trim() : "";
     if (!endpoint && !runnableScript) {
       throw new Error("LangChain adapter requires endpoint or runnableScript");
     }
@@ -90,7 +89,7 @@ export class LangChainAdapter extends BaseAdapter {
       yield* parseLangChainSse(response.body);
       return;
     }
-    const payload = await response.json() as unknown;
+    const payload = (await response.json()) as unknown;
     const content = outputText(payload);
     if (content) yield { type: "text", content };
   }
@@ -106,11 +105,12 @@ export class LangChainAdapter extends BaseAdapter {
         : pathToFileURL(isAbsolute(runnableScript) ? runnableScript : resolve(runnableScript)).href;
       // TODO: Replace this structural loader with the official LangChain Runnable loader when
       // Chorus adopts LangChain as an optional dependency.
-      const module = await import(scriptUrl) as Record<string, unknown>;
+      const module = (await import(scriptUrl)) as Record<string, unknown>;
       const candidate = module.default ?? module.runnable;
-      this.runnable = typeof candidate === "function"
-        ? await (candidate as () => RunnableLike | Promise<RunnableLike>)()
-        : candidate as RunnableLike;
+      this.runnable =
+        typeof candidate === "function"
+          ? await (candidate as () => RunnableLike | Promise<RunnableLike>)()
+          : (candidate as RunnableLike);
     }
     if (this.runnable.stream) {
       for await (const value of this.runnable.stream(input, { signal })) {
@@ -125,9 +125,7 @@ export class LangChainAdapter extends BaseAdapter {
   }
 }
 
-async function* parseLangChainSse(
-  body: ReadableStream<Uint8Array>,
-): AsyncGenerator<StreamChunk> {
+async function* parseLangChainSse(body: ReadableStream<Uint8Array>): AsyncGenerator<StreamChunk> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";

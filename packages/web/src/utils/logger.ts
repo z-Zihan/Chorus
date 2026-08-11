@@ -48,7 +48,11 @@ function write(level: LogLevel, message: unknown, data?: unknown): void {
   if (import.meta.env.DEV) {
     const method = level === "debug" ? "debug" : level;
     const time = new Date(entry.timestamp).toISOString();
-    console[method](`%c[${time}] [${level.toUpperCase()}] ${entry.message}`, consoleColors[level], data ?? "");
+    console[method](
+      `%c[${time}] [${level.toUpperCase()}] ${entry.message}`,
+      consoleColors[level],
+      data ?? "",
+    );
   }
 }
 

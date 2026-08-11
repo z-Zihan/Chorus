@@ -43,25 +43,27 @@ export function verifyOwnerProof(
 export function isOwnerProof(value: unknown): value is OwnerProof {
   if (!value || typeof value !== "object") return false;
   const proof = value as Partial<OwnerProof>;
-  return typeof proof.agentId === "string"
-    && proof.agentId.length > 0
-    && typeof proof.ownerId === "string"
-    && proof.ownerId.length > 0
-    && typeof proof.roomId === "string"
-    && proof.roomId.length > 0
-    && Number.isSafeInteger(proof.keyEpoch)
-    && (proof.keyEpoch ?? 0) >= 1
-    && typeof proof.signature === "string"
-    && proof.signature.length > 0;
+  return (
+    typeof proof.agentId === "string" &&
+    proof.agentId.length > 0 &&
+    typeof proof.ownerId === "string" &&
+    proof.ownerId.length > 0 &&
+    typeof proof.roomId === "string" &&
+    proof.roomId.length > 0 &&
+    Number.isSafeInteger(proof.keyEpoch) &&
+    (proof.keyEpoch ?? 0) >= 1 &&
+    typeof proof.signature === "string" &&
+    proof.signature.length > 0
+  );
 }
 
 function ownerProofClaims(value: OwnerProofClaims): OwnerProofClaims {
   if (
-    !value.agentId
-    || !value.ownerId
-    || !value.roomId
-    || !Number.isSafeInteger(value.keyEpoch)
-    || value.keyEpoch < 1
+    !value.agentId ||
+    !value.ownerId ||
+    !value.roomId ||
+    !Number.isSafeInteger(value.keyEpoch) ||
+    value.keyEpoch < 1
   ) {
     throw new Error("OwnerProof claims are invalid");
   }

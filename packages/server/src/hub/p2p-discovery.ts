@@ -53,10 +53,12 @@ export class P2PDiscovery {
     const txt = txtRecord(service.txt);
     const hubId = txt.hubId;
     const publicKey = txt.publicKey;
-    if (!hubId || !publicKey || hubId === this.localHubId || !Number.isInteger(service.port)) return;
-    const host = service.addresses?.find((address) => address.includes("."))
-      ?? service.addresses?.[0]
-      ?? service.host;
+    if (!hubId || !publicKey || hubId === this.localHubId || !Number.isInteger(service.port))
+      return;
+    const host =
+      service.addresses?.find((address) => address.includes(".")) ??
+      service.addresses?.[0] ??
+      service.host;
     if (!host) return;
     const discovered: P2PDiscoveredHub = {
       hubId,

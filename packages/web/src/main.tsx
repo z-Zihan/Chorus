@@ -21,5 +21,5 @@ createRoot(rootElement).render(
     >
       <App />
     </Suspense>
-  </StrictMode>
+  </StrictMode>,
 );

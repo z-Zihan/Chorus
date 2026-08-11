@@ -47,10 +47,12 @@ export function canonicalize(value: unknown): string {
       const keys = Object.keys(record)
         .filter((key) => record[key] !== undefined)
         .sort(compareUtf16);
-      return `{${keys.map((key) => {
-        assertValidUnicode(key);
-        return `${JSON.stringify(key)}:${serialize(record[key])}`;
-      }).join(",")}}`;
+      return `{${keys
+        .map((key) => {
+          assertValidUnicode(key);
+          return `${JSON.stringify(key)}:${serialize(record[key])}`;
+        })
+        .join(",")}}`;
     } finally {
       ancestors.delete(current);
     }

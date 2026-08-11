@@ -53,9 +53,11 @@ export function isLoopbackAddress(address: string | undefined): boolean {
     normalized = normalized.slice("::ffff:".length);
   }
   const octets = normalized.split(".");
-  return octets.length === 4
-    && octets.every((octet) => /^\d{1,3}$/u.test(octet) && Number(octet) <= 255)
-    && Number(octets[0]) === 127;
+  return (
+    octets.length === 4 &&
+    octets.every((octet) => /^\d{1,3}$/u.test(octet) && Number(octet) <= 255) &&
+    Number(octets[0]) === 127
+  );
 }
 
 export function bearerToken(header: string | undefined): string | undefined {

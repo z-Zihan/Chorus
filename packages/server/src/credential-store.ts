@@ -75,9 +75,11 @@ export async function deleteCredential(agentId: string): Promise<void> {
       activateFileFallback(backend, error);
     }
   }
-  await mutateFileCredentials((credentials) => Object.fromEntries(
-    Object.entries(credentials).filter(([storedAgentId]) => storedAgentId !== agentId),
-  ));
+  await mutateFileCredentials((credentials) =>
+    Object.fromEntries(
+      Object.entries(credentials).filter(([storedAgentId]) => storedAgentId !== agentId),
+    ),
+  );
 }
 
 export async function hasCredential(agentId: string): Promise<boolean> {
@@ -129,15 +131,15 @@ export async function getCredentialStorageBackend(): Promise<CredentialStorageBa
 async function resolveBackend(): Promise<NativeBackend | "file"> {
   if (selectedBackend) return selectedBackend;
 
-  if (process.platform === "darwin" && await commandExists("security")) {
+  if (process.platform === "darwin" && (await commandExists("security"))) {
     selectedBackend = "macos-keychain";
     return selectedBackend;
   }
-  if (process.platform === "win32" && await windowsPowerShell()) {
+  if (process.platform === "win32" && (await windowsPowerShell())) {
     selectedBackend = "windows-credential-manager";
     return selectedBackend;
   }
-  if (process.platform === "linux" && await commandExists("secret-tool")) {
+  if (process.platform === "linux" && (await commandExists("secret-tool"))) {
     selectedBackend = "linux-libsecret";
     return selectedBackend;
   }
@@ -173,15 +175,25 @@ async function setNativeCredential(
   apiKey: string,
 ): Promise<void> {
   if (backend === "macos-keychain") {
-    await execFileAsync("security", [
-      "add-generic-password", "-U", "-s", SERVICE_NAME, "-a", agentId, "-w", apiKey,
-    ], { windowsHide: true });
+    await execFileAsync(
+      "security",
+      ["add-generic-password", "-U", "-s", SERVICE_NAME, "-a", agentId, "-w", apiKey],
+      { windowsHide: true },
+    );
     return;
   }
   if (backend === "linux-libsecret") {
     await execFileWithInput(
       "secret-tool",
-      ["store", "--label", `${SERVICE_NAME} (${agentId})`, "service", SERVICE_NAME, "account", agentId],
+      [
+        "store",
+        "--label",
+        `${SERVICE_NAME} (${agentId})`,
+        "service",
+        SERVICE_NAME,
+        "account",
+        agentId,
+      ],
       apiKey,
     );
     return;
@@ -238,11 +250,9 @@ async function deleteNativeCredential(backend: NativeBackend, agentId: string): 
     return;
   }
   if (backend === "linux-libsecret") {
-    await execFileAsync(
-      "secret-tool",
-      ["clear", "service", SERVICE_NAME, "account", agentId],
-      { windowsHide: true },
-    );
+    await execFileAsync("secret-tool", ["clear", "service", SERVICE_NAME, "account", agentId], {
+      windowsHide: true,
+    });
     return;
   }
   await runWindowsCredentialCommand("delete", agentId);
@@ -298,8 +308,9 @@ function windowsCredentialScript(
   usernameBase64: string,
   secretBase64: string,
 ): string {
-  const operationCode = operation === "set"
-    ? `
+  const operationCode =
+    operation === "set"
+      ? `
 $secret = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${secretBase64}'))
 $bytes = [Text.Encoding]::Unicode.GetBytes($secret)
 $blob = [Runtime.InteropServices.Marshal]::AllocCoTaskMem($bytes.Length)
@@ -320,8 +331,8 @@ try {
   [Runtime.InteropServices.Marshal]::Copy($zeros, 0, $blob, $zeros.Length)
   [Runtime.InteropServices.Marshal]::FreeCoTaskMem($blob)
 }`
-    : operation === "get"
-      ? `
+      : operation === "get"
+        ? `
 $pointer = [IntPtr]::Zero
 if (-not [WinCredential.NativeMethods]::CredRead($target, 1, 0, [ref]$pointer)) {
   if ([Runtime.InteropServices.Marshal]::GetLastWin32Error() -eq 1168) { Write-Output '__NOT_FOUND__'; exit 0 }
@@ -333,7 +344,7 @@ try {
   [Runtime.InteropServices.Marshal]::Copy($credential.CredentialBlob, $bytes, 0, $bytes.Length)
   Write-Output ([Text.Encoding]::Unicode.GetString($bytes))
 } finally { [WinCredential.NativeMethods]::CredFree($pointer) }`
-      : `
+        : `
 if (-not [WinCredential.NativeMethods]::CredDelete($target, 1, 0)) {
   if ([Runtime.InteropServices.Marshal]::GetLastWin32Error() -ne 1168) {
     throw [ComponentModel.Win32Exception]::new([Runtime.InteropServices.Marshal]::GetLastWin32Error())
@@ -373,7 +384,11 @@ async function readFileCredentials(): Promise<Record<string, string>> {
   try {
     const payload = JSON.parse(await readFile(FALLBACK_FILE, "utf8")) as EncryptedCredentialFile;
     if (payload.version !== FILE_VERSION) throw new Error("Unsupported credential file version");
-    const decipher = createDecipheriv("aes-256-gcm", machineKey(), Buffer.from(payload.iv, "base64"));
+    const decipher = createDecipheriv(
+      "aes-256-gcm",
+      machineKey(),
+      Buffer.from(payload.iv, "base64"),
+    );
     decipher.setAuthTag(Buffer.from(payload.tag, "base64"));
     const plaintext = Buffer.concat([
       decipher.update(Buffer.from(payload.ciphertext, "base64")),
@@ -403,7 +418,8 @@ async function writeFileCredentials(credentials: Record<string, string>): Promis
   const temporaryPath = `${FALLBACK_FILE}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`;
   await writeFile(temporaryPath, JSON.stringify(payload), { encoding: "utf8", mode: 0o600 });
   await rename(temporaryPath, FALLBACK_FILE);
-  if (process.platform !== "win32") await access(FALLBACK_FILE, fsConstants.R_OK | fsConstants.W_OK);
+  if (process.platform !== "win32")
+    await access(FALLBACK_FILE, fsConstants.R_OK | fsConstants.W_OK);
 }
 
 function mutateFileCredentials(

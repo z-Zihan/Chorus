@@ -60,16 +60,21 @@ export function searchMessages(
   }
   parameters.limit = Math.min(Math.max(filters.limit ?? 50, 1), 200);
 
-  const rows = context.sqlite.prepare(`
+  const rows = context.sqlite
+    .prepare(
+      `
     SELECT m.rowid, m.*
     FROM messages_fts
     JOIN messages m ON m.rowid = messages_fts.rowid
     WHERE ${clauses.join(" AND ")}
     ORDER BY bm25(messages_fts), m.created_at DESC
     LIMIT @limit
-  `).all(parameters) as MessageRow[];
+  `,
+    )
+    .all(parameters) as MessageRow[];
 
-  const contextStatement = (direction: "before" | "after") => context.sqlite.prepare(`
+  const contextStatement = (direction: "before" | "after") =>
+    context.sqlite.prepare(`
     SELECT rowid, * FROM messages
     WHERE conversation_id = @conversationId
       AND (created_at ${direction === "before" ? "<" : ">"} @createdAt
@@ -91,17 +96,22 @@ export function searchMessages(
     };
     const before = beforeStatement.get(contextParameters) as MessageRow | undefined;
     const after = afterStatement.get(contextParameters) as MessageRow | undefined;
-    return [{
-      message: toMessage(row),
-      conversation,
-      before: before ? toMessage(before) : null,
-      after: after ? toMessage(after) : null,
-    }];
+    return [
+      {
+        message: toMessage(row),
+        conversation,
+        before: before ? toMessage(before) : null,
+        after: after ? toMessage(after) : null,
+      },
+    ];
   });
 }
 
 function toFtsQuery(query: string): string {
-  return query.trim().split(/\s+/u).filter(Boolean)
+  return query
+    .trim()
+    .split(/\s+/u)
+    .filter(Boolean)
     .map((term) => `"${term.replaceAll('"', '""')}"*`)
     .join(" AND ");
 }

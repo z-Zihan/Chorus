@@ -29,7 +29,9 @@ export class CatalogService {
   }
 
   getCompatible(): Promise<CatalogEntryWithStatus[]> {
-    return this.list().then((items) => items.filter((entry) => entry.platforms.includes(currentPlatform())));
+    return this.list().then((items) =>
+      items.filter((entry) => entry.platforms.includes(currentPlatform())),
+    );
   }
 
   private async ensureDetections(): Promise<void> {
@@ -39,22 +41,34 @@ export class CatalogService {
     if (cached.length > 0) return;
     // Trigger a scan if no cache
     if (!this.scanning) {
-      this.scanning = this.detector.detect().then(() => { this.scanning = null; }).catch(() => { this.scanning = null; });
+      this.scanning = this.detector
+        .detect()
+        .then(() => {
+          this.scanning = null;
+        })
+        .catch(() => {
+          this.scanning = null;
+        });
     }
     await this.scanning;
   }
 
   private withInstalledStatus(entry: CatalogEntry): CatalogEntryWithStatus {
-    const agent = this.registry.list(true).find((candidate) =>
-      candidate.catalogEntryId === entry.id ||
-      (entry.descriptorId !== undefined && candidate.id === entry.descriptorId),
-    );
+    const agent = this.registry
+      .list(true)
+      .find(
+        (candidate) =>
+          candidate.catalogEntryId === entry.id ||
+          (entry.descriptorId !== undefined && candidate.id === entry.descriptorId),
+      );
 
     let detected = false;
     if (!agent && entry.descriptorId && this.detector) {
       const detections = this.detector.getCachedDetections();
       const detection = detections.find((d) => d.descriptorId === entry.descriptorId);
-      detected = Boolean(detection && (detection.status === "ready" || detection.status === "installed"));
+      detected = Boolean(
+        detection && (detection.status === "ready" || detection.status === "installed"),
+      );
     }
 
     return {

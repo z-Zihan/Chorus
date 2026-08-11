@@ -105,17 +105,15 @@ export class GroupKeyManager {
   }
 
   /** Install a rekey only after validating its commitment. */
-  installRekey(
-    conversationId: string,
-    groupKey: GroupKey,
-    keyCommitment: string,
-  ): boolean {
-    if (!verifyKeyCommitment(
-      Buffer.from(groupKey.key, "base64url"),
-      conversationId,
-      groupKey.version,
-      keyCommitment,
-    )) {
+  installRekey(conversationId: string, groupKey: GroupKey, keyCommitment: string): boolean {
+    if (
+      !verifyKeyCommitment(
+        Buffer.from(groupKey.key, "base64url"),
+        conversationId,
+        groupKey.version,
+        keyCommitment,
+      )
+    ) {
       return false;
     }
     return this.setKey(conversationId, groupKey);
@@ -184,10 +182,10 @@ export class GroupKeyManager {
 
 function isValidGroupKey(groupKey: GroupKey): boolean {
   if (
-    !groupKey.id.startsWith("gk_")
-    || !Number.isInteger(groupKey.version)
-    || groupKey.version < 1
-    || !Number.isFinite(groupKey.createdAt)
+    !groupKey.id.startsWith("gk_") ||
+    !Number.isInteger(groupKey.version) ||
+    groupKey.version < 1 ||
+    !Number.isFinite(groupKey.createdAt)
   ) {
     return false;
   }

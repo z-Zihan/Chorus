@@ -80,14 +80,14 @@ export class Scheduler {
   private start(task: ScheduledAgentTask): void {
     this.stop(task.id);
     const job = cron.schedule(task.cronExpression, () => {
-      void this.runtime.handleUserMessage(
-        task.conversationId,
-        task.prompt,
-        [],
-        task.agentId,
-      ).catch((error: unknown) => {
-        logger.error({ err: error, taskId: task.id, agentId: task.agentId }, "Scheduled task failed");
-      });
+      void this.runtime
+        .handleUserMessage(task.conversationId, task.prompt, [], task.agentId)
+        .catch((error: unknown) => {
+          logger.error(
+            { err: error, taskId: task.id, agentId: task.agentId },
+            "Scheduled task failed",
+          );
+        });
     });
     this.jobs.set(task.id, job);
   }

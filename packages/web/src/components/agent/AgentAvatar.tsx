@@ -43,19 +43,13 @@ export function AgentAvatar({ name, src, size = "md" }: Props) {
   const sizeClass = SIZE_MAP[size];
 
   if (src) {
-    return (
-      <img
-        src={src}
-        alt={name}
-        className={`${sizeClass} rounded-full object-cover`}
-      />
-    );
+    return <img src={src} alt={name} className={`${sizeClass} rounded-full object-cover`} />;
   }
 
   return (
     <div
       className={`${sizeClass} ${getColor(
-        name
+        name,
       )} flex flex-shrink-0 items-center justify-center rounded-full font-medium text-white`}
     >
       {getInitials(name)}

@@ -23,11 +23,7 @@ interface ResyncRelay {
 
 type ResyncRepository = Pick<
   Repository,
-  | "getRoomState"
-  | "getRoomStateEvents"
-  | "listRoomIds"
-  | "saveRoomStateEvent"
-  | "setRoomState"
+  "getRoomState" | "getRoomStateEvents" | "listRoomIds" | "saveRoomStateEvent" | "setRoomState"
 >;
 
 type ResyncSender = (toHubId: string, payload: ResyncMessage, roomId: string) => Promise<unknown>;
@@ -53,12 +49,20 @@ export class ResyncService {
     const recipients = this.relay
       .getOnlineRoomMembers(roomId)
       .filter(({ hubId }) => hubId !== this.localHubId);
-    await Promise.all(recipients.map(({ hubId }) => this.send(hubId, {
-      messageType: "resync_request",
-      messageId: randomUUID(),
-      conversationId: roomId,
-      resyncRequest: request,
-    }, roomId)));
+    await Promise.all(
+      recipients.map(({ hubId }) =>
+        this.send(
+          hubId,
+          {
+            messageType: "resync_request",
+            messageId: randomUUID(),
+            conversationId: roomId,
+            resyncRequest: request,
+          },
+          roomId,
+        ),
+      ),
+    );
   }
 
   async requestAllRooms(): Promise<void> {
@@ -72,11 +76,13 @@ export class ResyncService {
     let missedEvents: RoomStateEvent[] = [];
 
     if (revisionGap > 0 && revisionGap <= MAX_INCREMENTAL_RESYNC_EVENTS) {
-      const candidates = this.repository.getRoomStateEvents(
-        request.roomId,
-        request.lastKnownRevision,
-        MAX_INCREMENTAL_RESYNC_EVENTS + 1,
-      ).filter((event) => event.revision <= snapshot.revision);
+      const candidates = this.repository
+        .getRoomStateEvents(
+          request.roomId,
+          request.lastKnownRevision,
+          MAX_INCREMENTAL_RESYNC_EVENTS + 1,
+        )
+        .filter((event) => event.revision <= snapshot.revision);
       if (hasCompleteRevisionRange(candidates, request.lastKnownRevision, snapshot.revision)) {
         missedEvents = candidates;
       }
@@ -97,11 +103,9 @@ export class ResyncService {
     if (response.currentRevision <= current.revision) return false;
 
     if (response.missedEvents.length > 0) {
-      if (!hasCompleteRevisionRange(
-        response.missedEvents,
-        current.revision,
-        response.currentRevision,
-      )) {
+      if (
+        !hasCompleteRevisionRange(response.missedEvents, current.revision, response.currentRevision)
+      ) {
         throw new Error(`Resync events for Room ${response.roomId} are not contiguous`);
       }
       for (const event of response.missedEvents) this.verifyInboundEvent(event, response);
@@ -125,13 +129,14 @@ export class ResyncService {
     }
     if (event.eventType !== "agent_added") return;
     const proof = event.data.ownerProof;
-    if (!isOwnerProof(proof)) throw new Error(`agent_added event ${event.eventId} has no OwnerProof`);
+    if (!isOwnerProof(proof))
+      throw new Error(`agent_added event ${event.eventId} has no OwnerProof`);
     const agentId = event.data.agentId;
     if (
-      proof.agentId !== agentId
-      || proof.ownerId !== event.actorUserId
-      || proof.roomId !== response.roomId
-      || proof.keyEpoch !== event.keyEpoch
+      proof.agentId !== agentId ||
+      proof.ownerId !== event.actorUserId ||
+      proof.roomId !== response.roomId ||
+      proof.keyEpoch !== event.keyEpoch
     ) {
       throw new Error(`OwnerProof claims do not match agent_added event ${event.eventId}`);
     }
@@ -153,11 +158,11 @@ function hasCompleteRevisionRange(
 
 function assertResyncRequest(request: ResyncRequestPayload): void {
   if (
-    !request.roomId
-    || !Number.isSafeInteger(request.lastKnownRevision)
-    || request.lastKnownRevision < 0
-    || !Number.isSafeInteger(request.lastKnownKeyEpoch)
-    || request.lastKnownKeyEpoch < 1
+    !request.roomId ||
+    !Number.isSafeInteger(request.lastKnownRevision) ||
+    request.lastKnownRevision < 0 ||
+    !Number.isSafeInteger(request.lastKnownKeyEpoch) ||
+    request.lastKnownKeyEpoch < 1
   ) {
     throw new Error("Invalid resync request");
   }
@@ -165,15 +170,15 @@ function assertResyncRequest(request: ResyncRequestPayload): void {
 
 function assertResyncResponse(response: ResyncResponsePayload): void {
   if (
-    !response.roomId
-    || !Number.isSafeInteger(response.currentRevision)
-    || response.currentRevision < 0
-    || !Number.isSafeInteger(response.currentKeyEpoch)
-    || response.currentKeyEpoch < 1
-    || response.snapshot.revision !== response.currentRevision
-    || response.snapshot.keyEpoch !== response.currentKeyEpoch
-    || (response.snapshot.managementState !== "managed"
-      && response.snapshot.managementState !== "unmanaged")
+    !response.roomId ||
+    !Number.isSafeInteger(response.currentRevision) ||
+    response.currentRevision < 0 ||
+    !Number.isSafeInteger(response.currentKeyEpoch) ||
+    response.currentKeyEpoch < 1 ||
+    response.snapshot.revision !== response.currentRevision ||
+    response.snapshot.keyEpoch !== response.currentKeyEpoch ||
+    (response.snapshot.managementState !== "managed" &&
+      response.snapshot.managementState !== "unmanaged")
   ) {
     throw new Error("Invalid resync response");
   }

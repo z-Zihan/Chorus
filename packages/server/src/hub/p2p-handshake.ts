@@ -6,11 +6,7 @@ export class P2PHandshake {
     return randomBytes(32).toString("base64");
   }
 
-  async verifyChallenge(
-    nonce: string,
-    signature: string,
-    publicKey: string,
-  ): Promise<boolean> {
+  async verifyChallenge(nonce: string, signature: string, publicKey: string): Promise<boolean> {
     try {
       return await verifySignature(nonce, signature, publicKey);
     } catch {

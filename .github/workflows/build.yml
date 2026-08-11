@@ -30,8 +30,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Lint, typecheck, and test
-        run: pnpm lint && pnpm typecheck && pnpm test
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Repository quality gates
+        env:
+          PLAYWRIGHT_CHANNEL: chromium
+        run: pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm test:e2e && pnpm build
 
   # ─── Windows ──────────────────────────────────────────────
   build-windows:
