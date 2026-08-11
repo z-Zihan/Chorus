@@ -91,6 +91,23 @@ Windows 打包细节见 [Windows 构建指南](docs/WINDOWS_BUILD.md)。
 完整使用指南见 [docs/GUIDE.md](docs/GUIDE.md)，涵盖 Agent 管理、多 Agent 协作、跨设备通信等。
 开发者文档见 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)，涵盖项目结构、启动方式、开发注意事项。
 
+## 质量验证
+
+仓库级质量门禁如下，Web E2E 与 Vitest 分开运行：
+
+```bash
+pnpm format:check
+pnpm lint
+pnpm typecheck
+pnpm test       # Shared 9 + Relay 18 + Server 144 = 171
+pnpm test:e2e   # Playwright Chromium，当前 18 项
+pnpm build
+cargo test --manifest-path src-tauri/Cargo.toml
+cargo check --manifest-path src-tauri/Cargo.toml
+```
+
+自动测试和浏览器渲染不等于正式发布验收。当前仍需完成两台物理设备的配对/Room/重连、P2P receipt parity、人工屏幕阅读器、Windows 原生 UI、签名/公证以及干净机器安装升级。完整证据与未关闭项见 [自动化质量报告](docs/reviews/automated-quality-report.md)。
+
 ## 工作原理
 
 ```text
@@ -211,7 +228,7 @@ CLI 以当前系统用户权限运行，其文件与命令权限由 CLI 自身�
 
 ### 多 Agent 群聊和跨设备聊天可用吗？
 
-多 Agent 群聊、A2A 通信（@mention 转发 + A2A_CALL 同步调用）、跨设备协作均已实现。跨设备协作可通过 Relay（跨网络）或 P2P 直连（同一局域网）。支持多用户身份体系、信任管理、签名目录发现，不同用户的 Agent 可以互相发现和协作。
+多 Agent 群聊和 A2A 通信（@mention 转发 + A2A_CALL 同步调用）已实现。跨设备协作的 Relay/P2P、身份、信任和签名目录已有进程级实现与确定性测试，但两台物理设备的配对、Room 消息和断网重连仍是发布前验收项，不能仅凭浏览器或模拟测试视为真实设备闭环。
 
 ### 外部 Agent 怎么接入 Chorus？
 

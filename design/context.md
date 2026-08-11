@@ -59,9 +59,9 @@
 ## 已知事实与假设
 
 - 事实：当前本地聊天、Agent 发现、A2A、Relay/P2P 基础代码已经存在。
-- 事实：当前 Web 和 Relay 没有独立测试套件，浏览器 E2E 缺失。
-- 事实：当前生产桌面后端依赖系统 Node 和未打包的运行依赖。
-- 事实：当前 API 默认监听所有网卡且关闭认证。
+- 事实：Shared、Relay、Server 已有独立自动测试；Web 已建立 Playwright + axe E2E，并进入 PR 质量门禁。
+- 事实：Tauri 生产包已携带 Node sidecar、Server bundle、迁移与原生运行时；签名、公证、Windows 和干净机器安装仍未验收。
+- 事实：API 默认绑定 loopback；显式绑定非 loopback 且未启用认证时失败关闭。
 - 假设：用户更关心“当前协作与消息”而不是按 Agent 展开的多层历史树，因此推荐 conversation-first 导航。
 - 假设：跨设备能力在首发中仍是核心，而不是隐藏到实验功能。
 

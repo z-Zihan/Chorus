@@ -2,16 +2,16 @@
 
 本文把产品审计转为可执行工程计划。状态只使用：`已实现`、`确定性验证通过`、`真实环境验证通过`、`阻断`；源码存在或单元测试通过不等同于产品闭环。
 
-## 当前基线（2026-08-11）
+## 当前基线（2026-08-12）
 
 - 已实现：API 默认绑定 `127.0.0.1`；无认证时禁止显式绑定非 loopback 地址。
 - 已实现：Quiet Signal 明暗 Token、系统字体、焦点与 reduced-motion 基线。
 - 已实现：会话优先侧栏、可行动空状态、响应式设置导航、新品牌图形及桌面/Web 图标。
 - 已实现：配对入口明确标为“部分可用”，不再把生成挑战描述为完成配对。
-- 确定性验证通过：Shared 9 项、Relay 18 项、Server 144 项测试；所有 workspace 类型检查；Web production build。
+- 确定性验证通过：Shared 9 项、Relay 18 项、Server 144 项测试；18 项 Playwright Web E2E；format、lint、所有 workspace 类型检查、Web production build 和 Cargo test/check。
 - 浏览器验证通过：1280×720 基础中文界面、Light/Dark 切换、会话列表无横向溢出、配对部分可用状态可读；Room 邀请中心在 1280×800 与 375×812 中文暗色下可见，真实拒绝交互通过。会话、消息、Agent、搜索、设置/隐私与 Agent 目录加载失败在 1280×800/375×812、Light/Dark、中文/English 下显示就地恢复并可重试。
 - 已实现：Relay Room HTTP 身份认证与成员/创建者授权；pending Room invitation 的接受、拒绝、撤回、过期和旧库补表；接受前不是成员且不能读取 Room/发送 Room 消息。
-- 已实现：全局 lint 达到 0 error/0 warning；主 Web chunk 约 268.16KB，构建无 chunk warning。
+- 已实现：PR CI 执行 format → lint → typecheck → 171 项单元/集成测试 → 18 项 Playwright E2E → build。主 Web 入口 268.25kB、总 JavaScript gzip 约 272.26kB、CSS gzip 10.55kB，构建无 chunk warning。
 - 已实现：设置中的定时任务具备加载、空、错误保留、创建、启停回滚和删除确认完整状态；诊断页只读展示服务启动时已加载的插件，不再把插件加载器描述成 UI 管理器。Scheduler API CRUD 与无效 Cron/缺失 Agent 共 2 项新增回归测试通过；桌面与 375×812 浏览器交互通过。
 - 已实现：群聊成员、联系人和 A2A 模式加载失败均与空/默认状态分离；群聊 Tooltip Provider 崩溃已关闭；跨 Hub Room Agent 添加/移除使用 owner-proof 路径。桌面故障恢复与成员增删确认、375×812 Header/44px/无横向溢出已通过。
 - 已实现：Onboarding 的未知/加载/网络失败、扫描、认证、未发现、采用和领域错误均可恢复；Updater 区分 Web/未配置/桌面检查，安装与重启失败分离；会话创建、重命名、置顶、归档和删除具备 pending、防竞态、失败保真与近场反馈。新增 Onboarding 路由 3 项测试；上述关键失败态在 375×812 中文暗色真实交互通过。
@@ -19,6 +19,7 @@
 - 已实现：全局状态色统一为明暗语义 Token；Toast 可点击关闭且移动命中区 44px；失败消息、离线横幅、跨 Hub 与配对状态不再依赖固定 Tailwind 色。中文标题导出使用 RFC 5987 文件名并有回归测试，配对/导出重复错误反馈已去重。
 - 浏览器验证通过：320×812、375×812、800×600、1440×900、400×300 极短视口无页面横向溢出；移动端可见主交互目标达到 44px。真实 Chrome 在 1286×768 窗口、地址栏明确显示 200% zoom 时，主会话、侧栏抽屉、设置及配对均可用且无横向溢出；设置标签支持方向键/Home/End 并自动滚动，居中 Dialog 的末端内容可滚动到达。加入 skip link、主内容焦点目标、会话 `h1` 与 Composer 可访问名称；Onboarding、设置、配对 Dialog 的真实模态、初始焦点、双向焦点循环及焦点返回通过。主界面仅键盘顺序与导出菜单 Enter/Space、方向键、Escape 已在真实 Chrome 验证。人工屏幕阅读器仍为发布前门禁。
 - 浏览器验证通过：375×812 自动语义/触控矩阵覆盖八个设置页面、配对、全局搜索、创建群聊、Agent 目录、Agent 设置、诊断日志、危险操作确认和群成员菜单；可见有效命中目标均不小于 44px，Dialog 均有稳定名称且无横向溢出。该证据不能替代人工屏幕阅读器验收。
+- 浏览器验证通过：Playwright 覆盖六档视口、Light/Dark × zh-CN/en、严重/致命 axe 门禁、Onboarding/会话加载恢复、A2A 与导出键盘菜单；手工浏览器复核覆盖消息状态 fixture、保留历史的加载失败和真实后端不可用的 Onboarding 重试焦点。证据等级为 E2，不等于原生或真实设备验收。
 - 已实现：Relay 密文先按目标持久化；目标 Hub 完成处理后返回 Ed25519/JCS 签名 `transport_receipt`，Relay 验签后才删除；加密 `delivery_ack` 独立表达 `accepted/denied/done/error`。A2A UI 分开展示传输与执行，普通消息用 client message ID 精确关联发送失败。
 - 阻断：真实两台物理设备的配对与 Room 消息/重连矩阵、P2P 对等回执、Windows 原生包、macOS/Windows 签名/公证、干净机器安装升级、真实历史迁移尚未关闭。
 

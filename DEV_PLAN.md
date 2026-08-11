@@ -1,8 +1,10 @@
 # Chorus 开发计划 / Development Plan
 
-> 最后更新：2026-08-11
+> 最后更新：2026-08-12
 > 规范来源：`docs/CROSS_DEVICE_DESIGN.md`
 > 当前发布门禁与证据以 `design/development-plan.md` 为准；本文件下半部“项目暂停总结”保留为 2026-08-05 历史快照，不代表当前发布完成度。
+
+当前仓库质量基线：Shared 9 + Relay 18 + Server 144 = 171 项单元/集成测试，另有 18 项 Playwright Web E2E；format、lint、typecheck、build 与 Cargo test/check 通过。完整运行证据见 `docs/reviews/automated-quality-report.md`。
 
 ## 状态说明
 
@@ -123,7 +125,7 @@ source ~/.nvm/nvm.sh
 pnpm install
 pnpm --filter @chorus/shared build
 pnpm dev  # 开发模式
-pnpm test  # 123 tests
+pnpm test  # 历史快照当时为 123 tests；当前数量见本文件顶部基线
 ```
 
 参考文档：

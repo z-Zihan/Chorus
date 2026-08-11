@@ -34,9 +34,11 @@ pnpm tauri:build     # 构建桌面端安装包
 |------|------|
 | `pnpm dev` | 同时启动前端 (5173) + 后端 (3210) |
 | `pnpm build` | 构建所有包（shared → relay → server → web） |
-| `pnpm test` | 运行测试（39 个） |
+| `pnpm test` | 运行 Shared、Relay、Server 测试（当前 171 项） |
+| `pnpm test:e2e` | 运行隔离 fixture 的 Playwright Web E2E（当前 18 项） |
 | `pnpm lint` | ESLint 检查 |
 | `pnpm typecheck` | TypeScript 类型检查 |
+| `pnpm format:check` | Prettier 格式检查 |
 | `pnpm db:studio` | Drizzle Studio 可视化数据库 |
 | `pnpm db:migrate` | 执行数据库迁移 |
 
@@ -342,10 +344,13 @@ src-tauri/
 ### 测试
 - 测试文件放在 `__tests__/` 目录，文件名 `*.test.ts`
 - 后端集成测试用内存 SQLite（`:memory:`）
-- 运行：`pnpm test`
+- 单元/集成测试运行：`pnpm test`。当前口径为 Shared 9、Relay 18、Server 144，共 171 项；数量会随代码变化，CI 退出码才是门禁。
+- Web E2E 运行：`pnpm test:e2e`。Playwright 测试位于 `e2e/`，使用确定性 API fixture、独立 Vite 进程和失败时保留的 trace/screenshot/video，不读取或修改用户数据库。
+- E2E 当前覆盖 320/375/400×300/800/1280/1440 视口、Light/Dark × zh-CN/en、严重/致命 axe 规则、设置/搜索/目录/日志/危险确认、Onboarding 与会话恢复、群聊 A2A/导出键盘路径、移动 44px 目标和横向溢出。
+- Rust 门禁：`cargo test --manifest-path src-tauri/Cargo.toml` 与 `cargo check --manifest-path src-tauri/Cargo.toml`。当前 Rust 测试数为 0，成功只证明编译/测试入口通过，不代表原生交互已覆盖。
 - 开发模式可用 `?fixture=message-status` 检查消息投递/执行状态，用 `?fixture=load-error` 与 `?fixture=load-error&preserved=1` 检查消息加载失败和保留历史状态；这些 fixture 不进入生产主包。
 - 导出响应必须同时提供 ASCII `filename` 回退与 RFC 5987 `filename*`；测试至少覆盖中文等非 ASCII 会话标题，避免 Node 因非法响应头返回 500。
-- UI 发布检查至少覆盖 320×812、375×812、800×600、1440×900、真实 200% zoom、Light/Dark、中文/English、仅键盘焦点顺序、Dialog Escape/焦点循环/焦点返回及屏幕阅读器；短视口或 640px 等效重排只能作为布局压力测试，不能替代真实 zoom。
+- UI 发布检查至少覆盖 320×812、375×812、800×600、1440×900、真实 200% zoom、Light/Dark、中文/English、仅键盘焦点顺序、Dialog Escape/焦点循环/焦点返回及屏幕阅读器；短视口或 640px 等效重排只能作为布局压力测试，不能替代真实 zoom。axe 和键盘自动化也不能替代人工屏幕阅读器验收。
 
 ### Git 提交
 - husky pre-commit 自动运行 lint-staged
