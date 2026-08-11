@@ -1,6 +1,6 @@
 services:
-  agentlink-relay:
-    image: agentlink/relay:latest
+  chorus-relay:
+    image: chorus/relay:latest
     build:
       context: ../..
       dockerfile: packages/relay/Dockerfile

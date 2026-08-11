@@ -1,4 +1,4 @@
-import type { AgentConfig, PersistedAgentConfig } from "@agentlink/shared";
+import type { AgentConfig, PersistedAgentConfig } from "@chorus/shared";
 import {
   deleteCredential,
   getCredential,
@@ -172,7 +172,7 @@ function rowToPersistedAgent(
 }
 
 function credentialReference(agentId: string): string {
-  return `agentlink:${agentId}`;
+  return `chorus:${agentId}`;
 }
 
 function withDefaults(config: AgentConfig | PersistedAgentConfig): PersistedAgentConfig {

@@ -1,4 +1,4 @@
-import type { HubEnvelope, P2PDiscoveredHub } from "@agentlink/shared";
+import type { HubEnvelope, P2PDiscoveredHub } from "@chorus/shared";
 import WebSocket, { type RawData, WebSocketServer } from "ws";
 import { logger } from "../utils/logger.js";
 import { signEnvelope, verifySignature } from "./crypto.js";

@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { constants } from "node:fs";
 import { access } from "node:fs/promises";
 import { delimiter, isAbsolute, resolve } from "node:path";
-import type { ConversationContext, StreamChunk } from "@agentlink/shared";
+import type { ConversationContext, StreamChunk } from "@chorus/shared";
 import { BaseAdapter, messageFromError } from "../adapter";
 
 type CliInputMode = "stdin" | "argument";

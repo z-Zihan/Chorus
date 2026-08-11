@@ -1,4 +1,4 @@
-# AgentLink 跨设备通信设计 / Cross-Device Communication Design
+# Chorus 跨设备通信设计 / Cross-Device Communication Design
 
 > 最后更新 / Last updated: 2026-08-04  
 > 状态 / Status: **规范性设计（后续跨设备通信实现的唯一参考）/ Normative design and the single source of truth for future cross-device communication work**
@@ -11,9 +11,9 @@ This document consolidates and supersedes the cross-device rules previously spre
 
 ## 1. 概述与设计原则 / Overview and Design Principles
 
-AgentLink 连接不同设备上的 User、Hub 与 Agent，同时保持本地优先。单机功能不依赖 Relay；跨设备传输可使用公网 Relay、局域网 P2P，或自动选择路径的混合模式。
+Chorus 连接不同设备上的 User、Hub 与 Agent，同时保持本地优先。单机功能不依赖 Relay；跨设备传输可使用公网 Relay、局域网 P2P，或自动选择路径的混合模式。
 
-AgentLink connects users, device hubs, and agents while remaining local-first. Local use never depends on a Relay. Cross-device transport may use a public/self-hosted Relay, LAN P2P, or a hybrid path selector.
+Chorus connects users, device hubs, and agents while remaining local-first. Local use never depends on a Relay. Cross-device transport may use a public/self-hosted Relay, LAN P2P, or a hybrid path selector.
 
 ### 1.1 三种通信模式 / Three transport modes
 
@@ -330,8 +330,8 @@ Registration authenticates each Hub to the Relay. Separate mutual challenge-resp
 
 ```yaml
 services:
-  agentlink-relay:
-    image: agentlink/relay:latest
+  chorus-relay:
+    image: chorus/relay:latest
     ports: ["3211:3211"]
     volumes: ["relay-data:/data"]
     environment:
@@ -766,7 +766,7 @@ Open the collaboration settings, enter an externally reachable Relay URL, and sa
 docker run -d -p 3211:3211 \
   -e RELAY_JWT_SECRET=replace-with-a-strong-secret \
   -v relay-data:/data \
-  agentlink/relay:latest
+  chorus/relay:latest
 ```
 
 生产环境在 Relay 前配置 TLS 反向代理。/ Put a TLS reverse proxy in front of a production Relay.
@@ -918,9 +918,9 @@ These files are no longer normative for cross-device implementation. Any protoco
 
 ### 14.2 外部设计参考 / External references
 
-- [Google A2A Agent Cards](https://google.github.io/A2A/latest/specification/)：借鉴由所有者选择发布、最小且可撤销的能力卡；AgentLink 不在配对后抓取全量目录。
+- [Google A2A Agent Cards](https://google.github.io/A2A/latest/specification/)：借鉴由所有者选择发布、最小且可撤销的能力卡；Chorus 不在配对后抓取全量目录。
 - [Discord OAuth2/Bots](https://discord.com/developers/docs/topics/oauth2) 与 [Slack OAuth](https://api.slack.com/authentication/oauth-v2)：借鉴 room/workspace-first、再显式安装 bot/app 的授权顺序。
-- [Agent Client Protocol (ACP)](https://agentclientprotocol.com/)：借鉴客户端与 Agent 的明确控制边界；AgentLink 额外要求跨用户 trust、Room scope 与 owner authorization。
+- [Agent Client Protocol (ACP)](https://agentclientprotocol.com/)：借鉴客户端与 Agent 的明确控制边界；Chorus 额外要求跨用户 trust、Room scope 与 owner authorization。
 - Ed25519/X25519、XSalsa20-Poly1305 与 AES-256-GCM 的具体实现必须使用经过审计的 libsodium/平台密码库，不得自行实现密码原语。
 
-The interaction model combines opt-in A2A-style capability cards, room-first bot admission, and ACP-style ownership boundaries. AgentLink's local-first identity, E2E envelopes, scoped room agents, and Relay metadata boundary remain architecture-specific.
+The interaction model combines opt-in A2A-style capability cards, room-first bot admission, and ACP-style ownership boundaries. Chorus's local-first identity, E2E envelopes, scoped room agents, and Relay metadata boundary remain architecture-specific.

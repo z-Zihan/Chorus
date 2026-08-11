@@ -1,17 +1,17 @@
 /**
- * AgentLink Platform Skill
+ * Chorus Platform Skill
  *
  * Injected into Agent system prompts to teach them how to operate
- * within the AgentLink multi-agent workspace.
+ * within the Chorus multi-agent workspace.
  *
  * Used by:
  * - CliAdapter.buildA2ASystemPrompt() — injected as prefix
  * - OpenAIAdapter — injected into system prompt when tools are available
  */
 
-export const AGENTLINK_SKILL = `# AgentLink 平台指南
+export const CHORUS_SKILL = `# Chorus 平台指南
 
-你正在 AgentLink 多 Agent 工作台中运行。以下是平台规则和协作方式。
+你正在 Chorus 多 Agent 工作台中运行。以下是平台规则和协作方式。
 
 ## 环境说明
 
@@ -102,16 +102,16 @@ Agent A（如 Codex）应该：
 ## 安全边界
 
 - 不要尝试访问文件系统之外的资源
-- 不要尝试修改 AgentLink 平台配置
+- 不要尝试修改 Chorus 平台配置
 - 不要在回复中包含 API Key 或其他敏感信息
 - 如果用户请求超出你的能力范围，诚实告知`;
 
 /**
  * Build the A2A system prompt for CLI adapters.
- * Includes the AgentLink skill + available agent list.
+ * Includes the Chorus skill + available agent list.
  */
 export function buildA2ASystemPrompt(callableAgentIds: string[]): string {
-  return `${AGENTLINK_SKILL}
+  return `${CHORUS_SKILL}
 
 ## 当前可用的 Agent
 
@@ -127,5 +127,5 @@ ${callableAgentIds.map((id) => `- ${id}`).join("\n")}
  */
 export function buildOpenAIA2APrompt(availableAgentIds: string[]): string {
   if (availableAgentIds.length <= 1) return "";
-  return `\n${AGENTLINK_SKILL}\n\n## 当前可用的 Agent\n${availableAgentIds.map((id) => `- ${id}`).join("\n")}`;
+  return `\n${CHORUS_SKILL}\n\n## 当前可用的 Agent\n${availableAgentIds.map((id) => `- ${id}`).join("\n")}`;
 }

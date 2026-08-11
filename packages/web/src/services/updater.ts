@@ -1,9 +1,9 @@
 import type { DownloadEvent, Update } from "@tauri-apps/plugin-updater";
 
-export const UPDATE_CHANNEL_STORAGE_KEY = "agentlink-update-channel";
-export const UPDATE_AVAILABLE_EVENT = "agentlink:update-available";
+export const UPDATE_CHANNEL_STORAGE_KEY = "chorus-update-channel";
+export const UPDATE_AVAILABLE_EVENT = "chorus:update-available";
 export const UPDATE_ENDPOINT =
-  "https://releases.agentlink.app/{{target}}/{{arch}}/{{current_version}}";
+  "https://releases.chorus.app/{{target}}/{{arch}}/{{current_version}}";
 
 export type UpdateChannel = "stable" | "beta";
 export type UpdateInfo = Update;
@@ -47,8 +47,8 @@ export async function checkForUpdates(): Promise<UpdateInfo | null> {
     // The configured endpoint carries the stable query parameter. These headers let the
     // release service honor a runtime beta selection without requiring an app rebuild.
     headers: {
-      "X-AgentLink-Update-Channel": channel,
-      "X-AgentLink-Update-Endpoint": getUpdateEndpoint(channel),
+      "X-Chorus-Update-Channel": channel,
+      "X-Chorus-Update-Endpoint": getUpdateEndpoint(channel),
     },
   });
 }

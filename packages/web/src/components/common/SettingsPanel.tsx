@@ -38,7 +38,7 @@ import { announceUpdate, checkForUpdates } from "@/services/updater";
 import { track } from "@/utils/analytics";
 
 const APP_VERSION = "0.1.0";
-const HOMEPAGE_URL = "https://github.com/z-Zihan/agent-link";
+const HOMEPAGE_URL = "https://github.com/z-Zihan/Chorus";
 
 interface SettingsPanelProps {
   open: boolean;
@@ -471,7 +471,7 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
                       <span className="text-[var(--text-primary)]">{APP_VERSION}</span>
                     </div>
                     <a
-                      href="https://github.com/z-Zihan/agent-link/blob/main/docs/GUIDE.md"
+                      href="https://github.com/z-Zihan/Chorus/blob/main/docs/GUIDE.md"
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-1.5 text-[var(--accent-hover)] hover:underline"
@@ -485,7 +485,7 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
                       rel="noreferrer"
                       className="inline-flex items-center gap-1.5 text-[var(--accent-hover)] hover:underline"
                     >
-                      AgentLink
+                      Chorus
                       <ExternalLink aria-hidden="true" className="h-4 w-4" />
                     </a>
                   </div>

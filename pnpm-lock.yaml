@@ -53,7 +53,7 @@ importers:
 
   packages/relay:
     dependencies:
-      '@agentlink/shared':
+      '@chorus/shared':
         specifier: workspace:*
         version: link:../shared
       '@fastify/cors':
@@ -96,7 +96,7 @@ importers:
 
   packages/server:
     dependencies:
-      '@agentlink/shared':
+      '@chorus/shared':
         specifier: workspace:*
         version: link:../shared
       '@fastify/cors':
@@ -190,7 +190,7 @@ importers:
 
   packages/web:
     dependencies:
-      '@agentlink/shared':
+      '@chorus/shared':
         specifier: workspace:*
         version: link:../shared
       '@radix-ui/react-dialog':

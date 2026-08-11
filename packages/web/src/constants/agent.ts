@@ -1,4 +1,4 @@
-import type { AgentStatus } from "@agentlink/shared";
+import type { AgentStatus } from "@chorus/shared";
 
 export const STATUS_COLORS: Record<AgentStatus, string> = {
   online: "bg-[var(--status-online)]",

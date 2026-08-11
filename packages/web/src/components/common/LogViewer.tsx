@@ -65,7 +65,7 @@ export function LogViewer({ open, onOpenChange }: LogViewerProps) {
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = `agentlink-logs-${new Date().toISOString().replaceAll(":", "-")}.json`;
+    anchor.download = `chorus-logs-${new Date().toISOString().replaceAll(":", "-")}.json`;
     anchor.click();
     URL.revokeObjectURL(url);
   };

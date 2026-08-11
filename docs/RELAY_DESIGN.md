@@ -1,4 +1,4 @@
-# AgentLink 跨用户通信架构设计
+# Chorus 跨用户通信架构设计
 
 > 最后更新：2026-08-04
 
@@ -43,7 +43,7 @@
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│              AgentLink Desktop (Tauri)               │
+│              Chorus Desktop (Tauri)               │
 │  ┌───────────────────────────────────────────────┐  │
 │  │              Frontend (React)                  │  │
 │  │  · 连接状态指示器 (P2P/Relay/离线)            │  │
@@ -266,8 +266,8 @@ Relay API 只管理 Hub 路由和加密 Room 信封，不能决定某个用户�
 ```yaml
 # docker-compose.yml
 services:
-  agentlink-relay:
-    image: agentlink/relay:latest
+  chorus-relay:
+    image: chorus/relay:latest
     ports:
       - "3211:3211"
     volumes:
@@ -286,7 +286,7 @@ volumes:
 # 一键自部署
 docker run -d -p 3211:3211 -v relay-data:/data \
   -e RELAY_JWT_SECRET=your-secret \
-  agentlink/relay:latest
+  chorus/relay:latest
 ```
 
 ### 扩展性
@@ -358,8 +358,8 @@ interface DirectoryManifest {
 import bonjour from "bonjour-service";
 
 const service = bonjour.publish({
-  name: `agentlink-${hubId.slice(0, 8)}`,
-  type: "agentlink",
+  name: `chorus-${hubId.slice(0, 8)}`,
+  type: "chorus",
   port: 3212,           // P2P 监听端口 (独立于 3210)
   txt: {
     hubId,
@@ -369,7 +369,7 @@ const service = bonjour.publish({
 });
 
 // 发现其他 Hub
-bonjour.find({ type: "agentlink" }, (service) => {
+bonjour.find({ type: "chorus" }, (service) => {
   // service.txt.hubId → 获取公钥 → 握手 → 直连
 });
 ```
@@ -633,7 +633,7 @@ packages/
 ## 11. 配置扩展
 
 ```typescript
-// agentlink.config.ts 新增字段
+// chorus.config.ts 新增字段
 export default {
   // ... 现有配置
   hub: {
@@ -641,7 +641,7 @@ export default {
     displayName: "子涵的 Hub",
     // Relay 配置
     relay: {
-      url: "wss://relay.agentlink.app/ws",  // 官方 Relay
+      url: "wss://relay.chorus.app/ws",  // 官方 Relay
       // url: "wss://my-relay.example.com/ws", // 自部署
       token: undefined,  // 首次注册后自动填充
     },

@@ -1,7 +1,7 @@
-import type { Agent } from "@agentlink/shared";
+import type { Agent } from "@chorus/shared";
 
 /**
- * Map AgentLink identity and capabilities to standard protocols.
+ * Map Chorus identity and capabilities to standard protocols.
  *
  * Google A2A: https://github.com/google/agent2agent
  * MCP: Model Context Protocol
@@ -46,7 +46,7 @@ export interface ACPService {
 }
 
 export class StandardAdapterMapper {
-  /** Convert AgentLink Agent to Google A2A Agent Card. */
+  /** Convert Chorus Agent to Google A2A Agent Card. */
   toAgentCard(agent: Agent, baseUrl: string): StandardAgentCard {
     return {
       name: agent.name,
@@ -69,7 +69,7 @@ export class StandardAdapterMapper {
     };
   }
 
-  /** Convert AgentLink Agent to an MCP Tool definition. */
+  /** Convert Chorus Agent to an MCP Tool definition. */
   toMCPTool(agent: Agent): MCPTool {
     return {
       name: agent.id,
@@ -85,7 +85,7 @@ export class StandardAdapterMapper {
     };
   }
 
-  /** Convert AgentLink Agent to an ACP service descriptor. */
+  /** Convert Chorus Agent to an ACP service descriptor. */
   toACPService(agent: Agent, baseUrl: string): ACPService {
     return {
       serviceId: agent.id,

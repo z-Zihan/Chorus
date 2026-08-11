@@ -1,4 +1,4 @@
-import type { RoomInfo, RoomMember } from "@agentlink/shared";
+import type { RoomInfo, RoomMember } from "@chorus/shared";
 import { and, count, eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import type { DatabaseContext } from "./db/index.js";

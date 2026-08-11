@@ -9,12 +9,12 @@ import type { UserKeyPair } from "./identity/user-keys.js";
 import { logger } from "./utils/logger.js";
 
 const execFileAsync = promisify(execFile);
-const SERVICE_NAME = "AgentLink";
-const USER_KEY_IDENTIFIER = "agentlink:user-key";
-const HUB_KEY_IDENTIFIER = "agentlink:hub-key";
+const SERVICE_NAME = "Chorus";
+const USER_KEY_IDENTIFIER = "chorus:user-key";
+const HUB_KEY_IDENTIFIER = "chorus:hub-key";
 const FILE_VERSION = 1;
 const FALLBACK_FILE = resolve(
-  process.env.AGENTLINK_CREDENTIAL_FILE?.trim() || resolve(homedir(), ".agentlink", "credentials.enc"),
+  process.env.CHORUS_CREDENTIAL_FILE?.trim() || resolve(homedir(), ".chorus", "credentials.enc"),
 );
 
 type NativeBackend = "macos-keychain" | "windows-credential-manager" | "linux-libsecret";

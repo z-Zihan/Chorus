@@ -11,7 +11,7 @@ import zhErrors from "./locales/zh-CN/errors.json";
 import zhSettings from "./locales/zh-CN/settings.json";
 import zhSidebar from "./locales/zh-CN/sidebar.json";
 
-export const LANGUAGE_STORAGE_KEY = "agentlink-lang";
+export const LANGUAGE_STORAGE_KEY = "chorus-lang";
 export type AppLanguage = "zh-CN" | "en";
 
 function normalizeLanguage(language?: string | null): AppLanguage | null {

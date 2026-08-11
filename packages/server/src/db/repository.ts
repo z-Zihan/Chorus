@@ -14,7 +14,7 @@ import type {
   RoomStateEvent,
   User,
   UserWithAgents,
-} from "@agentlink/shared";
+} from "@chorus/shared";
 import { and, asc, desc, eq, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import { getUserKey, setUserKey } from "../credential-store.js";
 import { deriveUserId, generateUserKeyPair } from "../identity/user-keys.js";

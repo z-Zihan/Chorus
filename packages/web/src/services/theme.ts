@@ -1,4 +1,4 @@
-export const THEME_STORAGE_KEY = "agentlink-theme";
+export const THEME_STORAGE_KEY = "chorus-theme";
 export type ThemePreference = "dark" | "light" | "system";
 
 const systemThemeQuery = "(prefers-color-scheme: dark)";
@@ -28,7 +28,7 @@ export function applyTheme(preference: ThemePreference): void {
 export function setThemePreference(preference: ThemePreference): void {
   localStorage.setItem(THEME_STORAGE_KEY, preference);
   applyTheme(preference);
-  window.dispatchEvent(new CustomEvent("agentlink-theme-change", { detail: preference }));
+  window.dispatchEvent(new CustomEvent("chorus-theme-change", { detail: preference }));
 }
 
 export function initializeTheme(): () => void {

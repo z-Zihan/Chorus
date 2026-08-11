@@ -1,5 +1,5 @@
 import { unwatchFile, watchFile, type Stats } from "node:fs";
-import type { AppConfig } from "@agentlink/shared";
+import type { AppConfig } from "@chorus/shared";
 import { loadConfigFile } from "./config.js";
 
 export type ConfigChangeCallback = (config: AppConfig) => void | Promise<void>;

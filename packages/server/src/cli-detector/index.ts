@@ -1,4 +1,4 @@
-import type { CliDetection } from "@agentlink/shared";
+import type { CliDetection } from "@chorus/shared";
 import {
   descriptorForExecutablePath,
   detect as detectExecutables,

@@ -1,4 +1,4 @@
-import type { ClientEvent, Message } from "@agentlink/shared";
+import type { ClientEvent, Message } from "@chorus/shared";
 import i18n from "@/i18n";
 import { useUIStore } from "@/store/uiStore";
 import { track } from "@/utils/analytics";

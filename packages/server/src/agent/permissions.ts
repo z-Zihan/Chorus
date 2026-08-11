@@ -1,4 +1,4 @@
-import type { A2APolicy } from "@agentlink/shared";
+import type { A2APolicy } from "@chorus/shared";
 import type { Repository } from "../db/repository";
 
 export type A2APermissionMode = A2APolicy;

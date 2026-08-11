@@ -1,4 +1,4 @@
-import type { Agent, DirectoryManifest, User } from "@agentlink/shared";
+import type { Agent, DirectoryManifest, User } from "@chorus/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AgentRegistry } from "../agent/registry.js";
 import { createDatabase, type DatabaseContext } from "../db/index.js";

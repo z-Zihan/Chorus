@@ -1,4 +1,4 @@
-import type { AgentConfig } from "@agentlink/shared";
+import type { AgentConfig } from "@chorus/shared";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { AgentRegistry } from "../agent/registry.js";

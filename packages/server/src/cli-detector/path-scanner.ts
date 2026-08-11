@@ -3,7 +3,7 @@ import { constants as fsConstants } from "node:fs";
 import { access, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { delimiter, join } from "node:path";
-import type { CliDetectionSource } from "@agentlink/shared";
+import type { CliDetectionSource } from "@chorus/shared";
 import { CLI_DESCRIPTORS, type CliDescriptor } from "./descriptors.js";
 import { appendLimited, normalizeForComparison, throwIfAborted } from "./utils.js";
 

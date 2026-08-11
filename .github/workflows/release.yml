@@ -108,7 +108,7 @@ jobs:
             : "darwin-x86_64";
           const manifest = {
             version: process.env.RELEASE_TAG.replace(/^v/, ""),
-            notes: `AgentLink ${process.env.RELEASE_TAG}`,
+            notes: `Chorus ${process.env.RELEASE_TAG}`,
             pub_date: new Date().toISOString(),
             platforms: {
               [macPlatform]: entry(mac),

@@ -1,4 +1,4 @@
-import type { RoomCasResult, RoomCasState } from "@agentlink/shared";
+import type { RoomCasResult, RoomCasState } from "@chorus/shared";
 
 const INITIAL_ROOM_CAS_STATE: RoomCasState = { revision: 1, keyEpoch: 1 };
 

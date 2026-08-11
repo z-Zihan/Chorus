@@ -5,7 +5,7 @@ import { chmod, unlink, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { tmpdir } from "node:os";
 import { EventEmitter } from "node:events";
-import type { PersistedAgentConfig } from "@agentlink/shared";
+import type { PersistedAgentConfig } from "@chorus/shared";
 import type { AgentRegistry } from "../agent/registry.js";
 import type { CliDetector } from "../cli-detector/index.js";
 import type { CatalogService } from "./index.js";

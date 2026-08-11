@@ -1,4 +1,4 @@
-import type { Message } from "@agentlink/shared";
+import type { Message } from "@chorus/shared";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { Repository } from "../db/repository.js";

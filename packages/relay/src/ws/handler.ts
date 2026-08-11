@@ -3,7 +3,7 @@ import type {
   RelayClientMessage,
   RelayServerMessage,
   TransportReceipt,
-} from "@agentlink/shared";
+} from "@chorus/shared";
 import type { FastifyInstance } from "fastify";
 import { verifyHubToken } from "../auth.js";
 import type { HubRegistry } from "../hub-registry.js";

@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import type { P2PDiscoveredHub, HubConfig } from "@agentlink/shared";
+import type { P2PDiscoveredHub, HubConfig } from "@chorus/shared";
 import Fastify from "fastify";
 import type { FastifyBaseLogger } from "fastify";
 import cors from "@fastify/cors";
@@ -74,7 +74,7 @@ async function main(): Promise<void> {
   const registry = new AgentRegistry(repository, relayClient);
   await registry.initialize(config.agents);
   registry.startHealthChecks();
-  registry.watchConfig(resolve(rootDir, "agentlink.config.ts"));
+  registry.watchConfig(resolve(rootDir, "chorus.config.ts"));
 
   const events = new EventHub();
   const pluginLoader = new PluginLoader();
@@ -231,7 +231,7 @@ async function main(): Promise<void> {
   process.once("SIGTERM", () => void close());
 
   await app.listen({ host: "0.0.0.0", port: config.port });
-  app.log.info(`AgentLink server running on http://localhost:${config.port}`);
+  app.log.info(`Chorus server running on http://localhost:${config.port}`);
   if (!hasAgentsAtStartup) {
     void onboarding.bootstrap().catch((error) => {
       app.log.error({ err: error }, "Automatic CLI detection failed");

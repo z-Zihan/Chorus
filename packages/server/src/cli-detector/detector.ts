@@ -1,7 +1,7 @@
 import { constants as fsConstants } from "node:fs";
 import { access, realpath } from "node:fs/promises";
 import { basename } from "node:path";
-import type { CliDetection } from "@agentlink/shared";
+import type { CliDetection } from "@chorus/shared";
 import { CLI_DESCRIPTORS, type CliDescriptor } from "./descriptors.js";
 import { scanPath } from "./path-scanner.js";
 import { probeCandidate } from "./probe.js";

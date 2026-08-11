@@ -1,4 +1,4 @@
-import type { HubEnvelope } from "@agentlink/shared";
+import type { HubEnvelope } from "@chorus/shared";
 import { describe, expect, it, vi } from "vitest";
 import type { AgentRegistry } from "../agent/registry.js";
 import type { AgentRuntime } from "../agent/runtime.js";

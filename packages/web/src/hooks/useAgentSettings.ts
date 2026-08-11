@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { Agent } from "@agentlink/shared";
+import type { Agent } from "@chorus/shared";
 import { useTranslation } from "react-i18next";
 import { useAgentStore } from "@/store/agentStore";
 import { track } from "@/utils/analytics";

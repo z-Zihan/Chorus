@@ -20,7 +20,7 @@ function positiveInteger(value: string | undefined, fallback: number): number {
 
 async function main(): Promise<void> {
   const port = positiveInteger(process.env.RELAY_PORT, 3211);
-  const jwtSecret = process.env.RELAY_JWT_SECRET?.trim() || "agentlink-relay-development-secret";
+  const jwtSecret = process.env.RELAY_JWT_SECRET?.trim() || "chorus-relay-development-secret";
   const ttlDays = positiveInteger(process.env.RELAY_OFFLINE_TTL_DAYS, 7);
   const retentionMs = positiveInteger(
     process.env.RELAY_OFFLINE_RETENTION_MS,
@@ -83,7 +83,7 @@ async function main(): Promise<void> {
   process.once("SIGTERM", () => void close());
 
   await app.listen({ host: "0.0.0.0", port });
-  app.log.info({ port, dbPath }, "AgentLink relay server started");
+  app.log.info({ port, dbPath }, "Chorus relay server started");
 }
 
 main().catch((error) => {

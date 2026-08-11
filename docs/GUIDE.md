@@ -1,17 +1,17 @@
-# AgentLink 使用指南
+# Chorus 使用指南
 
 ## 1. 安装
 
 ### 桌面端（推荐）
-1. 从 [GitHub Releases](https://github.com/z-Zihan/agent-link/releases) 下载对应平台的安装包
+1. 从 [GitHub Releases](https://github.com/z-Zihan/Chorus/releases) 下载对应平台的安装包
 2. macOS: 双击 `.dmg` 拖拽安装
 3. Windows: 双击 `.msi` 或 `.exe` 安装
 4. 首次打开会自动检测本机已安装的 AI CLI
 
 ### 从源码构建
 ```bash
-git clone https://github.com/z-Zihan/agent-link.git
-cd agent-link
+git clone https://github.com/z-Zihan/Chorus.git
+cd Chorus
 pnpm install
 pnpm tauri:dev    # 开发模式
 pnpm tauri:build  # 生产构建
@@ -35,9 +35,9 @@ pnpm tauri:build  # 生产构建
 5. API Connector → 填入 API Key → 点"添加"
 
 ### 手动配置
-在项目根目录创建 `agentlink.config.ts`：
+在项目根目录创建 `chorus.config.ts`：
 ```typescript
-import type { AppConfig } from "@agentlink/shared";
+import type { AppConfig } from "@chorus/shared";
 
 export default {
   port: 3210,
@@ -91,7 +91,7 @@ PATCH /api/conversations/:id/a2a-mode
 
 ### 多用户身份
 
-AgentLink 使用三层身份模型：
+Chorus 使用三层身份模型：
 
 | 层级 | 说明 | 标识 |
 |------|------|------|
@@ -113,7 +113,7 @@ AgentLink 使用三层身份模型：
 - 披露预览（查看外部 Hub 能看到你的哪些 Agent）
 
 ### 外部 Agent 接入
-外部 Agent（如 OpenClaw）可通过 AgentLink 的 REST API 发送消息、创建会话、管理 Agent：
+外部 Agent（如 OpenClaw）可通过 Chorus 的 REST API 发送消息、创建会话、管理 Agent：
 1. `GET /api/skill` 获取完整接入指南（SKILL.md）
 2. `GET /api/agents` 发现可用 Agent
 3. `POST /api/conversations` 创建会话
@@ -123,7 +123,7 @@ AgentLink 使用三层身份模型：
 非本机访问支持 Scoped Client Token 认证（`POST /api/tokens` 创建）。
 
 ### 标准协议适配
-AgentLink 支持三种标准协议端点：
+Chorus 支持三种标准协议端点：
 - `GET /.well-known/agent-card.json` — Google A2A Agent Card
 - `GET /api/mcp/tools` — MCP Tool 列表
 - `GET /api/acp/services` — ACP 服务列表
@@ -149,7 +149,7 @@ AgentLink 支持三种标准协议端点：
 docker run -d -p 3211:3211 \
   -e RELAY_JWT_SECRET=your-secret \
   -v relay-data:/data \
-  agentlink/relay:latest
+  chorus/relay:latest
 ```
 
 ### 连接中继服务器
@@ -166,7 +166,7 @@ docker run -d -p 3211:3211 \
 同一局域网内的设备可以不通过 Relay 直接通信：
 
 1. 在 **设置 → 跨设备协作** 中开启 **P2P 直连** 开关
-2. AgentLink 会通过 mDNS 自动发现同一局域网内的其他 AgentLink 设备
+2. Chorus 会通过 mDNS 自动发现同一局域网内的其他 Chorus 设备
 3. 发现设备后会弹出确认提示，**不会自动连接**——需要你手动确认
 4. 确认后设备间建立加密 WebSocket 连接，消息直接传输，不经过第三方
 5. 在设置页可查看 P2P 连接状态（端口、已连接设备、延迟）
@@ -250,4 +250,4 @@ docker run -d -p 3211:3211 \
 添加好友会看到我的 Agent 吗？不会。配对只交换最小联系人资料。你的 Agent 默认 `private`；只有你能把自己的 `room` 或 `public` Agent 加入聊天室。No. Pairing exchanges only minimal contact information, and only you can add your agents to a room.
 
 ### 外部 Agent 怎么接入？
-AgentLink 暴露 `GET /api/skill` 端点返回完整接入文档。外部 Agent 读取后通过 REST API 操作。非本机访问支持 Token 认证。
+Chorus 暴露 `GET /api/skill` 端点返回完整接入文档。外部 Agent 读取后通过 REST API 操作。非本机访问支持 Token 认证。

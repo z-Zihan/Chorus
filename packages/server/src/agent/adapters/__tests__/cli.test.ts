@@ -1,4 +1,4 @@
-import type { A2ABusLike, ConversationContext, StreamChunk } from "@agentlink/shared";
+import type { A2ABusLike, ConversationContext, StreamChunk } from "@chorus/shared";
 import { describe, expect, it, vi } from "vitest";
 import { CliAdapter } from "../cli";
 

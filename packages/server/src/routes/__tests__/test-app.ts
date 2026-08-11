@@ -1,4 +1,4 @@
-import type { AppConfig } from "@agentlink/shared";
+import type { AppConfig } from "@chorus/shared";
 import Fastify, { type FastifyInstance } from "fastify";
 import { AgentRegistry } from "../../agent/registry";
 import { AgentRuntime } from "../../agent/runtime";

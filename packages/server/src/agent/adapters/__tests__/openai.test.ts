@@ -1,4 +1,4 @@
-import type { A2ABusLike, ConversationContext, StreamChunk } from "@agentlink/shared";
+import type { A2ABusLike, ConversationContext, StreamChunk } from "@chorus/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { OpenAIAdapter } from "../openai";
 

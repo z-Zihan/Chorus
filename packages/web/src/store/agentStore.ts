@@ -1,10 +1,10 @@
 import { create } from "zustand";
-import type { Agent, AgentConfig, AgentStatus, AgentStatusSnapshot } from "@agentlink/shared";
+import type { Agent, AgentConfig, AgentStatus, AgentStatusSnapshot } from "@chorus/shared";
 import { api } from "@/services/api";
 import { track } from "@/utils/analytics";
 import { logger } from "@/utils/logger";
 
-export type { Agent, AgentStatus } from "@agentlink/shared";
+export type { Agent, AgentStatus } from "@chorus/shared";
 
 export type AgentHealthState = "healthy" | "checking" | "unhealthy";
 

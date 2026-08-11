@@ -1,4 +1,4 @@
-import type { Agent, AgentConfig, CliDetection, Conversation, ConversationType, CreateConversationInput, HubConnectionState, Message, OnboardingStatus, RoomMember, UserWithAgents } from "@agentlink/shared";
+import type { Agent, AgentConfig, CliDetection, Conversation, ConversationType, CreateConversationInput, HubConnectionState, Message, OnboardingStatus, RoomMember, UserWithAgents } from "@chorus/shared";
 import { useUIStore } from "@/store/uiStore";
 import { getApiBaseUrl } from "./env";
 import i18n from "@/i18n";

@@ -1,5 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
-import type { AppConfig } from "@agentlink/shared";
+import type { AppConfig } from "@chorus/shared";
 import type { FastifyRequest, onRequestHookHandler } from "fastify";
 import type { ClientToken } from "../auth/token-store.js";
 import type { TokenStore } from "../auth/token-store.js";

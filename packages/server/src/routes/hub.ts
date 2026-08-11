@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import type { HubConfig, P2PDiscoveredHub } from "@agentlink/shared";
+import type { HubConfig, P2PDiscoveredHub } from "@chorus/shared";
 import type { AgentRegistry } from "../agent/registry.js";
 import { getUserKey } from "../credential-store.js";
 import type { Repository } from "../db/repository.js";

@@ -7,7 +7,7 @@ import type {
   RoomCasState,
   RoomMember,
   RoomInfo,
-} from "@agentlink/shared";
+} from "@chorus/shared";
 import WebSocket, { type RawData } from "ws";
 import { logger } from "../utils/logger.js";
 

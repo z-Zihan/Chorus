@@ -1,6 +1,6 @@
 import { isAbsolute, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import type { ConversationContext, StreamChunk } from "@agentlink/shared";
+import type { ConversationContext, StreamChunk } from "@chorus/shared";
 import { BaseAdapter } from "../adapter.js";
 
 export interface LangChainAdapterConfig {
@@ -105,7 +105,7 @@ export class LangChainAdapter extends BaseAdapter {
         ? runnableScript
         : pathToFileURL(isAbsolute(runnableScript) ? runnableScript : resolve(runnableScript)).href;
       // TODO: Replace this structural loader with the official LangChain Runnable loader when
-      // AgentLink adopts LangChain as an optional dependency.
+      // Chorus adopts LangChain as an optional dependency.
       const module = await import(scriptUrl) as Record<string, unknown>;
       const candidate = module.default ?? module.runnable;
       this.runnable = typeof candidate === "function"

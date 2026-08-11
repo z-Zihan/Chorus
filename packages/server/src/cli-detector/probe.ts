@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import type { CliDetection, CliReadiness } from "@agentlink/shared";
+import type { CliDetection, CliReadiness } from "@chorus/shared";
 import type { CliDescriptor } from "./descriptors.js";
 import type { ExecutableCandidate } from "./path-scanner.js";
 import {

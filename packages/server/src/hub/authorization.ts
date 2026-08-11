@@ -1,4 +1,4 @@
-import type { HubPayload } from "@agentlink/shared";
+import type { HubPayload } from "@chorus/shared";
 import type { Repository } from "../db/repository.js";
 import type { TrustStore } from "./trust-store.js";
 

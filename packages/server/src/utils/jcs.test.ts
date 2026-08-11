@@ -1,4 +1,4 @@
-import { canonicalize } from "@agentlink/shared";
+import { canonicalize } from "@chorus/shared";
 import { describe, expect, it } from "vitest";
 
 describe("RFC 8785 JCS", () => {

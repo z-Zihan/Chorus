@@ -1,4 +1,4 @@
-import type { HubPayload } from "@agentlink/shared";
+import type { HubPayload } from "@chorus/shared";
 
 /** Normalize a supported legacy payload into the v2 shape used internally. */
 export function normalizeHubPayload(raw: Record<string, unknown>): HubPayload {

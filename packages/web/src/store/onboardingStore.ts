@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { OnboardingStatus } from "@agentlink/shared";
+import type { OnboardingStatus } from "@chorus/shared";
 import { api } from "@/services/api";
 import { logger } from "@/utils/logger";
 

@@ -1,5 +1,5 @@
 import _sodium from "libsodium-wrappers";
-import { canonicalize } from "@agentlink/shared";
+import { canonicalize } from "@chorus/shared";
 
 let initialized = false;
 

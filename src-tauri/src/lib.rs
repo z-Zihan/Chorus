@@ -116,7 +116,7 @@ pub fn run() {
         .setup(|app| {
             let log_dir = app.path().app_log_dir()?;
             std::fs::create_dir_all(&log_dir)?;
-            let file_appender = tracing_appender::rolling::never(log_dir, "agentlink.log");
+            let file_appender = tracing_appender::rolling::never(log_dir, "chorus.log");
             let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
             let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
@@ -126,7 +126,7 @@ pub fn run() {
                 .with_writer(non_blocking)
                 .try_init();
             app.manage(TracingState { _guard: guard });
-            tracing::info!("AgentLink application started");
+            tracing::info!("Chorus application started");
 
             let show_window = MenuItem::with_id(
                 app,
@@ -198,5 +198,5 @@ pub fn run() {
             }
         })
         .run(tauri::generate_context!())
-        .expect("error while running AgentLink");
+        .expect("error while running Chorus");
 }

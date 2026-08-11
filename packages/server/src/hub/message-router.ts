@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { ConversationContext, HubEnvelope, HubPayload } from "@agentlink/shared";
+import type { ConversationContext, HubEnvelope, HubPayload } from "@chorus/shared";
 import type { AgentRegistry } from "../agent/registry.js";
 import type { AgentRuntime } from "../agent/runtime.js";
 import type { Repository } from "../db/repository.js";

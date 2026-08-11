@@ -1,4 +1,4 @@
-import type { AgentAdapter, ConversationContext, StreamChunk } from "@agentlink/shared";
+import type { AgentAdapter, ConversationContext, StreamChunk } from "@chorus/shared";
 import { BaseAdapter } from "../agent/adapter.js";
 import { MCPClient } from "./client.js";
 

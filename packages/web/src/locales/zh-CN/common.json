@@ -1,5 +1,5 @@
 {
-  "appName": "AgentLink",
+  "appName": "Chorus",
   "loading": "加载中…",
   "buttons": {
     "save": "保存",
@@ -130,7 +130,7 @@
     "apiKeyPlaceholder": "输入 API 密钥",
     "installMethod": "安装方式",
     "confirmTitle": "确认安装",
-    "confirmDescription": "AgentLink 将运行以下命令，请确认后继续。",
+    "confirmDescription": "Chorus 将运行以下命令，请确认后继续。",
     "noCommand": "不会运行命令，连接器将在本地完成配置。",
     "cancelInstall": "取消安装",
     "back": "返回目录",

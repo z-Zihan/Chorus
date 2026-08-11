@@ -7,7 +7,7 @@ import { useChatStore } from "@/store/chatStore";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { openTerminal } from "@/services/terminal";
 
-const INSTALLATION_GUIDE_URL = "https://github.com/z-Zihan/agent-link#安装与运行";
+const INSTALLATION_GUIDE_URL = "https://github.com/z-Zihan/Chorus#安装与运行";
 const KNOWN_ERROR_CODES = new Set([
   "PROBE_TIMEOUT",
   "CLI_NOT_FOUND",

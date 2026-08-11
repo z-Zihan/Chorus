@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { ClientEvent, Conversation, ConversationType, Message } from "@agentlink/shared";
+import type { ClientEvent, Conversation, ConversationType, Message } from "@chorus/shared";
 import { api } from "@/services/api";
 import { useAgentStore } from "@/store/agentStore";
 import { StreamManager } from "@/store/streamManager";
@@ -8,7 +8,7 @@ import i18n from "@/i18n";
 import { track } from "@/utils/analytics";
 import { logger } from "@/utils/logger";
 
-export type { Conversation, Message } from "@agentlink/shared";
+export type { Conversation, Message } from "@chorus/shared";
 
 type WebSocketSend = (event: ClientEvent) => boolean;
 

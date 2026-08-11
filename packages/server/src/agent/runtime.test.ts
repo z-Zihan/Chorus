@@ -1,4 +1,4 @@
-import type { AppConfig } from "@agentlink/shared";
+import type { AppConfig } from "@chorus/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDatabase, type DatabaseContext } from "../db";
 import { Repository } from "../db/repository";

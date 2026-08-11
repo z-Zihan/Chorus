@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import type { ClientEvent, Message, ServerEvent } from "@agentlink/shared";
+import type { ClientEvent, Message, ServerEvent } from "@chorus/shared";
 import { useChatStore } from "@/store/chatStore";
 import { useAgentStore } from "@/store/agentStore";
 import { getWsUrl } from "@/services/env";

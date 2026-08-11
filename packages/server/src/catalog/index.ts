@@ -1,4 +1,4 @@
-import type { CliDetection } from "@agentlink/shared";
+import type { CliDetection } from "@chorus/shared";
 import type { CliDetector } from "../cli-detector/index.js";
 import type { AgentRegistry } from "../agent/registry.js";
 import { defaultCatalog } from "./default-catalog.js";

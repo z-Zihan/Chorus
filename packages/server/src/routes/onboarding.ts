@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { OnboardingStatus } from "@agentlink/shared";
+import type { OnboardingStatus } from "@chorus/shared";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { AgentRegistry } from "../agent/registry.js";

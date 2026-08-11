@@ -1,4 +1,4 @@
-# AgentLink — 开发者指南
+# Chorus — 开发者指南
 
 > 面向贡献者的项目结构、启动方式和开发注意事项。
 
@@ -13,8 +13,8 @@
 ### 安装与运行
 
 ```bash
-git clone https://github.com/z-Zihan/agent-link.git
-cd agent-link
+git clone https://github.com/z-Zihan/Chorus.git
+cd Chorus
 pnpm install
 
 # Web 开发模式（浏览器调试）
@@ -43,7 +43,7 @@ pnpm tauri:build     # 构建桌面端安装包
 ## 项目结构
 
 ```
-agentlink/
+Chorus/
 ├── packages/
 │   ├── shared/              # 前后端共享类型和工具
 │   ├── server/              # 后端服务（Node.js + Fastify）
@@ -51,7 +51,7 @@ agentlink/
 │   └── relay/               # 中继服务器（独立部署）
 ├── src-tauri/               # Tauri 桌面端（Rust）
 ├── docs/                    # 文档
-├── agentlink.config.ts      # Agent 配置（可选，零配置也能用）
+├── chorus.config.ts      # Agent 配置（可选，零配置也能用）
 └── .env.example             # 环境变量示例
 ```
 
@@ -90,7 +90,7 @@ server/src/
 │   ├── persistence.ts    # Agent 配置持久化（DB 读写）
 │   ├── permissions.ts    # A2A 权限系统（auto/confirm/deny）
 │   ├── metrics.ts        # Agent 调用指标（次数、延迟、错误率）
-│   ├── agentlink-skill.ts # 注入 Agent 的平台使用指南
+│   ├── chorus-skill.ts # 注入 Agent 的平台使用指南
 │   └── adapters/         # 具体适配器
 │       ├── openai.ts     # OpenAI API（支持 tool-calling A2A）
 │       ├── cli.ts        # CLI 工具（Claude Code、Codex 等，支持 prompt-based A2A）

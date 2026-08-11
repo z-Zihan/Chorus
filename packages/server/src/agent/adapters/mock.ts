@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { ConversationContext, StreamChunk } from "@agentlink/shared";
+import type { ConversationContext, StreamChunk } from "@chorus/shared";
 import { BaseAdapter } from "../adapter";
 
 const sleep = (ms: number, signal?: AbortSignal) => new Promise<void>((resolve, reject) => {
@@ -117,5 +117,5 @@ function buildReply(message: string): string {
   if (/你好|hello|hi\b/i.test(message)) {
     return "你好，我是 **Link**。我已连接本地会话与实时消息通道。\n\n你可以让我解释问题、生成代码示例，或输入“帮我审查这个 PR”查看 A2A 调用链。";
   }
-  return `收到你的消息：\n\n> ${message}\n\n这是来自 Mock Adapter 的流式回复。你可以在 \`agentlink.config.ts\` 中切换为 OpenAI Adapter。\n\n\`\`\`ts\nconst status = \"ready\";\nconsole.log(status);\n\`\`\``;
+  return `收到你的消息：\n\n> ${message}\n\n这是来自 Mock Adapter 的流式回复。你可以在 \`chorus.config.ts\` 中切换为 OpenAI Adapter。\n\n\`\`\`ts\nconst status = \"ready\";\nconsole.log(status);\n\`\`\``;
 }

@@ -1,4 +1,4 @@
-import type { HubEnvelope, RelayServerMessage } from "@agentlink/shared";
+import type { HubEnvelope, RelayServerMessage } from "@chorus/shared";
 import type { HubRegistry } from "./hub-registry.js";
 import type { OfflineStore } from "./offline-store.js";
 import type { RoomManager } from "./room-manager.js";

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { Agent, Conversation, RoomMember } from "@agentlink/shared";
+import type { Agent, Conversation, RoomMember } from "@chorus/shared";
 import { Plus, User, UserMinus, Users } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { AgentAvatar } from "@/components/agent/AgentAvatar";

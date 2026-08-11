@@ -1,4 +1,4 @@
-import type { P2PDiscoveredHub } from "@agentlink/shared";
+import type { P2PDiscoveredHub } from "@chorus/shared";
 import Bonjour, { type Browser, type Service } from "bonjour-service";
 import { logger } from "../utils/logger.js";
 
@@ -17,12 +17,12 @@ export class P2PDiscovery {
     this.localHubId = hubId;
     this.bonjour = new Bonjour();
     this.service = this.bonjour.publish({
-      name: `agentlink-${hubId.slice(0, 8)}`,
-      type: "agentlink",
+      name: `chorus-${hubId.slice(0, 8)}`,
+      type: "chorus",
       port,
       txt: { hubId, publicKey, displayName, version: "1.0" },
     });
-    this.browser = this.bonjour.find({ type: "agentlink" });
+    this.browser = this.bonjour.find({ type: "chorus" });
     this.browser.on("up", (service) => this.handleService(service));
     this.browser.on("down", (service) => {
       const hubId = stringValue(service.txt?.hubId);

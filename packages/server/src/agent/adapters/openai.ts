@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
-import type { ConversationContext, StreamChunk } from "@agentlink/shared";
+import type { ConversationContext, StreamChunk } from "@chorus/shared";
 import { BaseAdapter, messageFromError } from "../adapter";
-import { buildOpenAIA2APrompt } from "../agentlink-skill";
+import { buildOpenAIA2APrompt } from "../chorus-skill";
 
 interface OpenAIToolCall {
   id: string;

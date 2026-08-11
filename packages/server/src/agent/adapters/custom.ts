@@ -1,4 +1,4 @@
-import type { ConversationContext, Message, StreamChunk } from "@agentlink/shared";
+import type { ConversationContext, Message, StreamChunk } from "@chorus/shared";
 import { BaseAdapter } from "../adapter";
 
 export interface CustomAdapterConfig {

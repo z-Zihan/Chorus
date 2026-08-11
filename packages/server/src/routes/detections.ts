@@ -1,4 +1,4 @@
-import type { Agent, CliDetection, PersistedAgentConfig } from "@agentlink/shared";
+import type { Agent, CliDetection, PersistedAgentConfig } from "@chorus/shared";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import type { AgentRegistry } from "../agent/registry.js";

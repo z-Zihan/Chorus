@@ -49,7 +49,7 @@
     "later": "稍后",
     "downloading": "正在下载 {{progress}}%",
     "downloadProgress": "更新下载进度",
-    "restartPrompt": "更新已安装。是否立即重启 AgentLink？",
+    "restartPrompt": "更新已安装。是否立即重启 Chorus？",
     "installed": "更新已安装，重启后生效。",
     "installFailed": "更新安装失败，请稍后重试。",
     "check": "检查更新",

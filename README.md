@@ -1,10 +1,10 @@
-# AgentLink
+# Chorus
 
 > 让 AI Agent 像人一样交流——不止你和 Agent 聊，Agent 之间也能协作，一个本地优先的 Agent 通信工作台。
 
 ## 产品介绍
 
-AI CLI 越来越强，但它们彼此隔离——切换工具靠开终端，协作靠复制粘贴，跨设备更是无从谈起。AgentLink 想解决这个问题。
+AI CLI 越来越强，但它们彼此隔离——切换工具靠开终端，协作靠复制粘贴，跨设备更是无从谈起。Chorus 想解决这个问题。
 
 **三层能力，层层递进：**
 
@@ -12,16 +12,16 @@ AI CLI 越来越强，但它们彼此隔离——切换工具靠开终端，协�
 打开应用自动发现已安装的 AI CLI，一个界面管理和使用它们。不写配置、不记命令，像用即时通讯工具一样聊天、查历史、管理会话。
 
 **第二层：Agent 间通信（已实现）**
-这是 AgentLink 的核心方向。三种 A2A 模式可切换：`@mention` 异步转发（Agent 回复中 @了其他 Agent → 自动转发）、`A2A_CALL` 同步调用（调用方拿到返回值继续推理）、`off` 关闭。也可以创建群聊，多个 Agent 在同一会话中协作。
+这是 Chorus 的核心方向。三种 A2A 模式可切换：`@mention` 异步转发（Agent 回复中 @了其他 Agent → 自动转发）、`A2A_CALL` 同步调用（调用方拿到返回值继续推理）、`off` 关闭。也可以创建群聊，多个 Agent 在同一会话中协作。
 
 **第三层：跨设备、跨人的 Agent 协作（已实现）**
 你的 Agent 不仅能和本机其他 Agent 协作，还能和**同事电脑上的 Agent** 直接通信。通过自托管 Relay 服务器中转，端到端加密，数据不经第三方。
 
-**管理 CLI 只是手段，让 Agent 之间能交流、能协作、能跨设备跨人协作，才是 AgentLink 要做的事。**
+**管理 CLI 只是手段，让 Agent 之间能交流、能协作、能跨设备跨人协作，才是 Chorus 要做的事。**
 
 ## 愿景
 
-AgentLink 坚持 local-first：聊天记录默认保存在本机，CLI 在本机运行，用户可以自由选择模型供应商，并在需要远程协作时部署自己的 Relay。它不是一个新的模型，而是连接用户、AI CLI 与 Agent 工作流的通信层。
+Chorus 坚持 local-first：聊天记录默认保存在本机，CLI 在本机运行，用户可以自由选择模型供应商，并在需要远程协作时部署自己的 Relay。它不是一个新的模型，而是连接用户、AI CLI 与 Agent 工作流的通信层。
 
 最终目标：不只是管理 CLI，而是让 Agent 之间能交流、能协作、能跨设备跨人协作。
 
@@ -53,7 +53,7 @@ AgentLink 坚持 local-first：聊天记录默认保存在本机，CLI 在本机
 - 📡 **签名目录发现**：Hub 间交换签名 Agent 目录，支持版本/TTL/撤销、可见性过滤（trusted/room/public）。
 - 📮 **离线消息**：queued → delivered → accepted/denied → done/error 状态机，TTL 7 天，幂等投递。
 - 🔌 **标准协议适配**：Agent 能力映射到 Google A2A Agent Card、MCP Tool、ACP Service。
-- 🛠️ **外部 Agent 接入**：通过 `GET /api/skill` 发现 AgentLink，REST API 完整接入，Scoped Client Token 认证。
+- 🛠️ **外部 Agent 接入**：通过 `GET /api/skill` 发现 Chorus，REST API 完整接入，Scoped Client Token 认证。
 - 🛡️ **Relay 加固**：消息大小限制、频率限制、房间容量限制、保留策略，全部可配置。
 
 ## 产品预览
@@ -65,13 +65,13 @@ AgentLink 坚持 local-first：聊天记录默认保存在本机，CLI 在本机
 准备 Node.js 22 LTS、pnpm 9，以及至少一个已安装并登录的受支持 AI CLI。
 
 ```bash
-git clone https://github.com/z-Zihan/agent-link.git
-cd agent-link
+git clone https://github.com/z-Zihan/Chorus.git
+cd Chorus
 pnpm install
 pnpm tauri:dev
 ```
 
-AgentLink 启动后会自动扫描本机 CLI。选择检测到的 Agent，即可开始对话，无需先编写配置文件。
+Chorus 启动后会自动扫描本机 CLI。选择检测到的 Agent，即可开始对话，无需先编写配置文件。
 
 也可以只启动 Web 界面与本地服务：
 
@@ -103,7 +103,7 @@ Windows 打包细节见 [Windows 构建指南](docs/WINDOWS_BUILD.md)。
     │ P2P 直连  │          │
     │(局域网)  │          │
 ┌────────┐       │       ┌──────────────────────┐
-│  用户  │ ────▶│────────│ AgentLink 桌面端      │
+│  用户  │ ────▶│────────│ Chorus 桌面端      │
 └────────┘       │       │  · 统一聊天界面        │
                  │       │  · Agent 间 A2A 通信   │
                  │       │  · 本地 SQLite 持久化  │
@@ -115,7 +115,7 @@ Windows 打包细节见 [Windows 构建指南](docs/WINDOWS_BUILD.md)。
   (本机 CLI)  (本机 CLI)    OpenAI / GLM   Aider / Gemini…
 ```
 
-AgentLink 统一不同 Agent 的消息格式、流式输出与状态管理。CLI 以当前系统用户权限在本机执行；模型请求是否联网以及数据如何处理，取决于所选择的 CLI 或 API 服务商。
+Chorus 统一不同 Agent 的消息格式、流式输出与状态管理。CLI 以当前系统用户权限在本机执行；模型请求是否联网以及数据如何处理，取决于所选择的 CLI 或 API 服务商。
 
 ## 支持的 AI CLI
 
@@ -139,7 +139,7 @@ AgentLink 统一不同 Agent 的消息格式、流式输出与状态管理。CLI
 | API Connector | DeepSeek API | OpenAI-compatible API |
 | API Connector | GLM API | OpenAI-compatible API |
 
-AgentLink 不包含上述工具或模型本身。使用前请根据对应服务商的要求完成安装、登录或 API 凭据配置。
+Chorus 不包含上述工具或模型本身。使用前请根据对应服务商的要求完成安装、登录或 API 凭据配置。
 
 ## 自托管 Relay
 
@@ -161,14 +161,14 @@ curl http://localhost:3211/api/health
 
 ## 配置
 
-自动发现可以满足大多数场景。需要手动指定命令或参数时，可在项目根目录使用 `agentlink.config.ts`：
+自动发现可以满足大多数场景。需要手动指定命令或参数时，可在项目根目录使用 `chorus.config.ts`：
 
 ```typescript
-import type { AppConfig } from "@agentlink/shared";
+import type { AppConfig } from "@chorus/shared";
 
 export default {
   port: 3210,
-  dbPath: "./data/agentlink.db",
+  dbPath: "./data/chorus.db",
   agents: [
     {
       id: "claude",
@@ -185,25 +185,25 @@ export default {
 } satisfies AppConfig;
 ```
 
-不要将 API Key 或其他敏感信息提交到 Git。AgentLink 使用系统级钥匙串（macOS Keychain / Windows Credential Manager / Linux libsecret）保护 API 凭据，不明文存入数据库。
+不要将 API Key 或其他敏感信息提交到 Git。Chorus 使用系统级钥匙串（macOS Keychain / Windows Credential Manager / Linux libsecret）保护 API 凭据，不明文存入数据库。
 
 ## FAQ
 
-### AgentLink 会上传我的聊天记录吗？
+### Chorus 会上传我的聊天记录吗？
 
-聊天记录默认保存在本机 SQLite，AgentLink 不会因为本地使用而自动将记录上传到自己的云端。但你选择的 AI CLI 或 API 可能会把提示词发送给其服务商，请同时阅读对应服务的隐私政策。
+聊天记录默认保存在本机 SQLite，Chorus 不会因为本地使用而自动将记录上传到自己的云端。但你选择的 AI CLI 或 API 可能会把提示词发送给其服务商，请同时阅读对应服务的隐私政策。
 
 ### 可以完全离线使用吗？
 
-AgentLink 的界面、本地服务和历史记录可以离线运行。具体 Agent 能否离线工作取决于它自身；本地模型可以离线，云端 CLI 与 API 通常需要网络连接。
+Chorus 的界面、本地服务和历史记录可以离线运行。具体 Agent 能否离线工作取决于它自身；本地模型可以离线，云端 CLI 与 API 通常需要网络连接。
 
-### AgentLink 和 ChatGPT 有什么不同？
+### Chorus 和 ChatGPT 有什么不同？
 
-ChatGPT 是模型与云端助手产品；AgentLink 是本机 Agent 的管理和通信层。它不提供新的基础模型，而是统一已有 CLI、API Connector、会话和协作体验。
+ChatGPT 是模型与云端助手产品；Chorus 是本机 Agent 的管理和通信层。它不提供新的基础模型，而是统一已有 CLI、API Connector、会话和协作体验。
 
-### 使用 AgentLink 还需要安装 AI CLI 吗？
+### 使用 Chorus 还需要安装 AI CLI 吗？
 
-需要。AgentLink 会发现并连接本机已有的 CLI，但不包含这些工具本身。也可以不安装 CLI，直接配置支持的 API Connector。
+需要。Chorus 会发现并连接本机已有的 CLI，但不包含这些工具本身。也可以不安装 CLI，直接配置支持的 API Connector。
 
 ### CLI 能访问我的文件吗？
 
@@ -213,11 +213,11 @@ CLI 以当前系统用户权限运行，其文件与命令权限由 CLI 自身�
 
 多 Agent 群聊、A2A 通信（@mention 转发 + A2A_CALL 同步调用）、跨设备协作均已实现。跨设备协作可通过 Relay（跨网络）或 P2P 直连（同一局域网）。支持多用户身份体系、信任管理、签名目录发现，不同用户的 Agent 可以互相发现和协作。
 
-### 外部 Agent 怎么接入 AgentLink？
+### 外部 Agent 怎么接入 Chorus？
 
-AgentLink 启动后暴露 `GET /api/skill` 端点，返回完整的 Platform Skill 文档（Markdown 格式）。外部 Agent 读取该文档后即可通过 REST API 发送消息、创建会话、管理 Agent。非本机访问支持 Scoped Client Token 认证。
+Chorus 启动后暴露 `GET /api/skill` 端点，返回完整的 Platform Skill 文档（Markdown 格式）。外部 Agent 读取该文档后即可通过 REST API 发送消息、创建会话、管理 Agent。非本机访问支持 Scoped Client Token 认证。
 
-### AgentLink 支持哪些标准协议？
+### Chorus 支持哪些标准协议？
 
 Agent 能力可映射到 Google A2A Agent Card（`/.well-known/agent-card.json`）、MCP Tool 列表（`/api/mcp/tools`）、ACP 服务列表（`/api/acp/services`）。
 

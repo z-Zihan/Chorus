@@ -43,9 +43,9 @@ describe("config migration", () => {
     expect(hasExistingConfig()).toBe(false);
   });
 
-  it("continues to load an existing agentlink.config.ts", async () => {
-    temporaryDirectory = await mkdtemp(join(tmpdir(), "agentlink-config-"));
-    let configPath = join(temporaryDirectory, "agentlink.config.ts");
+  it("continues to load an existing chorus.config.ts", async () => {
+    temporaryDirectory = await mkdtemp(join(tmpdir(), "chorus-config-"));
+    let configPath = join(temporaryDirectory, "chorus.config.ts");
     await writeFile(
       configPath,
       `export default {
@@ -55,7 +55,7 @@ describe("config migration", () => {
       "utf8",
     );
     process.chdir(temporaryDirectory);
-    configPath = join(process.cwd(), "agentlink.config.ts");
+    configPath = join(process.cwd(), "chorus.config.ts");
     mockedExistsSync.mockImplementation((path) => String(path) === configPath);
 
     expect(hasExistingConfig()).toBe(true);
@@ -73,9 +73,9 @@ describe("config migration", () => {
 
 describe("resolveAppDataDir", () => {
   it.each([
-    ["darwin", join(homedir(), "Library", "Application Support", "AgentLink")],
-    ["win32", join("C:\\Users\\agent\\AppData\\Roaming", "AgentLink")],
-    ["linux", join("/var/lib/agent", "agentlink")],
+    ["darwin", join(homedir(), "Library", "Application Support", "Chorus")],
+    ["win32", join("C:\\Users\\agent\\AppData\\Roaming", "Chorus")],
+    ["linux", join("/var/lib/agent", "chorus")],
   ] as const)("returns the platform data directory on %s", (platform, expected) => {
     vi.spyOn(process, "platform", "get").mockReturnValue(platform);
     vi.stubEnv("APPDATA", platform === "win32" ? "C:\\Users\\agent\\AppData\\Roaming" : "");

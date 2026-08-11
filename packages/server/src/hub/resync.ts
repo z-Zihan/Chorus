@@ -6,7 +6,7 @@ import type {
   ResyncResponsePayload,
   RoomMember,
   RoomStateEvent,
-} from "@agentlink/shared";
+} from "@chorus/shared";
 import type { Repository } from "../db/repository.js";
 import { isOwnerProof, verifyOwnerProof } from "./owner-proof.js";
 

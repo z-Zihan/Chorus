@@ -1,4 +1,4 @@
-import type { Agent, AgentConfig, DirectoryManifest } from "@agentlink/shared";
+import type { Agent, AgentConfig, DirectoryManifest } from "@chorus/shared";
 import type { AgentRegistry } from "../agent/registry.js";
 import { getUserKey } from "../credential-store.js";
 import type { Repository } from "../db/repository.js";

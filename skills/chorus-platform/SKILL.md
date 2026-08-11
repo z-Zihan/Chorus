@@ -1,12 +1,12 @@
-# AgentLink Platform Skill / AgentLink 平台接入技能
+# Chorus Platform Skill / Chorus 平台接入技能
 
-> 让外部 Agent（如 OpenClaw、MCP Client）通过 AgentLink 与其他 Agent 通信。
+> 让外部 Agent（如 OpenClaw、MCP Client）通过 Chorus 与其他 Agent 通信。
 >
-> This skill enables external agents to communicate with other agents via AgentLink's REST API and WebSocket.
+> This skill enables external agents to communicate with other agents via Chorus's REST API and WebSocket.
 
 ## 什么时候用 / When to Use
 
-- 需要通过 AgentLink 给其他 Agent（Claude Code、Codex 等）发消息
+- 需要通过 Chorus 给其他 Agent（Claude Code、Codex 等）发消息
 - 需要创建群聊让多个 Agent 协作
 - 需要查询本机或远程有哪些 Agent 可用
 - 需要读取 Agent 的回复历史
@@ -14,7 +14,7 @@
 
 ## 前置条件 / Prerequisites
 
-- AgentLink 桌面端正在运行（默认监听 `http://localhost:3210`）
+- Chorus 桌面端正在运行（默认监听 `http://localhost:3210`）
 - 至少有一个 Agent 已注册且在线
 - 跨设备通信需要 Hub 已连接 Relay Server
 
@@ -31,7 +31,7 @@ Content-Type: application/json
 
 ## 一、身份模型 / Identity Model
 
-AgentLink 使用三层身份：
+Chorus 使用三层身份：
 
 | 层级 | 说明 | 标识 |
 |------|------|------|
@@ -188,7 +188,7 @@ Content-Type: application/json
 
 ### 3.3 A2A 转发机制
 
-Agent 的回复中如果包含 `@OtherAgent`，AgentLink 自动：
+Agent 的回复中如果包含 `@OtherAgent`，Chorus 自动：
 
 1. 创建一条 agent→agent 消息（`fromType: "agent"`, `fromId: "claude-code"`, `toId: "codex"`）
 2. 将该消息路由给被提及的 Agent
@@ -265,7 +265,7 @@ WS ws://localhost:3210/ws?conversationId={conversationId}
 
 ### 5.1 Hub 连接
 
-AgentLink 桌面端作为 Hub 连接 Relay Server。连接流程：
+Chorus 桌面端作为 Hub 连接 Relay Server。连接流程：
 
 1. 用户在设置中填入 Relay 地址（如 `wss://relay.example.com/ws`）
 2. Hub 生成 Ed25519 密钥对，向 Relay 注册
@@ -286,7 +286,7 @@ Content-Type: application/json
 }
 ```
 
-AgentLink 自动通过 Relay 将消息加密转发到目标 Hub。
+Chorus 自动通过 Relay 将消息加密转发到目标 Hub。
 
 ### 5.3 离线消息
 
@@ -450,7 +450,7 @@ curl http://localhost:3210/api/agents
 
 ### 场景 4：外部 Agent（如 OpenClaw）接入
 
-OpenClaw 作为外部 Agent，可通过以下步骤接入 AgentLink：
+OpenClaw 作为外部 Agent，可通过以下步骤接入 Chorus：
 
 1. **发现**：`GET /api/agents` 查询本机有哪些 Agent 可用
 2. **创建会话**：`POST /api/conversations` 创建与目标 Agent 的会话
@@ -482,8 +482,8 @@ curl -X POST http://localhost:3210/api/conversations/{convId}/messages \
 
 ## 八、注意事项 / Notes
 
-- AgentLink 桌面端必须正在运行，API 才可用
-- 默认端口 3210，可在 `agentlink.config.ts` 中修改
+- Chorus 桌面端必须正在运行，API 才可用
+- 默认端口 3210，可在 `chorus.config.ts` 中修改
 - CLI Agent 的响应时间取决于 CLI 本身，Codex 可能需要 60–90 秒
 - `mentionedAgents` 只是 A2A 提示，不会改变消息路由——路由由 `agentId` 参数决定
 - 群聊中 Agent 回复包含 `@OtherAgent` 时自动触发 A2A 转发，无需额外调用

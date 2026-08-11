@@ -1,4 +1,4 @@
-import type { ConversationContext, StreamChunk } from "@agentlink/shared";
+import type { ConversationContext, StreamChunk } from "@chorus/shared";
 import { BaseAdapter } from "../adapter";
 
 export interface DifyAdapterConfig {

@@ -43,7 +43,7 @@ export class MCPClient {
       await this.request("initialize", {
         protocolVersion: "2025-03-26",
         capabilities: {},
-        clientInfo: { name: "agentlink", version: "0.3.0" },
+        clientInfo: { name: "chorus", version: "0.3.0" },
       });
       this.notify("notifications/initialized", {});
       // TODO: Negotiate all MCP protocol versions and server capabilities through the official SDK.

@@ -1,5 +1,5 @@
 {
-  "appName": "AgentLink",
+  "appName": "Chorus",
   "loading": "Loading…",
   "buttons": {
     "save": "Save",
@@ -124,14 +124,14 @@
     "failed": "Installation failed",
     "success": "Agent installed successfully",
     "added": "Agent added",
-    "verificationFailed": "The Agent was added, but AgentLink could not confirm it. Please refresh and try again.",
+    "verificationFailed": "The Agent was added, but Chorus could not confirm it. Please refresh and try again.",
     "permissions": "Permissions",
     "homepage": "Homepage",
     "apiKey": "API key",
     "apiKeyPlaceholder": "Enter API key",
     "installMethod": "Install method",
     "confirmTitle": "Confirm installation",
-    "confirmDescription": "AgentLink will run the following command. Review it before continuing.",
+    "confirmDescription": "Chorus will run the following command. Review it before continuing.",
     "noCommand": "No command will be run. The connector will be configured locally.",
     "cancelInstall": "Cancel installation",
     "back": "Back to catalog",

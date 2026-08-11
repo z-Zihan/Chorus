@@ -1,4 +1,4 @@
-import type { HubConnectionState } from "@agentlink/shared";
+import type { HubConnectionState } from "@chorus/shared";
 import { create } from "zustand";
 import { api, type HubPeerStatus } from "@/services/api";
 import { logger } from "@/utils/logger";

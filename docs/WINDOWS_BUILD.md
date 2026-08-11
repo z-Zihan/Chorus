@@ -14,8 +14,8 @@
 
 ```powershell
 # 1. 克隆仓库
-git clone https://github.com/z-Zihan/agent-link.git
-cd agent-link
+git clone https://github.com/z-Zihan/Chorus.git
+cd Chorus
 
 # 2. 安装依赖
 pnpm install
@@ -38,9 +38,9 @@ pnpm tauri build
 ```
 src-tauri/target/release/bundle/
 ├── msi/
-│   └── AgentLink_0.1.0_x64_en-US.msi    # MSI 安装包
+│   └── Chorus_0.1.0_x64_en-US.msi    # MSI 安装包
 └── nsis/
-    └── AgentLink_0.1.0_x64-setup.exe     # NSIS 安装包
+    └── Chorus_0.1.0_x64-setup.exe     # NSIS 安装包
 ```
 
 ## 开发模式 / Dev Mode

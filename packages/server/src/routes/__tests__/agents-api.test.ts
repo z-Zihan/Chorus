@@ -7,7 +7,7 @@ import { AgentRegistry } from "../../agent/registry.js";
 import { AgentRuntime } from "../../agent/runtime.js";
 import { EventHub } from "../../ws/events.js";
 import { registerAgentRoutes } from "../agents.js";
-import type { AppConfig } from "@agentlink/shared";
+import type { AppConfig } from "@chorus/shared";
 
 const databases: DatabaseContext[] = [];
 

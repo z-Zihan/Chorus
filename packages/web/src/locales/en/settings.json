@@ -49,7 +49,7 @@
     "later": "Later",
     "downloading": "Downloading {{progress}}%",
     "downloadProgress": "Update download progress",
-    "restartPrompt": "The update is installed. Restart AgentLink now?",
+    "restartPrompt": "The update is installed. Restart Chorus now?",
     "installed": "The update is installed and will apply after restart.",
     "installFailed": "The update could not be installed. Please try again later.",
     "check": "Check for updates",

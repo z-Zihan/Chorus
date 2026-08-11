@@ -3,23 +3,23 @@ import { dirname, resolve } from "node:path";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
-import type { AppConfig } from "@agentlink/shared";
+import type { AppConfig } from "@chorus/shared";
 import { createJiti } from "jiti";
 
 export function resolveAppDataDir(): string {
   if (process.platform === "darwin") {
-    return join(homedir(), "Library", "Application Support", "AgentLink");
+    return join(homedir(), "Library", "Application Support", "Chorus");
   }
   if (process.platform === "win32") {
-    return join(process.env.APPDATA?.trim() || join(homedir(), "AppData", "Roaming"), "AgentLink");
+    return join(process.env.APPDATA?.trim() || join(homedir(), "AppData", "Roaming"), "Chorus");
   }
-  return join(process.env.XDG_DATA_HOME?.trim() || join(homedir(), ".local", "share"), "agentlink");
+  return join(process.env.XDG_DATA_HOME?.trim() || join(homedir(), ".local", "share"), "chorus");
 }
 
 function defaultConfig(): AppConfig {
   return {
     port: 3210,
-    dbPath: join(resolveAppDataDir(), "agentlink.db"),
+    dbPath: join(resolveAppDataDir(), "chorus.db"),
     cors: { origin: ["http://localhost:5173", "http://127.0.0.1:5173"] },
     auth: { enabled: false, tokens: {} },
     history: { maxMessages: 20, maxTokens: 8_000 },
@@ -39,9 +39,9 @@ function applyEnvOverrides(config: AppConfig): AppConfig {
 function locateConfig(): string | undefined {
   const here = dirname(fileURLToPath(import.meta.url));
   const candidates = [
-    resolve(process.cwd(), "agentlink.config.ts"),
-    resolve(process.cwd(), "../../agentlink.config.ts"),
-    resolve(here, "../../../agentlink.config.ts"),
+    resolve(process.cwd(), "chorus.config.ts"),
+    resolve(process.cwd(), "../../chorus.config.ts"),
+    resolve(here, "../../../chorus.config.ts"),
   ];
   return candidates.find(existsSync);
 }

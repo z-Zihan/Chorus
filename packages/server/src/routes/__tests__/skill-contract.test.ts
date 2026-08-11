@@ -1,4 +1,4 @@
-import type { AppConfig } from "@agentlink/shared";
+import type { AppConfig } from "@chorus/shared";
 import Fastify, { type FastifyInstance } from "fastify";
 import { readFileSync } from "node:fs";
 import request from "supertest";
@@ -104,7 +104,7 @@ async function createConversation(
   return request(app.server).post("/api/conversations").send(body);
 }
 
-describe("AgentLink SKILL.md contract", () => {
+describe("Chorus SKILL.md contract", () => {
   let app: FastifyInstance;
 
   beforeEach(async () => {
@@ -421,9 +421,9 @@ describe("AgentLink SKILL.md contract", () => {
   });
 
   describe("Skill Discovery", () => {
-    it("serves the AgentLink SKILL.md contract as Markdown", async () => {
+    it("serves the Chorus SKILL.md contract as Markdown", async () => {
       const expected = readFileSync(
-        new URL("../../../../../skills/agentlink-platform/SKILL.md", import.meta.url),
+        new URL("../../../../../skills/chorus-platform/SKILL.md", import.meta.url),
         "utf8",
       );
 
@@ -440,8 +440,8 @@ describe("AgentLink SKILL.md contract", () => {
       expect(response.status).toBe(200);
       expect(response.body).toEqual({
         available: true,
-        title: "AgentLink Platform Skill / AgentLink 平台接入技能",
-        description: expect.stringContaining("AgentLink"),
+        title: "Chorus Platform Skill / Chorus 平台接入技能",
+        description: expect.stringContaining("Chorus"),
         endpoint: "/api/skill",
         contentType: "text/markdown",
       });

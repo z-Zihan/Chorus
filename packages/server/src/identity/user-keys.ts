@@ -6,7 +6,7 @@ import {
   sign,
   verify,
 } from "node:crypto";
-import { canonicalize } from "@agentlink/shared";
+import { canonicalize } from "@chorus/shared";
 
 export interface UserKeyPair {
   publicKey: string;

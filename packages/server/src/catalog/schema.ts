@@ -1,4 +1,4 @@
-import type { AgentType } from "@agentlink/shared";
+import type { AgentType } from "@chorus/shared";
 
 export type CatalogKind = "detected-cli" | "managed-cli" | "api-connector";
 export type CatalogPlatform = "darwin" | "linux" | "win32";

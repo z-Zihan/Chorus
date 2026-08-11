@@ -1,4 +1,4 @@
-import type { HubEnvelope } from "@agentlink/shared";
+import type { HubEnvelope } from "@chorus/shared";
 
 export type DeliveryStatus =
   | "queued"

@@ -1,4 +1,4 @@
-# AgentLink 产品需求文档（PRD）
+# Chorus 产品需求文档（PRD）
 
 > 版本：v2.2<br>
 > 日期：2026-08-04<br>
@@ -9,17 +9,17 @@
 
 ### 1.1 一句话定义
 
-AgentLink 是一个本地优先的 AI CLI 即时通讯工作台：自动发现并管理属于用户的本机与远程 Agent，让用户在统一界面中聊天、整理历史，并让多个用户的 Agent 安全协作。
+Chorus 是一个本地优先的 AI CLI 即时通讯工作台：自动发现并管理属于用户的本机与远程 Agent，让用户在统一界面中聊天、整理历史，并让多个用户的 Agent 安全协作。
 
 ### 1.2 产品判断
 
-当前版本已经有 CLI Adapter、流式聊天、本地持久化、A2A Bus 和 Relay Server 等技术基础，但首个用户价值仍被 `agentlink.config.ts` 挡住。**下一阶段不应该继续横向增加技术能力，必须先完成自动检测、零配置首启和首次消息闭环。**
+当前版本已经有 CLI Adapter、流式聊天、本地持久化、A2A Bus 和 Relay Server 等技术基础，但首个用户价值仍被 `chorus.config.ts` 挡住。**下一阶段不应该继续横向增加技术能力，必须先完成自动检测、零配置首启和首次消息闭环。**
 
 
 
 ### 1.3 要解决的问题
 
-| 用户问题 | 现状 | AgentLink 的产品结果 |
+| 用户问题 | 现状 | Chorus 的产品结果 |
 |----------|------|----------------------|
 | 多个 AI CLI 入口分散 | 每个工具有不同命令、历史和输出格式 | 一个可视化入口统一发现、聊天和管理 |
 | 安装与接入门槛高 | 用户要查命令、写配置、理解 Adapter | 像安装应用一样浏览、安装、验证和卸载 Agent |
@@ -37,7 +37,7 @@ AgentLink 是一个本地优先的 AI CLI 即时通讯工作台：自动发现�
 
 用户故事：
 
-- 作为同时使用多个 AI CLI 的开发者，我打开 AgentLink 就能看到哪些工具已安装、是否已登录、版本是否兼容。
+- 作为同时使用多个 AI CLI 的开发者，我打开 Chorus 就能看到哪些工具已安装、是否已登录、版本是否兼容。
 - 作为 CLI 用户，我不需要记住非交互参数和 JSON 输出格式，也能开始可视化聊天。
 - 作为高级用户，我仍可覆盖命令、工作目录、模型和环境变量，但默认设置已经可用。
 
@@ -45,7 +45,7 @@ AgentLink 是一个本地优先的 AI CLI 即时通讯工作台：自动发现�
 
 ### 2.2 应用内安装
 
-AgentLink 提供可信的本地 Agent 目录，用户可以从 UI 添加已检测 CLI、安装受支持的 CLI/Connector，或配置 API Agent。
+Chorus 提供可信的本地 Agent 目录，用户可以从 UI 添加已检测 CLI、安装受支持的 CLI/Connector，或配置 API Agent。
 
 用户故事：
 
@@ -114,7 +114,7 @@ AgentLink 提供可信的本地 Agent 目录，用户可以从 UI 添加已检�
 - 同时使用 2 个以上 AI CLI，在多个代码库工作。
 - 看重效率、本地历史和可控性，能理解 CLI，但不想维护重复配置。
 - 核心任务：快速选择合适 Agent、保留上下文、找回过去结论。
-- 成功信号：AgentLink 成为每天打开的 CLI 入口，而不是偶尔演示 A2A 的工具。
+- 成功信号：Chorus 成为每天打开的 CLI 入口，而不是偶尔演示 A2A 的工具。
 
 ### 3.2 Agent 工作流开发者
 
@@ -132,7 +132,7 @@ AgentLink 提供可信的本地 Agent 目录，用户可以从 UI 添加已检�
 
 - 只想注册即用一个云端通用聊天模型、不使用本地 CLI 的大众消费者。
 - 需要无监督执行高风险系统操作、且不接受权限确认的自动化场景。
-- 把 AgentLink 当成模型训练、模型托管或企业知识库平台的团队。
+- 把 Chorus 当成模型训练、模型托管或企业知识库平台的团队。
 
 ## 4. 核心 Jobs to Be Done
 
@@ -435,11 +435,11 @@ i18n、主题、动画、埋点供应商、更多 UI 基础组件不是当前发
 | 可恢复 | 检测、安装、登录和运行失败都有重试或回滚路径 |
 | 可访问性 | Onboarding、Catalog 和聊天主路径支持键盘操作与屏幕阅读器 |
 
-## 11. Anti-features：AgentLink 不是什么
+## 11. Anti-features：Chorus 不是什么
 
-- **不是 ChatGPT 克隆。** AgentLink 不以一个通用聊天模型为中心，也不销售模型能力。
+- **不是 ChatGPT 克隆。** Chorus 不以一个通用聊天模型为中心，也不销售模型能力。
 - **不是通用 Chatbot Builder。** 它不与 Dify 等工作流搭建平台争夺所有机器人场景，重点是本地 CLI 的管理与通信。
-- **不是默认云 SaaS。** 本地单人能力不依赖 AgentLink 账号或官方云端；Relay 是可选、自托管的协作组件。
+- **不是默认云 SaaS。** 本地单人能力不依赖 Chorus 账号或官方云端；Relay 是可选、自托管的协作组件。
 - **不是静默自动化平台。** 不会在用户不知情时安装二进制、登录账号或执行高风险操作。
 - **不是终端模拟器。** 产品抽象的是 Agent、会话和协作，而不是完整复刻 shell。
 - **不是“所有 Agent 自动广播”的聊天室。** 无提示广播会放大成本、噪音和安全风险，默认路由必须可预测。
@@ -462,7 +462,7 @@ i18n、主题、动画、埋点供应商、更多 UI 基础组件不是当前发
 1. 首批正式支持的 CLI 清单与最低版本。
 2. macOS GUI PATH 的获取策略：登录 shell 解析、常见目录补充及用户自选路径的边界。
 3. `needs_auth` 的探测方式，确保不会发出计费请求或污染用户历史。
-4. UI 配置、数据库记录与 `agentlink.config.ts` 冲突时的精确合并规则。
+4. UI 配置、数据库记录与 `chorus.config.ts` 冲突时的精确合并规则。
 5. 系统钥匙串落地前，API Agent 是否允许通过 UI 保存密钥；建议默认不开放。
 6. 一个 User 的多设备模型；已决策：User 身份稳定并可绑定多个 Hub，Room 状态跨绑定 Hub 同步，Agent 仅在其 `ownerHubId` 上实际执行。
 7. `public` Agent 是否允许被 Relay 全局搜索；已决策：v1 不提供全局目录，`public` 仅表示已配对联系人可发现。
@@ -472,8 +472,8 @@ i18n、主题、动画、埋点供应商、更多 UI 基础组件不是当前发
 
 ## 14. 设计参考 / Design References
 
-- [Google A2A Agent Cards](https://google.github.io/A2A/latest/specification/)：Agent Card 是由所有者选择发布的能力名片；AgentLink 采用最小、分范围、可撤销的声明，而不是配对后全量抓取。
-- [Discord Bots](https://discord.com/developers/docs/topics/oauth2) 与 [Slack app installation](https://api.slack.com/authentication/oauth-v2)：先建立服务器/工作区或频道，再由有权限的所有者安装 bot/app。AgentLink 对应为先建 Room，再由每位所有者带自己的 Agent 入房。
+- [Google A2A Agent Cards](https://google.github.io/A2A/latest/specification/)：Agent Card 是由所有者选择发布的能力名片；Chorus 采用最小、分范围、可撤销的声明，而不是配对后全量抓取。
+- [Discord Bots](https://discord.com/developers/docs/topics/oauth2) 与 [Slack app installation](https://api.slack.com/authentication/oauth-v2)：先建立服务器/工作区或频道，再由有权限的所有者安装 bot/app。Chorus 对应为先建 Room，再由每位所有者带自己的 Agent 入房。
 - [Agent Client Protocol (ACP)](https://agentclientprotocol.com/)：借鉴客户端—Agent 的明确控制边界；跨用户调用额外要求双方信任、Room 范围和所有者授权。
 
-**English:** The design combines opt-in A2A-style capability cards, Discord/Slack-style room-first bot admission, and ACP-style explicit ownership boundaries. These references inform the interaction model; AgentLink's E2E transport and local-first identity remain architecture-specific.
+**English:** The design combines opt-in A2A-style capability cards, Discord/Slack-style room-first bot admission, and ACP-style explicit ownership boundaries. These references inform the interaction model; Chorus's E2E transport and local-first identity remain architecture-specific.

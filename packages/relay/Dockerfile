@@ -4,7 +4,7 @@ RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 WORKDIR /app
 COPY . .
 RUN pnpm install --frozen-lockfile
-RUN pnpm --filter @agentlink/shared build && pnpm --filter @agentlink/relay build
+RUN pnpm --filter @chorus/shared build && pnpm --filter @chorus/relay build
 
 FROM node:22-alpine AS runtime
 

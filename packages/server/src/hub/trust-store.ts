@@ -10,7 +10,7 @@ import {
   timingSafeEqual,
   type KeyObject,
 } from "node:crypto";
-import { canonicalize } from "@agentlink/shared";
+import { canonicalize } from "@chorus/shared";
 import type { Repository } from "../db/repository.js";
 
 export type TrustLevel = "pending" | "trusted" | "blocked";
@@ -41,7 +41,7 @@ interface PendingPairing extends PairingChallenge {
 }
 
 const PAIRING_CODE_TTL_MS = 10 * 60 * 1000;
-const PAIRING_CONFIRMATION_INFO = "agentlink-pairing-confirmation-v1";
+const PAIRING_CONFIRMATION_INFO = "chorus-pairing-confirmation-v1";
 const DEFAULT_LOCAL_HUB_ID = "local-hub";
 
 export class TrustStore {

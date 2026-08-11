@@ -1,4 +1,4 @@
-import type { Conversation, Message, MessageStatus } from "@agentlink/shared";
+import type { Conversation, Message, MessageStatus } from "@chorus/shared";
 import type { DatabaseContext } from "./index.js";
 import type { Repository } from "./repository.js";
 

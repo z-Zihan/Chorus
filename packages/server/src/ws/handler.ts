@@ -1,4 +1,4 @@
-import type { AppConfig, ClientEvent } from "@agentlink/shared";
+import type { AppConfig, ClientEvent } from "@chorus/shared";
 import type { FastifyInstance } from "fastify";
 import type WebSocket from "ws";
 import { z } from "zod";

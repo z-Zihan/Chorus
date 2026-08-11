@@ -34,7 +34,7 @@ class PrettyLogStream extends Writable {
 
 const options = {
   level: process.env.RELAY_LOG_LEVEL?.trim() || "info",
-  base: { service: "agentlink-relay" },
+  base: { service: "chorus-relay" },
   timestamp: pino.stdTimeFunctions.epochTime,
 };
 

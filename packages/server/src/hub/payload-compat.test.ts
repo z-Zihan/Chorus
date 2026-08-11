@@ -1,4 +1,4 @@
-import type { HubPayload } from "@agentlink/shared";
+import type { HubPayload } from "@chorus/shared";
 import { describe, expect, it } from "vitest";
 import { isV2Payload, normalizeHubPayload, rejectIncompatibleVersion } from "./payload-compat.js";
 

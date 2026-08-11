@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { Agent } from "@agentlink/shared";
+import type { Agent } from "@chorus/shared";
 import { Pause, Play, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { AgentAvatar } from "@/components/agent/AgentAvatar";

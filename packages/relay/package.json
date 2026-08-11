@@ -1,5 +1,5 @@
 {
-  "name": "@agentlink/relay",
+  "name": "@chorus/relay",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@agentlink/shared": "workspace:*",
+    "@chorus/shared": "workspace:*",
     "@fastify/cors": "^10.1.0",
     "@fastify/websocket": "^11.0.2",
     "better-sqlite3": "^11.10.0",

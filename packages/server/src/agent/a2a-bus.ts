@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { A2ABusLike, ConversationContext, StreamChunk } from "@agentlink/shared";
+import type { A2ABusLike, ConversationContext, StreamChunk } from "@chorus/shared";
 import type { AgentRegistry } from "./registry";
 import { track } from "../analytics";
 import { logger } from "../utils/logger";

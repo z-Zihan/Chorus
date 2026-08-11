@@ -41,6 +41,10 @@ export class PluginLoader {
         initialized: false,
       });
     }
+    return this.listLoaded();
+  }
+
+  listLoaded(): PluginManifest[] {
     return this.plugins.map(({ manifest }) => ({ ...manifest, permissions: [...manifest.permissions] }));
   }
 

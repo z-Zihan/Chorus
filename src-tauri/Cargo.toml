@@ -1,12 +1,12 @@
 [package]
-name = "agentlink"
+name = "chorus"
 version = "0.1.0"
 description = "Local-first, Agent-native instant messaging desktop app"
-authors = ["AgentLink"]
+authors = ["Chorus"]
 edition = "2021"
 
 [lib]
-name = "agentlink_lib"
+name = "chorus_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

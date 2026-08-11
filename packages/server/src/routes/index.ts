@@ -25,7 +25,7 @@ import { logger } from "../utils/logger.js";
 import type { TrustStore } from "../hub/trust-store.js";
 import { registerTrustRoutes } from "./trust.js";
 import type { TokenStore } from "../auth/token-store.js";
-import type { AppConfig } from "@agentlink/shared";
+import type { AppConfig } from "@chorus/shared";
 import { registerTokenRoutes } from "./tokens.js";
 import { registerStandardRoutes } from "./standards.js";
 

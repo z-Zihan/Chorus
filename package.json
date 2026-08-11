@@ -1,5 +1,5 @@
 {
-  "name": "agentlink",
+  "name": "chorus",
   "version": "0.1.0",
   "private": true,
   "packageManager": "pnpm@9.15.9",
@@ -7,21 +7,21 @@
     "node": ">=20.0.0"
   },
   "scripts": {
-    "dev": "concurrently -k -n server,web -c magenta,cyan \"pnpm --filter @agentlink/server dev\" \"pnpm --filter @agentlink/web dev\"",
+    "dev": "concurrently -k -n server,web -c magenta,cyan \"pnpm --filter @chorus/server dev\" \"pnpm --filter @chorus/web dev\"",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
-    "db:generate": "pnpm --filter @agentlink/server db:generate",
-    "db:migrate": "pnpm --filter @agentlink/server db:migrate",
-    "db:studio": "pnpm --filter @agentlink/server db:studio",
-    "build": "pnpm --filter @agentlink/shared build && pnpm --filter @agentlink/relay build && pnpm --filter @agentlink/server build && pnpm --filter @agentlink/web build",
-    "test": "pnpm --filter @agentlink/shared test && pnpm --filter @agentlink/server test",
+    "db:generate": "pnpm --filter @chorus/server db:generate",
+    "db:migrate": "pnpm --filter @chorus/server db:migrate",
+    "db:studio": "pnpm --filter @chorus/server db:studio",
+    "build": "pnpm --filter @chorus/shared build && pnpm --filter @chorus/relay build && pnpm --filter @chorus/server build && pnpm --filter @chorus/web build",
+    "test": "pnpm --filter @chorus/shared test && pnpm --filter @chorus/server test",
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "prepare": "husky",
-    "start": "pnpm --filter @agentlink/server start"
+    "start": "pnpm --filter @chorus/server start"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.2.1",

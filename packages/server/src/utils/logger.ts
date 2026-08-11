@@ -114,7 +114,7 @@ class StructuredLogStream extends Writable {
 export const logger = pino(
   {
     level: process.env.SERVER_LOG_LEVEL?.trim() || "info",
-    base: { service: "agentlink-server" },
+    base: { service: "chorus-server" },
     timestamp: pino.stdTimeFunctions.epochTime,
   },
   new StructuredLogStream(),

@@ -1,4 +1,4 @@
-# AgentLink 开发计划 / Development Plan
+# Chorus 开发计划 / Development Plan
 
 > 最后更新：2026-08-05
 > 规范来源：`docs/CROSS_DEVICE_DESIGN.md`
@@ -108,11 +108,11 @@ P1 全部 ✅ done 且 Review 通过后发布：
 ### 快速恢复指南
 
 ```bash
-cd ~/Desktop/Crucio/agentlink
+cd ~/Desktop/Crucio/Chorus
 git pull
 source ~/.nvm/nvm.sh
 pnpm install
-pnpm --filter @agentlink/shared build
+pnpm --filter @chorus/shared build
 pnpm dev  # 开发模式
 pnpm test  # 123 tests
 ```
@@ -122,4 +122,4 @@ pnpm test  # 123 tests
 - 跨设备设计：`docs/CROSS_DEVICE_DESIGN.md`
 - 使用指南：`docs/GUIDE.md`
 - 技术文档：`docs/TECH.md`
-- 外部 Agent 接入：`skills/agentlink-platform/SKILL.md`
+- 外部 Agent 接入：`skills/chorus-platform/SKILL.md`

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import type { AppConfig, Message, MessageStatus, StreamChunk } from "@agentlink/shared";
-import { parseMentions, truncateHistory } from "@agentlink/shared";
+import type { AppConfig, Message, MessageStatus, StreamChunk } from "@chorus/shared";
+import { parseMentions, truncateHistory } from "@chorus/shared";
 import type { Repository } from "../db/repository";
 import type { EventHub } from "../ws/events";
 import { messageFromError } from "./adapter";

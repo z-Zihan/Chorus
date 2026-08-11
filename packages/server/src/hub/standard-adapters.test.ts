@@ -1,4 +1,4 @@
-import type { Agent } from "@agentlink/shared";
+import type { Agent } from "@chorus/shared";
 import { describe, expect, it } from "vitest";
 import { StandardAdapterMapper } from "./standard-adapters.js";
 
@@ -18,10 +18,10 @@ describe("StandardAdapterMapper", () => {
   const mapper = new StandardAdapterMapper();
 
   it("converts an Agent to a Google A2A Agent Card", () => {
-    expect(mapper.toAgentCard(agent, "https://agentlink.example/")).toEqual({
+    expect(mapper.toAgentCard(agent, "https://chorus.example/")).toEqual({
       name: "Research Agent",
       description: "Finds and summarizes sources",
-      url: "https://agentlink.example/api/agents/research-agent",
+      url: "https://chorus.example/api/agents/research-agent",
       version: "1.0.0",
       capabilities: {
         streaming: true,
@@ -63,11 +63,11 @@ describe("StandardAdapterMapper", () => {
   });
 
   it("converts an Agent to an ACP service descriptor", () => {
-    expect(mapper.toACPService(agent, "https://agentlink.example/")).toEqual({
+    expect(mapper.toACPService(agent, "https://chorus.example/")).toEqual({
       serviceId: "research-agent",
       serviceName: "Research Agent",
       serviceDescription: "Finds and summarizes sources",
-      serviceEndpoint: "https://agentlink.example/api/conversations",
+      serviceEndpoint: "https://chorus.example/api/conversations",
       serviceType: "agent-communication",
       protocolVersion: "1.0",
       capabilities: ["research", "summarize"],

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { AgentStatusSnapshot, ServerEvent } from "@agentlink/shared";
+import type { AgentStatusSnapshot, ServerEvent } from "@chorus/shared";
 import type WebSocket from "ws";
 
 type EventPayload<T> = T extends { eventId: string } ? Omit<T, "eventId"> : never;

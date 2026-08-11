@@ -1,4 +1,4 @@
-import type { HubEnvelope } from "@agentlink/shared";
+import type { HubEnvelope } from "@chorus/shared";
 import { asc, eq, lte, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import type { DatabaseContext } from "./db/index.js";

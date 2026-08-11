@@ -11,7 +11,7 @@ import type {
   AgentStatusSnapshot,
   HubInfo,
   PersistedAgentConfig,
-} from "@agentlink/shared";
+} from "@chorus/shared";
 import type { Repository } from "../db/repository.js";
 import { ConfigWatcher } from "../config-watcher.js";
 import { logger } from "../utils/logger.js";

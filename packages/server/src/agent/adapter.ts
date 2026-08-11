@@ -1,4 +1,4 @@
-import type { AgentAdapter, AgentStatus, ConversationContext, StreamChunk } from "@agentlink/shared";
+import type { AgentAdapter, AgentStatus, ConversationContext, StreamChunk } from "@chorus/shared";
 
 export abstract class BaseAdapter implements AgentAdapter {
   abstract readonly id: string;

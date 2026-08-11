@@ -1,4 +1,4 @@
-import type { HubEnvelope } from "@agentlink/shared";
+import type { HubEnvelope } from "@chorus/shared";
 import type { P2PListener } from "./p2p-listener.js";
 import type { RelayClient } from "./relay-client.js";
 

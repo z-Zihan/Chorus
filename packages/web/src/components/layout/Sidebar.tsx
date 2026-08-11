@@ -59,7 +59,7 @@ interface SidebarProps {
   onOpenSettings: () => void;
 }
 
-const LAST_GROUP_AGENTS_KEY = "agentlink-last-group-agents";
+const LAST_GROUP_AGENTS_KEY = "chorus-last-group-agents";
 
 function readLastGroupAgentIds(): Set<string> {
   try {

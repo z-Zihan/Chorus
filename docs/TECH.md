@@ -1,4 +1,4 @@
-# AgentLink — 技术设计文档
+# Chorus — 技术设计文档
 
 > 最后更新：2026-08-03
 >
@@ -57,7 +57,7 @@
 ## 3. 项目结构
 
 ```
-agentlink/
+Chorus/
 ├── docs/                    # 文档
 │   ├── PRD.md              # 产品需求文档
 │   └── TECH.md             # 技术设计文档
@@ -700,7 +700,7 @@ ws.userId = userId ?? "user";
 
 interface Config {
   port: number;              // 默认 3210
-  dbPath: string;            // 默认 ./data/agentlink.db
+  dbPath: string;            // 默认 ./data/chorus.db
   cors: {
     origin: string[];        // 默认 ["http://localhost:5173"]
   };
@@ -725,7 +725,7 @@ interface AgentConfig {
 }
 ```
 
-当前配置入口：`agentlink.config.ts`（项目根目录，TS 格式，类型安全）。
+当前配置入口：`chorus.config.ts`（项目根目录，TS 格式，类型安全）。
 
 **目标变更：** 配置文件将降级为高级覆盖和可重复部署入口，不再是首次使用的前置条件。常规用户配置存入 OS 应用数据目录；敏感信息存入系统钥匙串。
 
@@ -947,7 +947,7 @@ DELETE /api/agents/:id?removeManagedBinary=false
 ```typescript
 interface PersistedAgentConfig extends AgentConfig {
   source: "explicit_config" | "user" | "auto_detected" | "catalog";
-  managed: boolean;          // AgentLink 是否管理二进制生命周期
+  managed: boolean;          // Chorus 是否管理二进制生命周期
   customizedFields: string[];
   catalogEntryId?: string;
   detectionFingerprint?: string;
@@ -958,7 +958,7 @@ interface PersistedAgentConfig extends AgentConfig {
 合并顺序从高到低：
 
 ```text
-显式管理策略 / agentlink.config.ts
+显式管理策略 / chorus.config.ts
   > 用户在 UI 中确认且修改的持久记录
   > 新的自动检测候选
   > Catalog 默认模板
@@ -1054,11 +1054,11 @@ first_response_completed { elapsedMs, success }
 
 禁止上报：消息正文、API Key、完整可执行路径、项目路径、环境变量和 CLI 原始输出。
 
-验收必须使用新用户干净环境测试，而不是只在开发者已存在的 `agentlink.config.ts` 上测试。
+验收必须使用新用户干净环境测试，而不是只在开发者已存在的 `chorus.config.ts` 上测试。
 
 ### 8.4 Prompt-based A2A for CLI Adapters
 
-CLI adapters (Claude Code, Codex) don't support OpenAI's tool-calling parameter. AgentLink injects a system prompt teaching the CLI agent to use the `[A2A_CALL: target: message]` format. After CLI output completes, the adapter parses calls, executes them via `a2aBus`, and feeds the responses back to the CLI agent. The process is limited to 3 rounds. See `packages/server/src/agent/agentlink-skill.ts` for the full skill text.
+CLI adapters (Claude Code, Codex) don't support OpenAI's tool-calling parameter. Chorus injects a system prompt teaching the CLI agent to use the `[A2A_CALL: target: message]` format. After CLI output completes, the adapter parses calls, executes them via `a2aBus`, and feeds the responses back to the CLI agent. The process is limited to 3 rounds. See `packages/server/src/agent/chorus-skill.ts` for the full skill text.
 
 ### 8.5 Credential Storage Architecture
 
@@ -1177,7 +1177,7 @@ function parseMentions(content: string): {
 ### 11.1 接入原理
 
 ```
-用户消息 → AgentLink Server → Agent Adapter → 实际 Agent 后端
+用户消息 → Chorus Server → Agent Adapter → 实际 Agent 后端
                               ↑
                      统一接口，不管后端是什么
 ```
@@ -1228,7 +1228,7 @@ class OpenClawAdapter implements AgentAdapter {
         sessionKey: this.sessionKey,
       }),
     });
-    // 读取 SSE 流，转发给 AgentLink
+    // 读取 SSE 流，转发给 Chorus
     const reader = res.body!.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
@@ -1265,7 +1265,7 @@ class DifyAdapter implements AgentAdapter {
       },
       body: JSON.stringify({
         query: message,
-        user: "agentlink",
+        user: "chorus",
         conversation_id: context.difyConversationId ?? "",
         response_mode: "streaming",
       }),
@@ -1397,7 +1397,7 @@ class CLIAgentAdapter implements AgentAdapter {
 }
 ```
 
-> CLI 适配器让任何本机 Agent 工具（Codex、Claude Code、Copilot CLI）都能接入 AgentLink。
+> CLI 适配器让任何本机 Agent 工具（Codex、Claude Code、Copilot CLI）都能接入 Chorus。
 
 **CLI 结构化输出（重要）：**
 不要解析裸 stdout，应使用 CLI 的结构化输出模式：
@@ -1437,10 +1437,10 @@ class StructuredCLIAgentAdapter implements AgentAdapter {
 
 ### 11.3 配置方式
 
-用户在 `agentlink.config.ts` 中声明要接入哪些 Agent：
+用户在 `chorus.config.ts` 中声明要接入哪些 Agent：
 
 ```typescript
-import type { AgentConfig } from "@agentlink/shared";
+import type { AgentConfig } from "@chorus/shared";
 
 export interface AppConfig {
   port: number;
@@ -1567,7 +1567,7 @@ UI 上 Agent 间的调用以可折叠线程展示，用户可以展开查看每�
 ### 11.5 Adapter 注册流程
 
 ```
-1. 读取 agentlink.config.ts
+1. 读取 chorus.config.ts
 2. 遍历 agents 数组
 3. 对每个 agent:
    a. 根据 type 创建对应 Adapter 实例
@@ -1847,7 +1847,7 @@ interface BroadcastResponse {
 │ 3. 上传中转   │ ←──确认────────  │ 6. 回复完成   │
 └──────────────┘                   └──────────────┘
         │                                  │
-        └──────── AgentLink Server ─────────┘
+        └──────── Chorus Server ─────────┘
                    (中转 + 寻址)
 ```
 
@@ -1855,15 +1855,15 @@ interface BroadcastResponse {
 
 ```
 1. 用户发送: "@Agent1 把数据整理一下交接给 @Agent2"
-2. AgentLink Server 解析 @提及，路由给 Agent1
+2. Chorus Server 解析 @提及，路由给 Agent1
 3. Agent1 执行:
    a. 扫描本地目录，筛选需要迁移的数据
    b. 打包压缩为 zip
-   c. 上传到 AgentLink Server 中转存储 (POST /api/files/upload)
+   c. 上传到 Chorus Server 中转存储 (POST /api/files/upload)
    d. 获得 fileId
    e. 通过 A2A Bus 调用 Agent2:
       "数据迁移请求，fileId: {fileId}, 包含 {N} 个文件, 大小: {size}"
-4. AgentLink Server 转发 A2A 调用到 Agent2 所在的设备
+4. Chorus Server 转发 A2A 调用到 Agent2 所在的设备
 5. Agent2 执行:
    a. 从中转存储下载文件 (GET /api/files/{fileId})
    b. 解压到本地指定目录
@@ -1991,7 +1991,7 @@ DELETE /api/files/:fileId
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│                  AgentLink Server (中继)                   │
+│                  Chorus Server (中继)                   │
 │                                                          │
 │  ┌─────────────┐  ┌──────────────┐  ┌───────────────┐   │
 │  │ Agent 目录   │  │ 文件中转存储  │  │ 消息路由表     │   │
@@ -2237,7 +2237,7 @@ interface GroupConversation extends Conversation {
 
 ### 13.9 标准协议兼容（规划中）
 
-AgentLink 长期应兼容主流 Agent 通信标准：
+Chorus 长期应兼容主流 Agent 通信标准：
 
 | 协议 | 说明 | 兼容方式 |
 |------|------|----------|
@@ -2260,7 +2260,7 @@ AgentLink 长期应兼容主流 Agent 通信标准：
 └──────────┘     └──────────┘     └──────────┘
 ```
 
-- 每个用户本地跑一个 Hub（完整 AgentLink Server）
+- 每个用户本地跑一个 Hub（完整 Chorus Server）
 - Hub 之间通过轻量协议互联（WebSocket + JSON-RPC）
 - Hub 可独立运行（离线时本地 Agent 照常用）
 - 在线时自动同步好友消息和任务状态

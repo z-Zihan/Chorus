@@ -1,4 +1,4 @@
-import type { AppConfig } from "@agentlink/shared";
+import type { AppConfig } from "@chorus/shared";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { TokenStore, tokenHasScope } from "../auth/token-store.js";
