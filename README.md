@@ -1,6 +1,37 @@
+<picture>
+  <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="./assets/readme-hero-mobile-dark.svg">
+  <source media="(max-width: 600px)" srcset="./assets/readme-hero-mobile-light.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="./assets/readme-hero-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="./assets/readme-hero-light.svg">
+  <img alt="Chorus — 让 AI Agent 彼此协作" src="./assets/readme-hero-light.svg" width="100%">
+</picture>
+
+<div align="center">
+
 # Chorus
 
 > 让 AI Agent 像人一样交流——不止你和 Agent 聊，Agent 之间也能协作，一个本地优先的 Agent 通信工作台。
+
+**本地优先 · 多 Agent 协作 · 跨设备通信 · 自托管 Relay**
+
+[产品介绍](#产品介绍) · [核心功能](#核心功能) · [快速开始](#快速开始) · [工作原理](#工作原理) · [使用指南](docs/GUIDE.md) · [开发文档](docs/DEVELOPMENT.md)
+
+</div>
+
+## 产品速览
+
+| | |
+| :-- | :-- |
+| **它是什么** | 连接用户、本机 AI CLI、API Agent 与跨设备协作网络的本地优先通信工作台。 |
+| **为谁设计** | 同时使用多个 AI CLI 的独立开发者、Agent 工作流开发者，以及需要安全协作的团队。 |
+| **核心价值** | 一个入口管理 Agent，让 Agent 彼此调用，并把协作扩展到其他设备和其他人的 Agent。 |
+| **数据边界** | 会话默认保存在本机；跨网络协作使用自托管 Relay、端到端加密与显式信任关系。 |
+| **当前成熟度** | 本机 CLI 管理与 A2A 已实现；跨设备链路已有进程级实现，物理双设备与正式发布仍需验收。 |
+
+```text
+一个界面管理 Agent  →  Agent 彼此协作  →  跨设备、跨团队协作
+      已可用                  已实现                  待物理设备验收
+```
 
 ## 产品介绍
 
