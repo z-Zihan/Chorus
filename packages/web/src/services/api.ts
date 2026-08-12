@@ -11,6 +11,7 @@ import type {
   RoomInvitation,
   RoomMember,
   UserWithAgents,
+  LogEntry,
 } from "@chorus/shared";
 import { useUIStore } from "@/store/uiStore";
 import { getApiBaseUrl } from "./env";
@@ -34,13 +35,7 @@ export interface MessageSearchResult {
   after: Message | null;
 }
 
-export interface ServerLogEntry {
-  timestamp: number;
-  level: "debug" | "info" | "warn" | "error";
-  message: string;
-  data?: unknown;
-  source: "backend";
-}
+export type ServerLogEntry = LogEntry;
 
 export type A2AMode = "mention" | "call" | "off";
 

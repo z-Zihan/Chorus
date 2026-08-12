@@ -5,7 +5,6 @@ import { z } from "zod";
 import type { AgentRuntime } from "../agent/runtime";
 import type { AgentRegistry } from "../agent/registry";
 import type { EventHub } from "./events";
-import { track } from "../analytics.js";
 import { isLoopbackAddress, verifyAuthToken } from "../middleware/auth.js";
 import { tokenHasScope, type TokenStore } from "../auth/token-store.js";
 
@@ -57,7 +56,6 @@ export function registerWebSocket(
       })),
     );
     app.log.info("WebSocket client connected");
-    track("ws_connect");
 
     const heartbeatInterval = setInterval(() => {
       if (ws.readyState === ws.OPEN) ws.ping();
@@ -101,12 +99,10 @@ export function registerWebSocket(
     ws.on("close", () => {
       clearInterval(heartbeatInterval);
       app.log.info("WebSocket client disconnected");
-      track("ws_disconnect");
       events.remove(ws);
     });
     ws.on("error", (error) => {
       app.log.error({ err: error }, "WebSocket connection error");
-      track("error", { message: error.message, source: "websocket" });
       events.remove(ws);
     });
   });

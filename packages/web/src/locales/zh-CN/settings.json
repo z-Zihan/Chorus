@@ -35,20 +35,22 @@
   "logs": {
     "view": "查看日志",
     "title": "诊断日志",
-    "description": "查看并导出最近的前端与服务端日志。",
+    "description": "查看并导出最近的前端、服务端与桌面壳日志。",
     "levelFilter": "按日志级别筛选",
     "searchLabel": "搜索日志",
     "searchPlaceholder": "搜索消息或详情",
     "export": "导出 JSON",
     "exportFailed": "无法导出诊断日志文件。",
     "empty": "没有符合条件的日志。",
-    "backendUnavailable": "无法加载服务端日志，仍可查看前端日志。",
+    "backendUnavailable": "无法加载服务端日志，仍可查看本地前端与桌面壳日志。",
     "levels": {
       "all": "全部",
+      "trace": "追踪",
       "debug": "调试",
       "info": "信息",
       "warn": "警告",
-      "error": "错误"
+      "error": "错误",
+      "fatal": "致命"
     }
   },
   "updates": {

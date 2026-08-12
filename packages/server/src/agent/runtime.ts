@@ -8,7 +8,6 @@ import { A2ABus, type A2AAuthorizationRequest, type A2AAuthorizationResult } fro
 import { AdapterMetrics, type AgentMetrics } from "./metrics";
 import { A2APermissions, type A2APermissionMode } from "./permissions";
 import type { AgentRegistry } from "./registry";
-import { track } from "../analytics";
 import { logger } from "../utils/logger";
 import type { HubMessageRouter } from "../hub/message-router";
 import type { RelayClient } from "../hub/relay-client";
@@ -137,11 +136,6 @@ export class AgentRuntime {
       this.repository.saveMessage(errorMessage);
       this.events.publish(conversationId, { type: "message", message: errorMessage });
       logger.warn({ conversationId, explicitAgentId }, "Agent not assigned to conversation");
-      track("error", {
-        message: "Agent not assigned to conversation",
-        source: "agent_runtime",
-        agentId: explicitAgentId,
-      });
       return;
     }
     // @mentions are A2A hints only — they do NOT determine routing.
@@ -192,11 +186,6 @@ export class AgentRuntime {
     );
     this.repository.saveMessage(userMessage);
     this.events.publish(conversationId, { type: "message", message: userMessage });
-    track("message_sent", {
-      conversationId,
-      from: "user",
-      to: targetAgentIds.length === 1 ? (targetAgentIds[0] ?? "all") : "all",
-    });
 
     await Promise.all(
       targetAgentIds.map((agentId) =>
@@ -223,7 +212,6 @@ export class AgentRuntime {
       this.repository.saveMessage(errorMessage);
       this.events.publish(conversationId, { type: "message", message: errorMessage });
       logger.warn({ conversationId, agentId }, "Agent unavailable for message");
-      track("error", { message: "Agent unavailable", source: "agent_runtime", agentId });
       return;
     }
 
@@ -245,7 +233,6 @@ export class AgentRuntime {
           { conversationId, agentId, detail: preflight.detail },
           "Agent preflight failed",
         );
-        track("error", { message: "Preflight failed", source: "agent_runtime", agentId });
         return;
       }
     }
@@ -297,7 +284,6 @@ export class AgentRuntime {
     });
     this.repository.saveMessage(agentMessage);
     this.events.publish(conversationId, { type: "message", message: agentMessage });
-    track("message_sent", { conversationId, from: fromAgentId, to: toAgentId });
 
     await this.routeMessageToAgent(conversationId, toAgentId, content, []);
   }
@@ -331,7 +317,6 @@ export class AgentRuntime {
       { agentId: adapter.id, conversationId: reply.conversationId },
       "Agent invocation started",
     );
-    track("agent_invoke_start", { agentId: adapter.id, conversationId: reply.conversationId });
     this.events.publish(reply.conversationId, {
       type: "typing",
       agentId: adapter.id,
@@ -393,7 +378,6 @@ export class AgentRuntime {
           },
           "Agent invocation failed",
         );
-        track("error", { message: detail, source: "agent_runtime", agentId: adapter.id });
       } else {
         logger.warn(
           { agentId: adapter.id, conversationId: reply.conversationId, reason: "cancelled" },
@@ -455,12 +439,6 @@ export class AgentRuntime {
       { agentId, conversationId: reply.conversationId, status, durationMs },
       "Agent invocation ended",
     );
-    track("agent_invoke_end", {
-      agentId,
-      conversationId: reply.conversationId,
-      status,
-      durationMs,
-    });
     this.registry.setStatus(agentId, "online");
   }
 

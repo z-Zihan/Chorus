@@ -35,20 +35,22 @@
   "logs": {
     "view": "View logs",
     "title": "Diagnostic logs",
-    "description": "View and export recent frontend and server logs.",
+    "description": "View and export recent frontend, server, and desktop logs.",
     "levelFilter": "Filter by log level",
     "searchLabel": "Search logs",
     "searchPlaceholder": "Search messages or details",
     "export": "Export JSON",
     "exportFailed": "The diagnostic log file could not be exported.",
     "empty": "No logs match the current filters.",
-    "backendUnavailable": "Server logs could not be loaded. Frontend logs remain available.",
+    "backendUnavailable": "Server logs could not be loaded. Local frontend and desktop logs remain available.",
     "levels": {
       "all": "All",
+      "trace": "Trace",
       "debug": "Debug",
       "info": "Info",
       "warn": "Warning",
-      "error": "Error"
+      "error": "Error",
+      "fatal": "Fatal"
     }
   },
   "updates": {

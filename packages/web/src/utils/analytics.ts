@@ -1,61 +1,11 @@
-export interface AnalyticsEvent {
-  name: string;
-  props?: Record<string, string | number | boolean>;
-  timestamp: number;
-}
+import { TelemetryClient, type TelemetryProvider } from "@chorus/shared";
 
-export interface AnalyticsProvider {
-  track(event: AnalyticsEvent): void;
-  flush?(): Promise<void>;
-}
+/**
+ * Reserved integration point for a future browser telemetry SDK. It is inert
+ * until the application explicitly installs a provider.
+ */
+export const telemetry = new TelemetryClient();
 
-export class ConsoleAnalyticsProvider implements AnalyticsProvider {
-  track(event: AnalyticsEvent): void {
-    console.debug("[analytics]", event.name, event.props ?? {}, event.timestamp);
-  }
-}
-
-export class NoopAnalyticsProvider implements AnalyticsProvider {
-  track(_event: AnalyticsEvent): void {}
-}
-
-// Provider stub: initialize an SDK here and forward events from track(). The same
-// pattern can be used for PostHog (posthog.capture) or Umami (umami.track).
-export class SentryAnalyticsProvider implements AnalyticsProvider {
-  track(_event: AnalyticsEvent): void {
-    // Sentry.addBreadcrumb({ category: "analytics", message: event.name, data: event.props });
-  }
-}
-
-const MAX_EVENTS = 1_000;
-const providers = new Map<string, AnalyticsProvider>();
-const eventQueue: AnalyticsEvent[] = [];
-
-providers.set("console", new ConsoleAnalyticsProvider());
-const noopProvider = new NoopAnalyticsProvider();
-providers.set("noop", noopProvider);
-providers.set("sentry", new SentryAnalyticsProvider());
-
-const configuredProvider = import.meta.env.VITE_ANALYTICS_PROVIDER?.trim().toLowerCase();
-let activeProvider: AnalyticsProvider =
-  providers.get(configuredProvider || (import.meta.env.DEV ? "console" : "noop")) ?? noopProvider;
-
-export function registerAnalyticsProvider(name: string, provider: AnalyticsProvider): void {
-  providers.set(name.trim().toLowerCase(), provider);
-  if (configuredProvider === name.trim().toLowerCase()) activeProvider = provider;
-}
-
-export function track(name: string, props?: Record<string, string | number | boolean>): void {
-  const event: AnalyticsEvent = { name, props, timestamp: Date.now() };
-  eventQueue.push(event);
-  if (eventQueue.length > MAX_EVENTS) eventQueue.splice(0, eventQueue.length - MAX_EVENTS);
-  activeProvider.track(event);
-}
-
-export function getAnalyticsEvents(): AnalyticsEvent[] {
-  return [...eventQueue];
-}
-
-export async function flushAnalytics(): Promise<void> {
-  await activeProvider.flush?.();
+export async function setTelemetryProvider(provider: TelemetryProvider): Promise<void> {
+  await telemetry.setProvider(provider);
 }

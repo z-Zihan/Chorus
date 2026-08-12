@@ -14,7 +14,6 @@ import { AgentRuntime } from "./agent/runtime.js";
 import { EventHub } from "./ws/events.js";
 import { registerWebSocket } from "./ws/handler.js";
 import { registerRoutes } from "./routes/index.js";
-import { flushAnalytics, track } from "./analytics.js";
 import { logger } from "./utils/logger.js";
 import { CliDetector } from "./cli-detector/index.js";
 import { OnboardingService } from "./routes/onboarding.js";
@@ -54,14 +53,12 @@ monitorDesktopParent();
 
 process.on("uncaughtException", (error) => {
   logger.fatal({ err: error }, "Uncaught exception");
-  track("error", { message: error.message, source: "uncaughtException" });
-  void flushAnalytics().finally(() => process.exit(1));
+  process.exit(1);
 });
 
 process.on("unhandledRejection", (reason) => {
   const error = reason instanceof Error ? reason : new Error(String(reason));
   logger.error({ err: error }, "Unhandled promise rejection");
-  track("error", { message: error.message, source: "unhandledRejection" });
 });
 
 async function main(): Promise<void> {
@@ -185,14 +182,24 @@ async function main(): Promise<void> {
   const detector = new CliDetector();
   const onboarding = new OnboardingService(repository, registry, detector);
 
-  const app = Fastify({ loggerInstance: logger as FastifyBaseLogger });
+  const app = Fastify({
+    loggerInstance: logger as FastifyBaseLogger,
+    disableRequestLogging: true,
+  });
 
   app.addHook("onRequest", async (request) => {
+    if (request.url.startsWith("/api/logs/client")) return;
     request.log.info({ method: request.method, url: request.url }, "Request received");
   });
   app.addHook("onResponse", async (request, reply) => {
+    if (request.url.startsWith("/api/logs/client")) return;
     request.log.info(
-      { method: request.method, url: request.url, statusCode: reply.statusCode },
+      {
+        method: request.method,
+        url: request.url,
+        statusCode: reply.statusCode,
+        responseTimeMs: reply.elapsedTime,
+      },
       "Request completed",
     );
   });
@@ -254,7 +261,8 @@ async function main(): Promise<void> {
     });
   }
 
-  const close = async () => {
+  const close = async (signal: string) => {
+    logger.info({ signal }, "Chorus server shutdown started");
     p2pDiscovery?.stop();
     await p2pListener?.stop();
     relayClient?.disconnect();
@@ -266,9 +274,10 @@ async function main(): Promise<void> {
     pluginLoader.destroyPlugins();
     for (const agent of registry.list()) registry.getAdapter(agent.id)?.destroy?.();
     sqlite.close();
+    logger.info({ signal }, "Chorus server shutdown completed");
   };
-  process.once("SIGINT", () => void close());
-  process.once("SIGTERM", () => void close());
+  process.once("SIGINT", () => void close("SIGINT"));
+  process.once("SIGTERM", () => void close("SIGTERM"));
 
   const serverHost = config.host ?? "127.0.0.1";
   await app.listen({ host: serverHost, port: config.port });
@@ -321,6 +330,5 @@ async function registerHub(
 main().catch((err) => {
   const error = err instanceof Error ? err : new Error(String(err));
   logger.fatal({ err: error }, "Fatal startup error");
-  track("error", { message: error.message, source: "startup" });
   process.exit(1);
 });

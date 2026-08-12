@@ -163,7 +163,19 @@ async function installApiFixture(page: Page) {
         agents: [{ id: "fixture-claude", name: "Fixture Claude" }],
       });
     }
-    if (path === "/scheduler/tasks" || path === "/plugins" || path === "/logs") {
+    if (path === "/logs/client") return json(route, { accepted: 100 }, 202);
+    if (path === "/logs") {
+      return json(route, [
+        {
+          id: "fixture-backend-log",
+          timestamp: now,
+          level: "info",
+          message: "Fixture server started",
+          source: "backend",
+        },
+      ]);
+    }
+    if (path === "/scheduler/tasks" || path === "/plugins") {
       return json(route, []);
     }
     if (path === "/catalog" || path === "/users") return json(route, []);
@@ -399,6 +411,23 @@ for (const preferences of [
 test("low-frequency dialogs and destructive confirmation remain keyboard reachable", async ({
   page,
 }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      "chorus:diagnostics:logs:v1",
+      JSON.stringify({
+        entries: [
+          {
+            id: "fixture-frontend-log",
+            timestamp: Date.now(),
+            level: "warn",
+            message: "Fixture browser warning",
+            source: "frontend",
+          },
+        ],
+        pendingIds: [],
+      }),
+    );
+  });
   await page.setViewportSize({ width: 375, height: 812 });
   await page.goto("/");
 
@@ -422,6 +451,8 @@ test("low-frequency dialogs and destructive confirmation remain keyboard reachab
   await settingsDialog.getByRole("button", { name: "查看日志" }).click();
   const logDialog = page.getByRole("dialog", { name: "诊断日志" });
   await expect(logDialog.getByRole("textbox", { name: "搜索日志" })).toBeVisible();
+  await expect(logDialog.getByText("Fixture browser warning")).toBeVisible();
+  await expect(logDialog.getByText("Fixture server started")).toBeVisible();
   await expectMobileTargets(page, '[role="dialog"]');
   await page.keyboard.press("Escape");
   await expect(logDialog).toBeHidden();
@@ -459,7 +490,7 @@ test.describe("onboarding recovery", () => {
     await expect(retry).toBeFocused();
     await retry.click();
     await expect(retry).toBeFocused();
-    await expect(page.getByRole("alert")).toContainText("无法读取初始化状态");
+    await expect(page.getByRole("alert")).toContainText("本地服务未响应");
   });
 });
 

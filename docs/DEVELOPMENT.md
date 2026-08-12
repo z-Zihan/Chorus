@@ -126,7 +126,7 @@ server/src/
 │   └── p2p-handshake.ts  # Ed25519 双向认证握手
 │
 ├── credential-store.ts   # 系统级密钥存储（Keychain/Credential Manager/libsecret）
-├── analytics.ts          # 埋点框架
+├── analytics.ts          # 预留 telemetry provider 接口（默认不采集）
 ├── scheduler/            # 定时任务（cron）
 ├── mcp/                  # MCP 协议客户端
 ├── plugins/              # 插件系统（加载器 + manifest 验证）
@@ -255,8 +255,8 @@ web/src/
 │   └── agent.ts          # Agent 状态颜色/标签常量
 │
 └── utils/
-    ├── logger.ts         # 前端日志（ring buffer）
-    └── analytics.ts      # 埋点
+    ├── logger.ts         # 前端日志（本地保留 + 服务端批量汇聚）
+    └── analytics.ts      # 预留 telemetry provider 接口（默认不采集）
 ```
 
 ### packages/relay — 中继服务器
@@ -294,6 +294,13 @@ src-tauri/
 ├── capabilities/         # 权限配置
 └── icons/                # 应用图标（PNG + ICO + SVG）
 ```
+
+### 日志与 Telemetry
+
+- `packages/shared/src/utils/logging.ts` 定义统一日志级别、来源和脱敏规则。服务端、浏览器、Relay 在日志进入持久化或导出前都会清除 token、密码、API Key、Cookie 等常见凭据。
+- 浏览器保存最近 500 条诊断日志，并按最多 100 条一批发送到本机 `/api/logs/client`；断线日志会留在本地并在恢复连接后重试。服务端查询会合并当前进程和重启前的日志，设置页会进一步合并桌面壳日志并按日志 ID 去重。
+- Server 与 Relay 使用 JSON Lines 文件、按大小轮转；Tauri 使用每日 JSON 日志并清理 7 天前的文件。设置页可筛选、搜索并导出合并后的日志。
+- 日志是本地诊断能力，不等同于产品埋点。`TelemetryClient` 只保留未来 SDK 的 `initialize/track/flush/shutdown` provider 契约；当前没有 provider、业务事件调用、事件队列、持久化或网络上报。未来接入第三方或自建 SDK 时，只需实现 `TelemetryProvider` 并在应用启动时显式安装。
 
 ### 生产 sidecar 与发布包
 
@@ -387,9 +394,12 @@ src-tauri/
 | `RELAY_MAX_CHALLENGES_PER_MINUTE` | `10` | 单来源每分钟注册 challenge 上限 |
 | `RELAY_MAX_REGISTRATIONS_PER_MINUTE` | `30` | 单来源每分钟注册上限 |
 | `SERVER_LOG_FILE` | `data/logs/server.log` | 服务端日志文件 |
-| `SERVER_ANALYTICS_PROVIDER` | `noop` | 服务端 analytics provider |
+| `SERVER_LOG_MAX_BYTES` | `5242880` | 服务端单个日志文件最大字节数 |
+| `SERVER_LOG_MAX_FILES` | `5` | 服务端轮转日志文件数 |
 | `VITE_CHORUS_UPDATE_ENDPOINT` | 空 | 可选的桌面更新检查端点 |
-| `VITE_ANALYTICS_PROVIDER` | `noop` | 前端 analytics provider |
+| `RELAY_LOG_FILE` | `data/logs/relay.log` | Relay 结构化日志文件 |
+| `RELAY_LOG_MAX_BYTES` | `5242880` | Relay 单个日志文件最大字节数 |
+| `RELAY_LOG_MAX_FILES` | `5` | Relay 轮转日志文件数 |
 | `CHORUS_CREDENTIAL_FILE` | `~/.chorus/credentials.enc` | 系统钥匙串不可用时的加密凭据文件 |
 | `CHORUS_NODE_BINARY` | 自动探测 | 跨目标构建时指定目标平台 Node sidecar |
 | `CHORUS_BETTER_SQLITE3_DIR` | 自动探测 | 跨目标构建时指定目标平台 better-sqlite3 目录 |

@@ -5,7 +5,6 @@ import { useAgentStore } from "@/store/agentStore";
 import { StreamManager } from "@/store/streamManager";
 import { useUIStore } from "@/store/uiStore";
 import i18n from "@/i18n";
-import { track } from "@/utils/analytics";
 import { logger } from "@/utils/logger";
 
 export type { Conversation, Message } from "@chorus/shared";
@@ -284,10 +283,6 @@ export const useChatStore = create<ChatState>((set, get) => {
         messages: [...state.messages, userMsg],
         isStreaming: true,
       }));
-      track("message_sent", {
-        conversationId: convId,
-        transport: get().webSocketSend ? "websocket" : "http",
-      });
       streamManager.armStreamTimer(userMsg.id);
 
       // @mentions are A2A hints only, not routing targets
@@ -319,11 +314,6 @@ export const useChatStore = create<ChatState>((set, get) => {
       } catch (error) {
         if (!(error instanceof DOMException && error.name === "AbortError")) {
           logger.error("Failed to send message", error);
-          track("error_occurred", {
-            message: "Failed to send message",
-            source: "chat_store",
-            lineno: 0,
-          });
           streamManager.clearStreamTimer();
           get().setMessageStatus(userMsg.id, "error");
           set({ isStreaming: false, streamingMessageId: null });
@@ -447,7 +437,6 @@ export const useChatStore = create<ChatState>((set, get) => {
           messages: [],
           isLoadingMessages: false,
         }));
-        track("conversation_created", { conversationId: conv.id, type: conv.type });
         return conv;
       } catch (e) {
         logger.error("Failed to create conversation", e);
@@ -468,7 +457,6 @@ export const useChatStore = create<ChatState>((set, get) => {
           messages: [],
           isLoadingMessages: false,
         }));
-        track("conversation_created", { conversationId: conv.id, type });
         return conv;
       } catch (error) {
         logger.error("Failed to create group conversation", error);
@@ -484,10 +472,6 @@ export const useChatStore = create<ChatState>((set, get) => {
           (item) => item.relayRoomId === room.roomId,
         );
         if (conversation) get().setCurrentConversation(conversation.id);
-        track("conversation_created", {
-          conversationId: conversation?.id ?? room.roomId,
-          type: "cross_hub",
-        });
         return true;
       } catch (error) {
         logger.error("Failed to create Relay Room", error);
@@ -626,7 +610,6 @@ export const useChatStore = create<ChatState>((set, get) => {
       if (!beginConversationAction(id, "delete")) return false;
       try {
         await api.deleteConversation(id, true);
-        track("conversation_deleted", { conversationId: id });
         const state = get();
         const allConversations = [
           ...state.conversations,

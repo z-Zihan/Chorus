@@ -21,7 +21,6 @@ import {
   setUpdateChannel,
   type UpdateChannel,
 } from "@/services/updater";
-import { track } from "@/utils/analytics";
 import { useUIStore } from "@/store/uiStore";
 
 export function AgentSettingsExtras() {
@@ -38,11 +37,9 @@ export function AgentSettingsExtras() {
   const handleThemeChange = (preference: ThemePreference) => {
     setTheme(preference);
     if (!setThemePreference(preference)) addToast(t("preferenceSaveFailed"), "error");
-    track("settings_changed", { section: "theme", value: preference });
   };
 
   const handleLanguageChange = async (language: AppLanguage) => {
-    track("settings_changed", { section: "language", value: language });
     if (!(await changeLanguage(language))) addToast(t("preferenceSaveFailed"), "error");
   };
 
@@ -117,7 +114,6 @@ export function AgentSettingsExtras() {
               if (setUpdateChannel(channel)) {
                 setChannel(channel);
                 setUpdateStatus(null);
-                track("settings_changed", { section: "updateChannel", value: channel });
               } else {
                 setUpdateStatus(t("updates.channelSaveFailed"));
               }

@@ -44,7 +44,6 @@ import {
   isUpdateConfigured,
   isUpdateSupported,
 } from "@/services/updater";
-import { track } from "@/utils/analytics";
 
 const APP_VERSION = "0.1.0";
 const HOMEPAGE_URL = "https://github.com/z-Zihan/Chorus";
@@ -279,12 +278,10 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
     if (!setThemePreference(preference)) {
       addToast(t("settings:preferenceSaveFailed"), "error");
     }
-    track("settings_changed", { section: "theme", value: preference });
   };
 
   const handleLanguageChange = async (nextLanguage: AppLanguage) => {
     setLanguage(nextLanguage);
-    track("settings_changed", { section: "language", value: nextLanguage });
     if (!(await changeLanguage(nextLanguage))) {
       addToast(t("settings:preferenceSaveFailed"), "error");
     }

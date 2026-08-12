@@ -3,7 +3,6 @@ import { useTranslation } from "react-i18next";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { logger } from "@/utils/logger";
-import { track } from "@/utils/analytics";
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -44,7 +43,6 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     logger.error("Render error", { message: error.message, componentStack: info.componentStack });
-    track("error_occurred", { message: error.message, source: "react_error_boundary", lineno: 0 });
   }
 
   private retry = () => {

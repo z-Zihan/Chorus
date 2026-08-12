@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { api, type ServerLogEntry } from "@/services/api";
-import { getLogs, type LogLevel } from "@/utils/logger";
+import { getDesktopLogs, getLogs, type LogLevel } from "@/utils/logger";
 import { useUIStore } from "@/store/uiStore";
 
 type LogFilter = "all" | LogLevel;
@@ -26,6 +26,7 @@ export function LogViewer({ open, onOpenChange }: LogViewerProps) {
   const [level, setLevel] = useState<LogFilter>("all");
   const [search, setSearch] = useState("");
   const [backendLogs, setBackendLogs] = useState<ServerLogEntry[]>([]);
+  const [desktopLogs, setDesktopLogs] = useState<ServerLogEntry[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
   const addToast = useUIStore((state) => state.addToast);
@@ -35,13 +36,12 @@ export function LogViewer({ open, onOpenChange }: LogViewerProps) {
     let active = true;
     setIsLoading(true);
     setLoadFailed(false);
-    void api
-      .getLogs(level, 500)
-      .then((logs) => {
-        if (active) setBackendLogs(logs);
-      })
-      .catch(() => {
-        if (active) setLoadFailed(true);
+    void Promise.allSettled([api.getLogs(level, 2_000), getDesktopLogs(500)])
+      .then(([serverResult, desktopResult]) => {
+        if (!active) return;
+        if (serverResult.status === "fulfilled") setBackendLogs(serverResult.value);
+        else setLoadFailed(true);
+        if (desktopResult.status === "fulfilled") setDesktopLogs(desktopResult.value);
       })
       .finally(() => {
         if (active) setIsLoading(false);
@@ -54,14 +54,21 @@ export function LogViewer({ open, onOpenChange }: LogViewerProps) {
   const visibleLogs = useMemo(() => {
     const frontendLogs = getLogs(level === "all" ? undefined : level, 500);
     const keyword = search.trim().toLowerCase();
-    return [...frontendLogs, ...backendLogs]
+    const uniqueLogs = new Map<string, ServerLogEntry>();
+    for (const entry of [...backendLogs, ...desktopLogs, ...frontendLogs]) {
+      const key =
+        entry.id ??
+        `${entry.source}:${entry.timestamp}:${entry.level}:${entry.message}:${JSON.stringify(entry.data)}`;
+      uniqueLogs.set(key, entry);
+    }
+    return [...uniqueLogs.values()]
       .sort((left, right) => left.timestamp - right.timestamp)
       .filter((entry) => {
         if (level !== "all" && entry.level !== level) return false;
         if (!keyword) return true;
         return JSON.stringify(entry).toLowerCase().includes(keyword);
       });
-  }, [backendLogs, level, search]);
+  }, [backendLogs, desktopLogs, level, search]);
 
   const exportVisibleLogs = () => {
     let url: string | null = null;
@@ -103,11 +110,13 @@ export function LogViewer({ open, onOpenChange }: LogViewerProps) {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {(["all", "debug", "info", "warn", "error"] as const).map((item) => (
-                <SelectItem key={item} value={item}>
-                  {t(`settings:logs.levels.${item}`)}
-                </SelectItem>
-              ))}
+              {(["all", "trace", "debug", "info", "warn", "error", "fatal"] as const).map(
+                (item) => (
+                  <SelectItem key={item} value={item}>
+                    {t(`settings:logs.levels.${item}`)}
+                  </SelectItem>
+                ),
+              )}
             </SelectContent>
           </Select>
           <Input

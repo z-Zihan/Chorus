@@ -5,7 +5,6 @@ import { useAgentStore } from "@/store/agentStore";
 import { getWsUrl } from "@/services/env";
 import { api } from "@/services/api";
 import { logger } from "@/utils/logger";
-import { track } from "@/utils/analytics";
 
 const RECONNECT_BASE = 1000;
 const RECONNECT_MAX = 30000;
@@ -77,12 +76,6 @@ export function useWebSocket(enabled = true) {
         case "message":
           if (event.message.conversationId === useChatStore.getState().currentConversationId) {
             addMessage(event.message);
-            if (event.message.fromType === "agent" && event.message.status !== "thinking") {
-              track("message_received", {
-                conversationId: event.message.conversationId,
-                status: event.message.status,
-              });
-            }
           }
           break;
 
@@ -231,7 +224,6 @@ export function useWebSocket(enabled = true) {
         case "error":
           logger.error("Server error", { message: event.message });
           if (event.messageId) setMessageStatus(event.messageId, "error");
-          track("error_occurred", { message: event.message, source: "websocket", lineno: 0 });
           break;
       }
     };
@@ -275,11 +267,6 @@ export function useWebSocket(enabled = true) {
           handleEvent(JSON.parse(e.data));
         } catch (err) {
           logger.error("WebSocket message parse error", err);
-          track("error_occurred", {
-            message: "WebSocket message parse error",
-            source: "websocket",
-            lineno: 0,
-          });
         }
       };
 

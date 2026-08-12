@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from "react";
 import type { Agent, AgentVisibility } from "@chorus/shared";
 import { useTranslation } from "react-i18next";
 import { useAgentStore } from "@/store/agentStore";
-import { track } from "@/utils/analytics";
 
 type AgentWithConfig = Agent & { config?: Record<string, unknown> };
 
@@ -87,7 +86,6 @@ export function useAgentSettings(agentId: string | null) {
         visibility: fields.visibility,
         ...(Object.keys(config).length > 0 ? { config } : {}),
       });
-      track("settings_changed", { section: "agent", agentId: agent.id });
       clearSelectedAgent();
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : t("errors:saveFailed"));

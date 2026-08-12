@@ -99,17 +99,19 @@ async function main(): Promise<void> {
   checkpointTimer.unref();
 
   let closing = false;
-  const close = async () => {
+  const close = async (signal: string) => {
     if (closing) return;
     closing = true;
+    logger.info({ signal }, "Relay shutdown started");
     clearInterval(cleanupTimer);
     clearInterval(checkpointTimer);
     registry.shutdown();
     await app.close();
     database.sqlite.close();
+    logger.info({ signal }, "Relay shutdown completed");
   };
-  process.once("SIGINT", () => void close());
-  process.once("SIGTERM", () => void close());
+  process.once("SIGINT", () => void close("SIGINT"));
+  process.once("SIGTERM", () => void close("SIGTERM"));
 
   await app.listen({ host, port });
   app.log.info({ host, port, dbPath }, "Chorus relay server started");

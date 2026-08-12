@@ -1,7 +1,6 @@
 import type { ClientEvent, Message } from "@chorus/shared";
 import i18n from "@/i18n";
 import { useUIStore } from "@/store/uiStore";
-import { track } from "@/utils/analytics";
 import { logger } from "@/utils/logger";
 
 export const STREAM_TIMEOUT_MS = 180_000;
@@ -62,11 +61,6 @@ export class StreamManager<T extends StreamState> {
       }));
       useUIStore.getState().addToast(i18n.t("errors:agentTimeout"), "error");
       logger.error("Agent response timed out", { messageId: targetId });
-      track("error_occurred", {
-        message: "Agent response timed out",
-        source: "chat_store",
-        lineno: 0,
-      });
       this.clearStreamTimer();
     }, STREAM_TIMEOUT_MS);
   }

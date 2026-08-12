@@ -1,7 +1,6 @@
 import { create } from "zustand";
 import type { Agent, AgentConfig, AgentStatus, AgentStatusSnapshot } from "@chorus/shared";
 import { api } from "@/services/api";
-import { track } from "@/utils/analytics";
 import { logger } from "@/utils/logger";
 import i18n from "@/i18n";
 
@@ -134,7 +133,6 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     set((state) => ({
       agents: state.agents.map((a) => {
         if (a.id !== agentId) return a;
-        if (a.status !== status) track("agent_status_change", { agentId, status });
         return { ...a, status, error };
       }),
       statusByAgentId: { ...state.statusByAgentId, [agentId]: { status, error } },

@@ -1,6 +1,7 @@
 // A Rust toolchain is required to compile and package the actual Tauri desktop build.
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, SystemTime};
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconEvent},
@@ -104,6 +105,62 @@ fn is_tauri_env() -> bool {
     true
 }
 
+fn desktop_log_files(log_dir: &Path) -> Vec<PathBuf> {
+    let mut files = std::fs::read_dir(log_dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with("chorus.log"))
+        })
+        .collect::<Vec<_>>();
+    files.sort_by_key(|path| path.metadata().and_then(|meta| meta.modified()).ok());
+    files
+}
+
+fn remove_expired_desktop_logs(log_dir: &Path) {
+    let cutoff = SystemTime::now()
+        .checked_sub(Duration::from_secs(7 * 24 * 60 * 60))
+        .unwrap_or(SystemTime::UNIX_EPOCH);
+    for path in desktop_log_files(log_dir) {
+        let is_expired = path
+            .metadata()
+            .and_then(|meta| meta.modified())
+            .is_ok_and(|modified| modified < cutoff);
+        if is_expired {
+            let _ = std::fs::remove_file(path);
+        }
+    }
+}
+
+#[tauri::command]
+fn get_desktop_logs(
+    app: tauri::AppHandle,
+    limit: Option<usize>,
+) -> Result<Vec<serde_json::Value>, String> {
+    let log_dir = app
+        .path()
+        .app_log_dir()
+        .map_err(|error| error.to_string())?;
+    let mut records = Vec::new();
+    for path in desktop_log_files(&log_dir) {
+        let content = std::fs::read_to_string(path).map_err(|error| error.to_string())?;
+        for line in content.lines() {
+            if let Ok(record) = serde_json::from_str::<serde_json::Value>(line) {
+                records.push(record);
+            }
+        }
+    }
+    let keep = limit.unwrap_or(500).min(2_000);
+    if records.len() > keep {
+        records.drain(0..records.len() - keep);
+    }
+    Ok(records)
+}
+
 fn show_main_window(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
         tracing::info!(window = MAIN_WINDOW_LABEL, "showing application window");
@@ -122,20 +179,28 @@ pub fn run() {
             get_server_url,
             get_ws_url,
             is_tauri_env,
+            get_desktop_logs,
         ])
         .setup(|app| {
             let log_dir = app.path().app_log_dir()?;
             std::fs::create_dir_all(&log_dir)?;
-            let file_appender = tracing_appender::rolling::never(&log_dir, "chorus.log");
+            remove_expired_desktop_logs(&log_dir);
+            let file_appender = tracing_appender::rolling::daily(&log_dir, "chorus.log");
             let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
             let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
             let _ = tracing_subscriber::fmt()
                 .with_env_filter(env_filter)
                 .with_ansi(false)
+                .json()
                 .with_writer(non_blocking)
                 .try_init();
             app.manage(TracingState { _guard: guard });
+            let default_panic_hook = std::panic::take_hook();
+            std::panic::set_hook(Box::new(move |panic_info| {
+                tracing::error!(panic = %panic_info, "desktop panic");
+                default_panic_hook(panic_info);
+            }));
             tracing::info!("Chorus application started");
 
             let show_window =
