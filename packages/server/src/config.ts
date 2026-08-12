@@ -21,7 +21,15 @@ function defaultConfig(): AppConfig {
     host: "127.0.0.1",
     port: 3210,
     dbPath: join(resolveAppDataDir(), "chorus.db"),
-    cors: { origin: ["http://localhost:5173", "http://127.0.0.1:5173"] },
+    cors: {
+      origin: [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "tauri://localhost",
+        "http://tauri.localhost",
+        "https://tauri.localhost",
+      ],
+    },
     auth: { enabled: false, tokens: {} },
     history: { maxMessages: 20, maxTokens: 8_000 },
     agents: [],

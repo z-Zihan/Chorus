@@ -34,6 +34,24 @@ import { PairingService } from "./hub/pairing-service.js";
 import { TokenStore } from "./auth/token-store.js";
 import { signEnvelope } from "./hub/crypto.js";
 
+function monitorDesktopParent(): void {
+  const expectedParentPid = Number.parseInt(process.env.CHORUS_PARENT_PID ?? "", 10);
+  if (!Number.isInteger(expectedParentPid) || expectedParentPid <= 1) return;
+
+  const timer = setInterval(() => {
+    if (process.ppid === expectedParentPid) return;
+    clearInterval(timer);
+    logger.warn(
+      { expectedParentPid, currentParentPid: process.ppid },
+      "Desktop parent exited; stopping server sidecar",
+    );
+    process.kill(process.pid, "SIGTERM");
+  }, 1_000);
+  timer.unref();
+}
+
+monitorDesktopParent();
+
 process.on("uncaughtException", (error) => {
   logger.fatal({ err: error }, "Uncaught exception");
   track("error", { message: error.message, source: "uncaughtException" });

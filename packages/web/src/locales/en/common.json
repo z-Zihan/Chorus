@@ -185,7 +185,7 @@
   "onboarding": {
     "bootstrapping": "Initializing…",
     "loadingSetup": "Checking your setup…",
-    "loadFailed": "Chorus could not load the setup status. Check that the local service is running, then try again.",
+    "loadFailed": "The local service did not respond. Chorus retried automatically; reopen the app or check the diagnostic log.",
     "rescanFailed": "The scan could not be completed. Your previous results are still here.",
     "startFailed": "Chorus could not start this Agent. Your selection was not lost; try again.",
     "retrySetup": "Retry setup check",

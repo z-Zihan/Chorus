@@ -12,7 +12,7 @@ const RECONNECT_MAX = 30000;
 const HEARTBEAT_MS = 30000;
 const PONG_TIMEOUT_MS = 10000;
 
-export function useWebSocket() {
+export function useWebSocket(enabled = true) {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectDelay = useRef(RECONNECT_BASE);
   const heartbeatTimer = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -35,6 +35,7 @@ export function useWebSocket() {
   const updateAgentStatuses = useAgentStore((s) => s.updateAgentStatuses);
 
   useEffect(() => {
+    if (!enabled) return;
     let mounted = true;
 
     const sendEvent = (event: ClientEvent): boolean => {
@@ -317,5 +318,6 @@ export function useWebSocket() {
     currentConversationId,
     updateAgentStatus,
     updateAgentStatuses,
+    enabled,
   ]);
 }

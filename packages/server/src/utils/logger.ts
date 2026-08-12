@@ -20,6 +20,12 @@ const LOG_FILE = resolve(process.env.SERVER_LOG_FILE?.trim() || "data/logs/serve
 const isProduction = process.env.NODE_ENV === "production";
 const recentLogs: ServerLogEntry[] = [];
 
+// A packaged sidecar can briefly outlive its parent while the desktop process
+// is shutting down. Treat a closed stdout pipe as a logging failure, not as an
+// application exception; otherwise EPIPE recursively re-enters the global
+// uncaught-exception logger until V8 runs out of memory.
+process.stdout.on("error", () => undefined);
+
 const levelNames: Record<number, LogLevel> = {
   10: "debug",
   20: "debug",
@@ -100,8 +106,10 @@ class StructuredLogStream extends Writable {
         );
       }
       callback();
-    } catch (error) {
-      callback(error instanceof Error ? error : new Error(String(error)));
+    } catch {
+      // Diagnostics must never bring down the local service. The in-memory log
+      // may be unavailable for this line, but the application can keep running.
+      callback();
     }
   }
 }

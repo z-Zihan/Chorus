@@ -184,7 +184,7 @@
   "onboarding": {
     "bootstrapping": "正在初始化…",
     "loadingSetup": "正在检查本机配置…",
-    "loadFailed": "Chorus 无法读取初始化状态。请确认本地服务正在运行，然后重试。",
+    "loadFailed": "本地服务未响应。Chorus 已自动重试；请重新打开应用，或查看诊断日志。",
     "rescanFailed": "本次扫描未能完成，之前的检测结果仍会保留。",
     "startFailed": "Chorus 无法启动这个 Agent，你的选择仍已保留，请重试。",
     "retrySetup": "重新检查配置",

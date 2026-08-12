@@ -30,10 +30,14 @@ impl NodeSidecar {
     pub fn spawn(
         app: &tauri::AppHandle,
         server_path: &Path,
+        server_log_path: &Path,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let (mut events, child) = app
             .shell()
             .sidecar("chorus-node")?
+            .env("NODE_ENV", "production")
+            .env("SERVER_LOG_FILE", server_log_path)
+            .env("CHORUS_PARENT_PID", std::process::id().to_string())
             .arg(server_path)
             .spawn()?;
         tracing::info!(pid = child.pid(), path = %server_path.display(), "server sidecar spawned");
@@ -122,7 +126,7 @@ pub fn run() {
         .setup(|app| {
             let log_dir = app.path().app_log_dir()?;
             std::fs::create_dir_all(&log_dir)?;
-            let file_appender = tracing_appender::rolling::never(log_dir, "chorus.log");
+            let file_appender = tracing_appender::rolling::never(&log_dir, "chorus.log");
             let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
             let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
@@ -147,7 +151,12 @@ pub fn run() {
             {
                 // The production bundle copies this relative path into Tauri's resource directory.
                 let server_path = app.path().resource_dir()?.join(SERVER_SCRIPT_RELATIVE_PATH);
-                app.manage(NodeSidecar::spawn(app.handle(), &server_path)?);
+                let server_log_path = log_dir.join("server.log");
+                app.manage(NodeSidecar::spawn(
+                    app.handle(),
+                    &server_path,
+                    &server_log_path,
+                )?);
             }
 
             Ok(())
@@ -193,6 +202,16 @@ pub fn run() {
             }
             _ => {}
         })
-        .run(tauri::generate_context!())
-        .expect("error while running Chorus");
+        .build(tauri::generate_context!())
+        .expect("error while building Chorus")
+        .run(|app, event| {
+            if matches!(
+                event,
+                tauri::RunEvent::Exit | tauri::RunEvent::ExitRequested { .. }
+            ) {
+                if let Some(sidecar) = app.try_state::<NodeSidecar>() {
+                    sidecar.kill();
+                }
+            }
+        });
 }

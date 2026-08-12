@@ -5,6 +5,12 @@ import { logger } from "@/utils/logger";
 import i18n from "@/i18n";
 
 type OnboardingAction = "load" | "rescan" | "select";
+const STARTUP_ATTEMPTS = 10;
+const STARTUP_RETRY_MS = 350;
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
 
 interface OnboardingState {
   status: OnboardingStatus | null;
@@ -28,17 +34,23 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
   checkStatus: async () => {
     if (get().pendingAction) return;
     set({ isLoading: true, pendingAction: "load", loadError: null });
-    try {
-      const status = await api.getOnboardingStatus();
-      set({ status, isLoading: false, pendingAction: null, loadError: null });
-    } catch (e) {
-      logger.error("Failed to check onboarding status", e);
-      set({
-        isLoading: false,
-        pendingAction: null,
-        loadError: i18n.t("common:onboarding.loadFailed"),
-      });
+    let lastError: unknown;
+    for (let attempt = 0; attempt < STARTUP_ATTEMPTS; attempt += 1) {
+      try {
+        const status = await api.getOnboardingStatus();
+        set({ status, isLoading: false, pendingAction: null, loadError: null });
+        return;
+      } catch (error) {
+        lastError = error;
+        if (attempt < STARTUP_ATTEMPTS - 1) await wait(STARTUP_RETRY_MS);
+      }
     }
+    logger.error("Failed to check onboarding status", lastError);
+    set({
+      isLoading: false,
+      pendingAction: null,
+      loadError: i18n.t("common:onboarding.loadFailed"),
+    });
   },
 
   rescan: async () => {

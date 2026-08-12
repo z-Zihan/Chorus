@@ -123,7 +123,7 @@ async function request<T>(path: string, options?: RequestInit, silent = false): 
     const ui = useUIStore.getState();
     ui.setOffline(true);
     const now = Date.now();
-    if (now - lastOfflineToastAt >= 5_000) {
+    if (!silent && now - lastOfflineToastAt >= 5_000) {
       lastOfflineToastAt = now;
       ui.addToast(i18n.t("errors:offlineToast"), "error");
     }

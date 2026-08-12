@@ -92,8 +92,8 @@ function AppShell() {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
-  useWebSocket();
   const onboardingStatus = useOnboardingStore((s) => s.status);
+  useWebSocket(onboardingStatus?.step === "completed");
 
   useHotkeys(
     [
@@ -112,12 +112,6 @@ function AppShell() {
     ],
     [agents, selectedAgentId, selectAgent, clearSelectedAgent, closeSidebar],
   );
-
-  // Init: load agents & conversations on mount
-  useEffect(() => {
-    void fetchAgents().then(fetchHealthStatus);
-    void fetchConversations();
-  }, [fetchAgents, fetchConversations, fetchHealthStatus]);
 
   useEffect(() => {
     if (onboardingStatus?.step !== "completed") return;
