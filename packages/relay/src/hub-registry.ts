@@ -1,13 +1,12 @@
-import { eq } from "drizzle-orm";
+import { and, eq, or } from "drizzle-orm";
 import type { DatabaseContext } from "./db/index.js";
-import { hubs } from "./db/schema.js";
+import { hubBlocks, hubs } from "./db/schema.js";
 import type { RelaySocket } from "./socket.js";
 
 export type HubRecord = typeof hubs.$inferSelect;
 
 export class HubRegistry {
   private readonly sockets = new Map<string, RelaySocket>();
-  private readonly blockedHubs = new Map<string, Set<string>>();
   private shuttingDown = false;
 
   constructor(private readonly database: DatabaseContext) {
@@ -67,7 +66,6 @@ export class HubRegistry {
     this.database.db.update(hubs).set({ online: false, updatedAt: Date.now() }).run();
     for (const socket of this.sockets.values()) socket.close(1001, "Relay shutting down");
     this.sockets.clear();
-    this.blockedHubs.clear();
   }
 
   getSocket(hubId: string): RelaySocket | null {
@@ -75,21 +73,34 @@ export class HubRegistry {
   }
 
   blockHub(hubId: string, blockedHubId: string): void {
-    const blocked = this.blockedHubs.get(hubId) ?? new Set<string>();
-    blocked.add(blockedHubId);
-    this.blockedHubs.set(hubId, blocked);
+    this.database.db
+      .insert(hubBlocks)
+      .values({ hubId, blockedHubId, createdAt: Date.now() })
+      .onConflictDoNothing()
+      .run();
   }
 
-  /** Clear all session-scoped blocks installed by this Hub. */
+  /** Clear persisted blocks involving a Hub only when that Hub is unregistered. */
   unblockHub(hubId: string): void {
-    this.blockedHubs.delete(hubId);
+    this.database.db
+      .delete(hubBlocks)
+      .where(or(eq(hubBlocks.hubId, hubId), eq(hubBlocks.blockedHubId, hubId)))
+      .run();
   }
 
   /** Blocks are symmetric for routing even though only one side installs them. */
   isBlocked(fromHubId: string, toHubId: string): boolean {
-    return (
-      this.blockedHubs.get(fromHubId)?.has(toHubId) === true ||
-      this.blockedHubs.get(toHubId)?.has(fromHubId) === true
+    return Boolean(
+      this.database.db
+        .select({ hubId: hubBlocks.hubId })
+        .from(hubBlocks)
+        .where(
+          or(
+            and(eq(hubBlocks.hubId, fromHubId), eq(hubBlocks.blockedHubId, toHubId)),
+            and(eq(hubBlocks.hubId, toHubId), eq(hubBlocks.blockedHubId, fromHubId)),
+          ),
+        )
+        .get(),
     );
   }
 

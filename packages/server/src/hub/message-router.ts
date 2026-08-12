@@ -85,7 +85,7 @@ export class HubMessageRouter {
     private readonly pairingService?: PairingService,
     private readonly offlineStore = new OfflineStore(),
   ) {
-    this.authorizationService = new AuthorizationService(trustStore, repository);
+    this.authorizationService = new AuthorizationService(trustStore, repository, registry);
     this.resyncService = new ResyncService(
       repository,
       relayClient,
@@ -277,8 +277,11 @@ export class HubMessageRouter {
             content: message,
           }
         : { ...message, conversationId };
+    const localConversation = this.repository.getConversation?.(conversationId);
+    const protocolConversationId = localConversation?.relayRoomId ?? conversationId;
     const payload: HubPayload = {
       ...outbound,
+      conversationId: protocolConversationId,
       protocolVersion: 2,
       fromUserId: this.localUser.id,
       fromUserName: this.localUser.name,
@@ -412,9 +415,17 @@ export class HubMessageRouter {
   }
 
   private async handleDirectoryRequest(fromHubId: string, request: HubPayload): Promise<void> {
+    const requestedRoomId = stringMetadata(request.metadata, "roomId");
+    const sharedRoom = Boolean(
+      requestedRoomId &&
+      this.registry.isHubInRoom(requestedRoomId, fromHubId) &&
+      this.repository
+        .listConversations({ type: "cross_hub" })
+        .some((conversation) => conversation.relayRoomId === requestedRoomId),
+    );
     const directory = await this.directoryService.buildSignedLocalDirectory({
-      trusted: true,
-      sharedRoom: false,
+      trusted: false,
+      sharedRoom,
     });
     if (!directory) {
       logger.warn({ fromHubId }, "Unable to answer directory request without a signed directory");

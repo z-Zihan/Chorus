@@ -214,12 +214,12 @@ Chorus 提供可信的本地 Agent 目录，用户可以从 UI 添加已检测 C
 
 | 价值主张 | 状态 | 产品结论 |
 |----------|:---:|----------|
-| CLI 管理 | ⚠️ | Adapter 与聊天已可用；自动发现和统一接入缺失 |
-| 应用内安装 | ❌ | 只有后端注册 API，没有用户安装闭环 |
-| 多 Agent 群聊 | ❌ | 有技术基础，没有可完成的用户路径 |
-| 单人模式 | ⚠️ | 核心聊天可用，历史与配置管理不完整 |
-| 低认知负担 | ❌ | 无配置会进入 0 Agent 死路，无首启引导 |
-| 跨设备协作 | ⚠️ | 传输基础存在；保存反馈、连接状态、联系人、Room 所有权与 Agent 隐私模型需要重做 |
+| CLI 管理 | ✅ | 14 个 CLI 描述符、自动发现、重扫、添加和登录/安装指引已接入 UI |
+| 应用内安装 | ✅ | Catalog 安装、验证、添加和错误恢复路径已实现；系统级安装仍需用户确认 |
+| 多 Agent 群聊 | ✅ | 本地群聊、成员管理、明确路由、mention/call/off 与取消路径已实现 |
+| 单人模式 | ✅ | 零配置启动、历史、搜索、重命名、归档和导出已实现 |
+| 低认知负担 | ✅ | 首启检测和 ready/needs_auth/none_found/error 恢复路径已实现 |
+| 跨设备协作 | ⚠️ | Relay/P2P、配对、Room、可见性和入站授权已有进程级实现；真实双设备、断网恢复和打包后网络权限仍是发布阻断项 |
 
 “服务能启动”“数据库有字段”“API 能调用”均不等于用户需求已完成。
 
@@ -236,7 +236,7 @@ Chorus 提供可信的本地 Agent 目录，用户可以从 UI 添加已检测 C
 | Registry 重启恢复 | UI 注册当前无法可靠持久使用 | 配置导入、数据库记录、自动检测结果有明确合并优先级，重启不丢失 |
 | 安全与错误翻译 | CLI 继承本机权限 | 只执行允许的探测命令；错误转为用户语言；不记录密钥 |
 
-### 7.2 P1：留存与核心愿景
+### 7.2 P1：留存与核心愿景（代码完成，持续验收）
 
 | 功能 | 用户结果 |
 |------|----------|
@@ -366,12 +366,12 @@ i18n、主题、动画、埋点供应商、更多 UI 基础组件不是当前发
 
 #### Room 管理员 / Room administrators
 
-- Room 创建者默认为管理员。管理员可以邀请联系人、移除成员、移除任何 Agent，并把其他 Room 成员委派为管理员。
+- Room 创建者是当前唯一管理员，可以邀请联系人并移除 Room Agent。人类成员移除和管理员委派尚未实现，不得在 UI 或发布说明中宣称可用。
 - 管理员不能添加别人的 Agent；Agent 入房始终只能由所有者发起。
 - 非管理员只能退出 Room，以及添加或移除自己的 Agent。
-- 管理员移除他人的 Agent 时，系统必须通知所有者、写入可审计事件，并立即撤销该 Agent 的后续调用权限。
+- 管理员移除他人的 Agent 当前会立即撤销本地 Room membership；跨设备通知和完整审计事件仍是发布前待验收能力。
 
-**English:** The room creator is an administrator by default. Administrators may invite contacts, remove members or any room agent, and delegate the role to another member, but they cannot add someone else's agent. Non-administrators may only leave and manage their own agents. Removing another user's agent must notify its owner, create an audit event, and immediately revoke further invocation rights.
+**English:** The room creator is currently the only administrator and may invite contacts or remove room agents. Human-member removal, administrator delegation, owner notification, and the complete cross-device audit trail remain release work and must not be presented as available.
 
 #### 成功与权限验收 / Acceptance
 
@@ -380,7 +380,7 @@ i18n、主题、动画、埋点供应商、更多 UI 基础组件不是当前发
 3. 非所有者尝试添加 Agent 返回 `403 AGENT_OWNER_REQUIRED`；未入房 Agent 的消息返回 `403 AGENT_NOT_IN_ROOM`。
 4. 所有者移除 Agent 或改为 `private` 后，目录撤销在在线链路 60 秒内收敛，后续调用被拒绝。
 5. 联系人、Room 和 Agent 撤销分别可审计，且不会误删历史消息。
-6. Room 创建者自动获得管理员角色；非管理员邀请/移除他人返回 `403 ROOM_ADMIN_REQUIRED`，管理员移除他人 Agent 会通知所有者并生成审计事件。
+6. Room 创建者自动获得管理员角色；非管理员邀请/移除他人返回 `403 ROOM_ADMIN_REQUIRED`。通知所有者、管理员委派与人类成员移除仍属于未完成验收项。
 
 **English:** Acceptance covers immediate save feedback, persisted connection settings, zero agent disclosure on pairing, owner-only room agent admission, administrator enforcement, owner notification, fast revocation, and auditable history-preserving removal.
 
@@ -452,8 +452,8 @@ i18n、主题、动画、埋点供应商、更多 UI 基础组件不是当前发
 | 已完成 | 新用户打开即可发现 CLI 并完成首条消息 | 已实现 |
 | 已完成 | 用户能安装 Agent、管理长期历史、创建本地群聊 | 已实现 |
 | 已完成 | 多 Agent 协作可控、可取消、可审计 | 已实现 |
-| 已完成 | 团队可跨设备安全协作 | Hub Client、Relay、加密和运维方案完成 |
-| 下一阶段 | 用户通过联系人和 Room 安全协作 | Relay 配置反馈、Contacts、Room API/UI、owner-only Agent 加入、默认 private 与撤销通过验收 |
+| 代码完成，发布阻断 | 团队可跨设备安全协作 | Hub Client、Relay、加密、默认 private、Room owner-only 加入与入站授权已有自动化证据；仍需真实双设备和打包后验收 |
+| 下一阶段 | 完成 Room 治理与生产运维 | 人类成员移除、管理员委派、跨 Hub 审计通知、TLS/监控/备份和官方镜像发布 |
 
 ## 13. 开放决策
 

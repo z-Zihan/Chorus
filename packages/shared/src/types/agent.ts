@@ -4,6 +4,7 @@ import type { UserKind } from "./user";
 
 export type AgentStatus = "online" | "offline" | "busy" | "error";
 export type AgentType = "openai" | "openclaw" | "dify" | "cli" | "mock" | "custom" | "langchain";
+export type AgentVisibility = "private" | "room" | "public";
 
 export interface AgentConfig {
   id: string;
@@ -13,6 +14,7 @@ export interface AgentConfig {
   type: AgentType;
   config: Record<string, unknown>;
   capabilities?: string[];
+  visibility?: AgentVisibility;
 }
 
 export type AgentConfigSource = "explicit_config" | "user" | "auto_detected" | "catalog";
@@ -41,6 +43,7 @@ export interface Agent {
   ownerType?: "local" | "remote" | "system";
   owner?: { id: string; name: string; kind: UserKind };
   capabilities?: string[];
+  visibility: AgentVisibility;
   stale?: boolean;
   homeHubId?: string;
   createdAt: number;

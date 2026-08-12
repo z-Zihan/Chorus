@@ -1,8 +1,8 @@
 # Chorus — 技术设计文档
 
-> 最后更新：2026-08-03
+> 最后更新：2026-08-12
 >
-> 状态约定：本文同时包含已实现和目标设计。§8.1–8.6 已全部实现。
+> 状态约定：本文同时包含已实现能力、历史草案和未来方案；带“未实现/未来/历史”标记的内容不属于当前 API 或发布承诺，当前行为以源码、迁移和测试为准。
 
 ## 1. 系统架构
 
@@ -31,7 +31,7 @@
 │  └──────────────────────────────────────────────────┘    │
 │  ┌──────────────────────────────────────────────────┐    │
 │  │               Storage Layer                       │    │
-│  │  SQLite (better-sqlite3) + 文件存储               │    │
+│  │  SQLite (better-sqlite3) + OS credential store   │    │
 │  └──────────────────────────────────────────────────┘    │
 └──────────────────────────────────────────────────────────┘
 ```
@@ -402,7 +402,7 @@ type ServerEvent =
 
 ## 5. 数据库设计 / Database Design
 
-> 状态说明：以下是多用户目标模型。当前 Drizzle schema 尚未包含 `users` 和 owner 字段，必须通过版本化迁移落地，不能把文档中的目标字段当成现有 API 已返回字段。
+> 状态说明：当前 Drizzle schema 已包含 `users`、`user_hubs`、Agent owner/visibility、client token、Room 状态与成员身份快照字段。下方 SQL 是便于阅读的核心模型摘要；精确字段和迁移以 `packages/server/src/db/schema.ts` 与 `packages/server/drizzle/` 为准。
 
 ```sql
 -- 启用 WAL 模式（并发读写，避免读写锁）
@@ -434,11 +434,10 @@ CREATE TABLE agents (
   config          TEXT,                 -- 远程 Agent 不保存凭据或可执行配置
   owner_id        TEXT NOT NULL REFERENCES users(id),
   owner_type      TEXT NOT NULL,        -- 'local' | 'remote' | 'system'
-  home_hub_id     TEXT NOT NULL,
-  source_agent_id TEXT NOT NULL,        -- 对端 Hub 内原始 Agent ID
+  home_hub_id     TEXT,
   capabilities    TEXT NOT NULL DEFAULT '[]',
-  visibility      TEXT NOT NULL DEFAULT 'private', -- private|trusted|room|public
-  directory_version INTEGER NOT NULL DEFAULT 0,
+  visibility      TEXT NOT NULL DEFAULT 'private', -- private|room|public
+  stale           INTEGER NOT NULL DEFAULT 0,
   created_at      INTEGER NOT NULL,
   updated_at      INTEGER NOT NULL,
   last_seen_at    INTEGER
@@ -488,7 +487,6 @@ CREATE INDEX idx_messages_conversation ON messages(conversation_id, created_at);
 CREATE INDEX idx_messages_thread ON messages(thread_id) WHERE thread_id IS NOT NULL;
 CREATE INDEX idx_messages_parent ON messages(parent_id) WHERE parent_id IS NOT NULL;
 CREATE INDEX idx_users_hub ON users(hub_id);
-CREATE UNIQUE INDEX idx_agents_wire_identity ON agents(home_hub_id, source_agent_id);
 CREATE INDEX idx_agents_owner ON agents(owner_id, owner_type);
 ```
 
@@ -527,11 +525,19 @@ CREATE INDEX idx_agents_owner ON agents(owner_id, owner_type);
 | POST | `/api/a2a/confirm` | 批准或拒绝待确认 A2A 调用 |
 | GET | `/api/hub/status` | 获取 Relay/P2P 状态和已知 Hub |
 | GET | `/api/hub/contacts` | 获取当前已知 Hub 联系人；不是完整 Agent 目录 |
+| GET/PATCH | `/api/hub/config` | 读取或持久化 Hub/Relay/P2P 设置 |
+| GET/POST | `/api/hub/rooms` | 列出或创建跨 Hub Room |
+| POST | `/api/tokens` | loopback 创建 scoped Client Token；明文只返回一次 |
+| POST | `/api/tokens/ticket` | 以已授权客户端换取五分钟 `ws:connect` ticket |
+| GET | `/.well-known/agent-card.json` | 标准 Google A2A Agent Card 路径；无需本机 API token，因此只发布 `public` Agent |
+| GET | `/api/.well-known/agent-card.json` | Agent Card 兼容路径 |
+| GET | `/api/mcp/tools` | MCP Tool 描述 |
+| GET | `/api/acp/services` | ACP Service 描述 |
 | GET | `/api/health` | 健康检查 |
 
 ### 6.2 WebSocket
 
-连接：`ws://localhost:3210/ws`
+连接：浏览器先调用 `POST /api/tokens/ticket`，再连接 `ws://localhost:3210/ws?token=<short-lived-ticket>`。认证关闭或 loopback 情况下服务端仍签发短期 ticket，使客户端路径保持一致。
 
 事件格式见 [4.3 WebSocket 事件](#43-websocket-事件)
 
@@ -620,12 +626,12 @@ ws.on("message", (data) => {
 | 认证 | 当前本机 API 可关闭认证；外部进程/非 loopback 访问必须启用 Bearer Token。User 身份与 API client token 分离 |
 | CORS | 仅允许 localhost |
 | 输入校验 | Zod schema 验证所有输入 |
-| API Key 存储 | **当前缺口：** 配置 JSON 会直接存入 SQLite，尚未加密；UI 不应宣称已安全保管。目标是系统钥匙串 + 数据库仅存引用 |
+| API Key 存储 | 优先使用 macOS Keychain、Windows Credential Manager 或 Linux libsecret；不可用时使用本机加密文件 fallback，数据库只保存引用 |
 | SQL 注入 | Drizzle ORM 参数化查询 |
 
 ### 7.1 认证策略 / Authentication Strategy
 
-> 下方代码是早期身份映射草案，不代表当前实现，也不应作为多用户方案落地。当前实现已有可选 Bearer Token 校验：启用后保护 `/api/*`（`/api/health` 除外），WebSocket 使用 `?token=` 校验；它只认证“允许访问本机 API 的客户端”，尚未把 token 映射为 User，也没有 scope。
+> 下方代码是早期身份映射草案，不代表当前实现。当前实现持久化哈希后的 Client Token，并按 `agents:*`、`conversations:*`、`messages:*`、`hub:*`、`tokens:manage`、`api:*` 等 scope 对非 loopback REST 请求授权。浏览器先以 `POST /api/tokens/ticket` 换取五分钟 `ws:connect` ticket，再把该短期 ticket 放入 WebSocket query；长期 Client Token 不进入 WebSocket URL。
 
 <details><summary>历史草案 / Historical draft</summary>
 
@@ -687,7 +693,7 @@ ws.userId = userId ?? "user";
 
 </details>
 
-目标 token 记录为 `{ tokenHash, clientId, userId, scopes, expiresAt }`，至少支持 `agents:read`、`messages:write`、`conversations:write`、`hub:read`。关闭认证只适用于绑定 loopback 的桌面进程；外部 Agent 使用最小 scope，token 只展示一次并存入系统钥匙串，日志、URL、错误消息不得记录明文 token。WebSocket 后续优先使用短期 ticket 或 `Sec-WebSocket-Protocol`，兼容期才接受 query token。
+当前 token 记录为 `{ hash, clientId, userId?, scopes, expiresAt, revoked }`。关闭认证只允许绑定 loopback；外部 Agent 使用最小 scope，明文 token 只在创建时返回一次。WebSocket query 仅承载短期 ticket；日志、错误消息与持久化记录不得包含明文 token。
 
 身份校验分三层，不能互相替代：API token 验证本机 API client；Hub signature 验证传输端点；User directory signature 和策略验证远程调用者。Relay 登录成功永远不自动授予 A2A 权限。
 
@@ -700,14 +706,11 @@ ws.userId = userId ?? "user";
 
 interface Config {
   port: number;              // 默认 3210
-  dbPath: string;            // 默认 ./data/chorus.db
+  dbPath: string;            // 默认 OS 应用数据目录下的 chorus.db
   cors: {
     origin: string[];        // 默认 ["http://localhost:5173"]
   };
-  auth: {
-    enabled: boolean;        // 默认 false
-    token?: string;
-  };
+  auth: { enabled: boolean; tokens: Record<string, string> };
   agents: AgentConfig[];     // 预配置 Agent 列表
 }
 
@@ -1096,10 +1099,11 @@ pnpm tauri:dev    # 启动 Tauri 桌面端 + Node.js 后端 + 前端热更新
 pnpm tauri:build   # 构建前端 + 编译后端 + Tauri 打包
 ```
 
-生成平台对应安装包：
+当前 `tauri.conf.json` 声明并维护的桌面产物：
 - macOS: `.dmg` / `.app`
 - Windows: `.msi` / `.exe`
-- Linux: `.AppImage` / `.deb`
+
+Linux `.AppImage` / `.deb` 尚未加入 bundle targets，也没有本仓库发布验收证据；不能按已支持产物对外承诺。
 
 > 桌面客户端内置 Node.js 后端（sidecar），用户无需额外安装 Node.js。Tauri 启动时自动拉起 Node.js 进程，关闭时自动停止。
 
@@ -1834,7 +1838,7 @@ interface BroadcastResponse {
 - **跨设备**：Agent1 在子涵的 Mac 上，Agent2 在同事的 Mac 上，两台机器的 Agent 需要互相通信
 - **跨团队**：子涵的 Agent 排查出问题，自动 @小明 的 Agent 去修复，小明的 Agent 在另一台机器上
 
-### 13.2 场景一：跨设备数据迁移
+### 13.2 场景一：跨设备数据迁移（未来方案，未实现）
 
 ```
 用户: "@Agent1 把你电脑上的数据整理一下，交接给 @Agent2"
@@ -1859,13 +1863,13 @@ interface BroadcastResponse {
 3. Agent1 执行:
    a. 扫描本地目录，筛选需要迁移的数据
    b. 打包压缩为 zip
-   c. 上传到 Chorus Server 中转存储 (POST /api/files/upload)
+   c. 通过未来的受控附件传输能力上传（当前不存在 `/api/files/*`）
    d. 获得 fileId
    e. 通过 A2A Bus 调用 Agent2:
       "数据迁移请求，fileId: {fileId}, 包含 {N} 个文件, 大小: {size}"
 4. Chorus Server 转发 A2A 调用到 Agent2 所在的设备
 5. Agent2 执行:
-   a. 从中转存储下载文件 (GET /api/files/{fileId})
+   a. 从未来的受控附件传输能力下载
    b. 解压到本地指定目录
    c. 校验文件完整性
    d. A2A 回复 Agent1: "接收完成，共 {N} 个文件，校验通过"
@@ -1876,7 +1880,7 @@ interface BroadcastResponse {
 
 | 能力 | 实现方式 |
 |------|----------|
-| 中转文件存储 | Server 提供 `/api/files/upload` 和 `/api/files/{id}` 接口，文件存本地磁盘或 R2 |
+| 中转文件存储 | 未实现；若进入后续版本，需另行定义加密、配额、恶意文件扫描、过期与删除协议 |
 | Agent 寻址 | Agent 注册时声明所在设备 ID，Server 维护 `agentId → deviceId → connection` 路由表 |
 | 跨设备消息转发 | Agent2 不在本地时，Server 通过长连接（WebSocket）转发到目标设备 |
 | 文件传输协议 | A2A 消息支持 `fileAttachment` 类型，包含 fileId、fileName、size、checksum |
@@ -1900,7 +1904,7 @@ interface StreamChunk {
 }
 ```
 
-#### Server 文件中转 API
+#### 候选文件中转 API（未实现，不属于当前契约）
 
 ```
 POST /api/files/upload
@@ -1985,9 +1989,9 @@ DELETE /api/files/:fileId
 | **权限/审批** | Agent 被调用时可配置：自动接受 / 需主人确认 / 拒绝 |
 | **A2A 调用链展示** | 群聊中 Agent 间的调用以嵌套线程展示，可展开查看详情 |
 
-### 13.4 多设备架构升级
+### 13.4 早期多设备架构草案（已被 E2E Relay 模型取代）
 
-单机 → 多设备需要 Server 升级为"中继站"角色：
+以下图仅保留历史背景，不描述当前实现。当前 Relay 只保存 Hub/Room 路由元数据和加密信封，不维护明文 Agent 目录，也没有 `/files/*`：
 
 ```
 ┌──────────────────────────────────────────────────────────┐
@@ -2098,18 +2102,18 @@ interface DirectoryManifest {
     type: string;
     capabilities: string[];
     status: "online" | "busy" | "offline" | "error";
-    visibility: "trusted" | "room" | "public";
+    visibility: "private" | "room" | "public";
   }>;
   revokedAgentIds: string[];
   signature: string;                // User key 对 canonical JSON 签名
 }
 ```
 
-发现流程：Hub 建连后先向“已配对 Hub + 共同房间成员”发送 `directory_request`；本端按 visibility 过滤后回复完整 `directory_announce`。后续状态/目录变化发送更高 `directoryVersion` 的增量声明；隐身、删除或解除信任立即发送 `directory_revoke`。接收端事务性 upsert remote User，再以 `(homeHubId, sourceAgentId)` upsert remote Agent；过期声明把状态置为 `offline/stale`，不立即删除历史身份。
+发现流程：配对和 Hub 上线都不自动请求目录。所有者可向已配对联系人发布 `public` Agent，或在共同 Room 中发布 `room/public` Agent；`private` 永不进入远程目录。接收方只在信任与 Room scope 校验通过后接受签名 manifest，后续以更高 `directoryVersion` 更新，并通过 `directory_revoke` 立即撤销；过期声明只把远程记录置为 `offline/stale`，保留历史身份快照。
 
 会话语义：`dm` 可本地或跨 Hub，但只有一个目标 Agent；`group` 只含本 Hub Agent；`cross_hub` 绑定 `relayRoomId` 且至少包含两个 Hub。成员表保存 Owner/Agent 快照，消息 metadata 同时记录 `fromUserId/fromAgentId/homeHubId`，避免目录后续改名造成历史漂移。
 
-**English summary:** HubPayload v2 carries verifiable user identity. Trusted peers exchange signed, versioned, expiring directory manifests and upsert remote users before remote agents.
+**English summary:** HubPayload v2 carries verifiable user identity. Pairing does not disclose Agents. Owners explicitly publish signed, scoped, expiring cards; private Agents never leave the local Hub.
 
 ### 13.6 权限与安全
 

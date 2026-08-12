@@ -318,7 +318,6 @@ export function registerWebSocket(app: FastifyInstance, dependencies: WebSocketD
       clearInterval(heartbeat);
       if (hubId && registry.getSocket(hubId) === socket) {
         registry.setOffline(hubId);
-        registry.unblockHub(hubId);
         broadcastPresence(registry, hubId, "offline");
       }
     };

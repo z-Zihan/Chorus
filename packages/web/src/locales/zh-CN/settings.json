@@ -10,6 +10,13 @@
   "apiKey": "API Key",
   "apiKeyPlaceholder": "留空以保留现有 API Key",
   "apiKeyHelp": "出于安全考虑，已保存的密钥不会显示。",
+  "visibility": "可见性",
+  "visibilityHelp": "可见性只控制披露范围；远程调用仍需要 Room 成员关系和权限审批。",
+  "visibilityOptions": {
+    "private": "私有（仅本机）",
+    "room": "聊天室（仅明确加入的 Room）",
+    "public": "联系人（已配对联系人可发现）"
+  },
   "apiKeyShow": "显示 API Key",
   "apiKeyHide": "隐藏 API Key",
   "preferences": "界面偏好",
@@ -131,6 +138,13 @@
   "clearCredentialsMessage": "此设备中保存的所有 Agent 凭据都会被移除，之后可能需要逐个重新认证。",
   "credentialsClearFailed": "无法清除凭据，已有凭据仍然保留。",
   "hubSaveFailed": "无法保存 Hub 设置，已编辑的内容仍会保留，你可以重试。",
+  "p2pDiscovered": "发现的局域网设备",
+  "p2pApprove": "批准连接",
+  "p2pDismiss": "忽略",
+  "p2pNoneDiscovered": "暂未发现设备。发现过程是被动的，不会自动建立连接。",
+  "p2pApproved": "已批准 P2P 设备",
+  "p2pDismissed": "已忽略 P2P 设备",
+  "p2pActionFailed": "无法更新 P2P 设备状态，请重试。",
   "preferenceSaveFailed": "本次会话已应用此更改，但无法为下次启动保存。",
   "scheduler": {
     "description": "按 Cron 周期，让指定 Agent 自动执行已保存的提示词。",

@@ -62,3 +62,17 @@ export const roomInvitations = sqliteTable(
   },
   (table) => ({ pk: primaryKey({ columns: [table.roomId, table.inviteeHubId] }) }),
 );
+
+export const hubBlocks = sqliteTable(
+  "hub_blocks",
+  {
+    hubId: text("hub_id")
+      .notNull()
+      .references(() => hubs.hubId, { onDelete: "cascade" }),
+    blockedHubId: text("blocked_hub_id")
+      .notNull()
+      .references(() => hubs.hubId, { onDelete: "cascade" }),
+    createdAt: integer("created_at").notNull(),
+  },
+  (table) => ({ pk: primaryKey({ columns: [table.hubId, table.blockedHubId] }) }),
+);

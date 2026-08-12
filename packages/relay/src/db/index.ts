@@ -10,6 +10,7 @@ export function createDatabase(dbPath: string) {
 
   const sqlite = new Database(resolvedPath);
   sqlite.pragma("journal_mode = WAL");
+  sqlite.pragma("synchronous = FULL");
   sqlite.pragma("foreign_keys = ON");
   sqlite.exec(`
     CREATE TABLE IF NOT EXISTS hubs (
@@ -63,6 +64,13 @@ export function createDatabase(dbPath: string) {
 
     CREATE INDEX IF NOT EXISTS idx_room_invitations_invitee
       ON room_invitations (invitee_hub_id, status, created_at);
+
+    CREATE TABLE IF NOT EXISTS hub_blocks (
+      hub_id TEXT NOT NULL REFERENCES hubs(hub_id) ON DELETE CASCADE,
+      blocked_hub_id TEXT NOT NULL REFERENCES hubs(hub_id) ON DELETE CASCADE,
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (hub_id, blocked_hub_id)
+    );
   `);
 
   const hubColumns = sqlite.prepare("PRAGMA table_info(hubs)").all() as Array<{ name: string }>;

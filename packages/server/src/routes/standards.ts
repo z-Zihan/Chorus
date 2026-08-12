@@ -11,10 +11,15 @@ export function registerStandardRoutes(
   registry: AgentRegistry,
   mapper = new StandardAdapterMapper(),
 ): void {
-  app.get("/api/.well-known/agent-card.json", async (request) => {
+  const mapAgentCards = (request: FastifyRequest, publicOnly: boolean) => {
     const baseUrl = requestBaseUrl(request);
-    return registry.list().map((agent) => mapper.toAgentCard(agent, baseUrl));
-  });
+    return registry
+      .list()
+      .filter((agent) => !publicOnly || agent.visibility === "public")
+      .map((agent) => mapper.toAgentCard(agent, baseUrl));
+  };
+  app.get("/.well-known/agent-card.json", async (request) => mapAgentCards(request, true));
+  app.get("/api/.well-known/agent-card.json", async (request) => mapAgentCards(request, false));
 
   app.get("/api/mcp/tools", async () => {
     return registry.list().map((agent) => mapper.toMCPTool(agent));

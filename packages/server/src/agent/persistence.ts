@@ -166,6 +166,8 @@ function rowToPersistedAgent(
     catalogEntryId: row.catalogEntryId ?? undefined,
     detectionFingerprint: row.detectionFingerprint ?? undefined,
     disabled: row.disabled,
+    visibility:
+      row.visibility === "room" || row.visibility === "public" ? row.visibility : "private",
   };
 }
 

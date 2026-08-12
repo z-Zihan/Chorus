@@ -28,6 +28,7 @@ const createAgentSchema = z.object({
   type: agentTypeSchema,
   config: z.record(z.unknown()).default({}),
   capabilities: z.array(z.string().trim().min(1).max(100)).max(100).optional(),
+  visibility: z.enum(["private", "room", "public"]).default("private"),
 });
 const updateAgentSchema = createAgentSchema
   .pick({
@@ -35,6 +36,7 @@ const updateAgentSchema = createAgentSchema
     description: true,
     avatar: true,
     config: true,
+    visibility: true,
   })
   .partial()
   .extend({ disabled: z.boolean().optional() })
@@ -147,11 +149,10 @@ export function registerAgentRoutes(
 
   app.post("/api/agents", async (req, reply) => {
     const parsed = createAgentSchema.safeParse(req.body);
-    if (!parsed.success)
-      if (!parsed.success) {
-        logger.warn({ issues: parsed.error.flatten() }, "Invalid agent creation request");
-        return reply.code(400).send({ error: "Invalid Agent", issues: parsed.error.flatten() });
-      }
+    if (!parsed.success) {
+      logger.warn({ issues: parsed.error.flatten() }, "Invalid agent creation request");
+      return reply.code(400).send({ error: "Invalid Agent", issues: parsed.error.flatten() });
+    }
     if (registry.get(parsed.data.id)) {
       logger.warn({ agentId: parsed.data.id }, "Agent already exists");
       return reply.code(409).send({ error: "Agent already exists" });

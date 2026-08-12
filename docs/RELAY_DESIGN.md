@@ -2,7 +2,7 @@
 
 > 最后更新：2026-08-04
 
-> 实现状态：`packages/relay` 已包含 Relay Server、Hub 注册、WebSocket 路由、离线消息和 Room 基础；`packages/server` 已有 Hub Client/P2P/E2E 代码。本文定义的新目标是“Contact → Room → owner-authorized Agent”。现有自动目录交换和直接远程 Agent 入口属于待迁移行为，不能作为新流程继续扩展。
+> 实现状态：`packages/relay` 已包含 Relay Server、Hub 注册、WebSocket 路由、离线消息、Room 与持久化 block；`packages/server` 已实现 Hub Client/P2P/E2E、配对、Room 映射、owner/visibility 校验和签名目录。规范流程是“Contact → Room → owner-authorized Agent”；真实双设备与安装包验收仍是发布门禁。
 >
 > Target model: pairing creates a contact, rooms contain people, and each owner explicitly brings their own agents into a room. Transport readiness does not imply product-level authorization.
 
@@ -220,6 +220,9 @@ Hub → Relay:
   { type: "presence", status: "online"|"offline" }
   { type: "room:join", roomId }
   { type: "room:leave", roomId }
+  { type: "contact_block", blockedHubId }
+  { type: "transport_receipt", messageId, recipientHubId, status, timestamp, signature }
+  { type: "room_cas", roomId, expectedRevision, expectedKeyEpoch, newRevision, newKeyEpoch }
   { type: "ping" }
 
 Relay → Hub:
@@ -228,6 +231,10 @@ Relay → Hub:
   { type: "offline_messages", envelopes: HubEnvelope[] }
   { type: "presence", hubId, status }
   { type: "room:event", roomId, event, hubId }
+  { type: "room:members", roomId, members }
+  { type: "room_cas_result", roomId, accepted, revision, keyEpoch }
+  { type: "transport_status", messageId, status, timestamp }
+  { type: "contact_block_ack", blockedHubId, success }
   { type: "pong" }
 ```
 
@@ -249,18 +256,20 @@ Relay API 只管理 Hub 路由和加密 Room 信封，不能决定某个用户�
 
 | Local Hub 端点 | 方法 | 语义 / Semantics |
 |----------------|------|------------------|
-| `/api/hub/config` | PATCH | 验证并保存 Relay 配置，返回 `{ ok, config, connectionState }` 后异步连接 |
+| `/api/hub/config` | GET/PATCH | 读取或保存 Hub display name、Relay URL 与 P2P 设置；连接由 `/api/hub/connect` 显式触发 |
 | `/api/hub/status` | GET | 返回 `disconnected/connecting/connected/reconnecting/error` 和最近错误 |
 | `/api/trust/pair` | POST | 按完整 Hub ID 创建目标绑定、10 分钟有效的一次性配对包；不请求 Agent 目录 |
 | `/api/trust/pairing-sessions/accept` | POST | 接收配对包并启动双端密钥确认 |
 | `/api/trust/pairing-sessions/:id/approve` | POST | SAS 核对后本端明确批准；双方批准才创建 Contact |
 | `/api/trust/pairing-sessions/:id/cancel` | POST | 取消未完成配对 |
-| `/api/contacts` | GET | 只列出联系人名片和 presence |
-| `/api/rooms` | POST | 创建 `direct` 或 `group` Room，并建立 `type=room` 本地会话 |
-| `/api/rooms/:id/invitations` | POST | 邀请已配对联系人 |
-| `/api/rooms/:id/invitations/:inviteId/accept` | POST | 被邀请者明确接受 |
-| `/api/rooms/:id/agents` | POST | 仅所有者把自己的 `room/public` Agent 加入 Room |
-| `/api/rooms/:id/agents/:agentId` | DELETE | 所有者或 Room 管理员移出；只有所有者可以再次加入 |
+| `/api/hub/contacts` | GET | 只列出当前已知 Hub 联系人与 presence |
+| `/api/hub/rooms` | GET/POST | 列出或创建 Relay Room，并建立本地 `cross_hub` 会话 |
+| `/api/hub/rooms/:id/invite` | POST | 邀请目标 Hub |
+| `/api/hub/room-invitations` | GET | 列出待处理或待本地恢复的邀请 |
+| `/api/hub/room-invitations/:id/accept` | POST | 明确接受并建立/恢复本地会话 |
+| `/api/hub/room-invitations/:id/decline` | POST | 明确拒绝邀请 |
+| `/api/hub/rooms/:id/agents` | POST | 仅所有者把自己的 `room/public` Agent 加入 Room |
+| `/api/hub/rooms/:id/agents/:agentId` | DELETE | 所有者或本地记录的 Room 管理员移出 |
 
 **English:** Relay endpoints transport encrypted membership events. Local Hub endpoints enforce contact state, invitation acceptance, room roles, agent ownership, visibility, and conversation mapping.
 
@@ -268,9 +277,9 @@ Relay API 只管理 Hub 路由和加密 Room 信封，不能决定某个用户�
 
 - Relay 维护 SQLite `offline_messages` 表
 - 消息到达时接收方不在线 → 存入 offline store
-- 接收方上线 → 批量推送；Hub 持久化成功后发送 `delivery_ack`，Relay 再删除对应记录
-- TTL 默认 7 天；过期后向发送方返回 `expired`（若发送方仍可达），客户端不得长期显示 `queued`
-- 同一会话按发送方 sequence 排序，目录 revoke 优先于较旧 announce；接收端按 message ID 幂等
+- 接收方上线 → 批量推送；Hub 持久化成功后发送接收方签名的 `transport_receipt`，Relay 验签后才删除对应记录
+- TTL 默认 7 天；当前定时清理过期密文，但不会向发送方补发 `expired` 通知
+- 当前表没有 attempt/sequence 列；重复上线会重投仍未 receipt 的密文，接收端按 envelope/payload message ID 幂等
 - 加密存储：Relay 只存 ciphertext，无法解密
 
 离线排队只表示 Relay 已接收，不表示目标 Agent 已执行。消息状态依次为 `queued → delivered → accepted/denied → done/error`。
@@ -281,7 +290,10 @@ Relay API 只管理 Hub 路由和加密 Room 信封，不能决定某个用户�
 # docker-compose.yml
 services:
   chorus-relay:
-    image: chorus/relay:latest
+    build:
+      context: ../..
+      dockerfile: packages/relay/Dockerfile
+    image: chorus-relay:local
     ports:
       - "3211:3211"
     volumes:
@@ -297,10 +309,10 @@ volumes:
 ```
 
 ```bash
-# 一键自部署
+# 仓库目前不发布固定 registry 镜像；先从源码构建
+docker build -f packages/relay/Dockerfile -t chorus-relay:local .
 docker run -d -p 3211:3211 -v relay-data:/data \
-  -e RELAY_JWT_SECRET=your-secret \
-  chorus/relay:latest
+  -e RELAY_JWT_SECRET=your-secret chorus-relay:local
 ```
 
 ### 扩展性
@@ -644,7 +656,9 @@ packages/
 └── ...
 ```
 
-## 11. 配置扩展
+## 11. 配置来源
+
+Local Hub 的初始配置来自 `chorus.config.ts`；设置页通过 `GET/PATCH /api/hub/config` 把 `displayName`、Relay URL、P2P 开关和端口保存到 SQLite `app_settings`，后续启动覆盖配置文件中的对应值。Hub/User 私钥与 Agent 凭据存系统凭据库或加密文件 fallback，不写入该设置 JSON。Relay Server 自身只读取 `RELAY_*` 环境变量。
 
 ```typescript
 // chorus.config.ts 新增字段
@@ -665,8 +679,7 @@ export default {
       port: 3212,        // P2P WebSocket 监听端口
       discovery: "mdns", // mDNS 发现
     },
-    // 密钥对（首次启动自动生成）
-    // keypairPath: "./data/hub-keypair.json",
+    // Hub token 在运行时通过签名 challenge 获取；密钥不写配置文件
   },
 } satisfies AppConfig;
 ```
@@ -676,9 +689,9 @@ export default {
 ### Hub 上线与远程 Agent 注册
 
 ```text
-Hub A 上线并完成 Relay/P2P Hub 认证
-  → 向已配对 Hub B 发送 directory_request
-  → Hub B 按 A 的 trust/room 范围过滤本机 Agent
+Hub A 与 Hub B 完成配对（此时不交换 Agent 目录）
+  → Agent 所有者将 public Agent 发布给联系人，或把 room/public Agent 加入共同 Room
+  → Hub B 按显式 scope 生成最小 DirectoryManifest
   → User B 签名 DirectoryManifest，Hub B 加密并签名 envelope
   → Hub A 验证 Hub B → UserHubBinding → Directory signature
   → BEGIN: upsert remote User B → upsert B 的可见 Agent → COMMIT

@@ -10,6 +10,13 @@
   "apiKey": "API Key",
   "apiKeyPlaceholder": "Leave blank to keep the existing API Key",
   "apiKeyHelp": "Saved keys are never displayed for security.",
+  "visibility": "Visibility",
+  "visibilityHelp": "Visibility controls disclosure only; remote calls still require Room membership and permission approval.",
+  "visibilityOptions": {
+    "private": "Private (this device only)",
+    "room": "Room (only rooms you explicitly join)",
+    "public": "Contacts (discoverable by paired contacts)"
+  },
   "apiKeyShow": "Show API Key",
   "apiKeyHide": "Hide API Key",
   "preferences": "Appearance",
@@ -131,6 +138,13 @@
   "clearCredentialsMessage": "Every saved Agent credential will be removed from this device. You may need to authenticate each Agent again.",
   "credentialsClearFailed": "The credentials could not be cleared. Existing credentials remain stored.",
   "hubSaveFailed": "Hub settings could not be saved. Your edited values remain here so you can retry.",
+  "p2pDiscovered": "Discovered LAN devices",
+  "p2pApprove": "Approve connection",
+  "p2pDismiss": "Dismiss",
+  "p2pNoneDiscovered": "No devices discovered yet. Discovery is passive and never connects automatically.",
+  "p2pApproved": "P2P device approved",
+  "p2pDismissed": "P2P device dismissed",
+  "p2pActionFailed": "The P2P device state could not be updated. Try again.",
   "preferenceSaveFailed": "The change is active for this session but could not be saved for the next launch.",
   "scheduler": {
     "description": "Run a saved prompt with an Agent on a recurring cron schedule.",

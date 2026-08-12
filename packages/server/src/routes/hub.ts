@@ -248,6 +248,9 @@ export function registerHubRoutes(app: FastifyInstance, dependencies: HubRouteDe
     if (!localUser || agent.ownerId !== localUser.id) {
       return reply.code(403).send({ error: "AGENT_OWNER_REQUIRED" });
     }
+    if (agent.visibility !== "room" && agent.visibility !== "public") {
+      return reply.code(403).send({ error: "AGENT_VISIBILITY_REQUIRED" });
+    }
 
     const roomState = repository.getRoomState(conversation.id);
     if (!roomState) return reply.code(404).send({ error: "Room state not found" });

@@ -8,6 +8,13 @@ import { PasswordInput } from "@/components/common/PasswordInput";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { STATUS_COLORS } from "@/constants/agent";
 import { useAgentSettings } from "@/hooks/useAgentSettings";
 import { useAgentStore } from "@/store/agentStore";
@@ -88,6 +95,35 @@ export function AgentSettingsPanel() {
                     onChange={(event) => setField("name", event.target.value)}
                     maxLength={100}
                   />
+                </label>
+
+                <label className="block">
+                  <span className="mb-2 block text-sm font-medium text-[var(--text-primary)]">
+                    {t("settings:visibility")}
+                  </span>
+                  <Select
+                    value={fields.visibility}
+                    onValueChange={(value: "private" | "room" | "public") =>
+                      setField("visibility", value)
+                    }
+                    disabled={displayedAgent.ownerType === "remote"}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="private">
+                        {t("settings:visibilityOptions.private")}
+                      </SelectItem>
+                      <SelectItem value="room">{t("settings:visibilityOptions.room")}</SelectItem>
+                      <SelectItem value="public">
+                        {t("settings:visibilityOptions.public")}
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="mt-2 text-xs text-[var(--text-muted)]">
+                    {t("settings:visibilityHelp")}
+                  </p>
                 </label>
 
                 <label className="block">

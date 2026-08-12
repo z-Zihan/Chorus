@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { Agent } from "@chorus/shared";
+import type { Agent, AgentVisibility } from "@chorus/shared";
 import { useTranslation } from "react-i18next";
 import { useAgentStore } from "@/store/agentStore";
 import { track } from "@/utils/analytics";
@@ -12,6 +12,7 @@ export interface AgentSettingsFields {
   model: string;
   systemPrompt: string;
   apiKey: string;
+  visibility: AgentVisibility;
 }
 
 function configText(agent: Agent, key: string): string {
@@ -25,6 +26,7 @@ const EMPTY_FIELDS: AgentSettingsFields = {
   model: "",
   systemPrompt: "",
   apiKey: "",
+  visibility: "private",
 };
 
 export function useAgentSettings(agentId: string | null) {
@@ -46,6 +48,7 @@ export function useAgentSettings(agentId: string | null) {
       model: agent.model ?? configText(agent, "model"),
       systemPrompt,
       apiKey: "",
+      visibility: agent.visibility ?? "private",
     });
     setInitialSystemPrompt(systemPrompt);
     setError(null);
@@ -81,6 +84,7 @@ export function useAgentSettings(agentId: string | null) {
       await updateAgent(agent.id, {
         name: trimmedName,
         description: fields.description.trim(),
+        visibility: fields.visibility,
         ...(Object.keys(config).length > 0 ? { config } : {}),
       });
       track("settings_changed", { section: "agent", agentId: agent.id });

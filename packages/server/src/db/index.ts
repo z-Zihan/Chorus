@@ -37,10 +37,18 @@ export function createDatabase(dbPath: string) {
   ensureUserColumns(sqlite);
   ensureUserHubsTable(sqlite);
   ensureAgentDiscoveryColumns(sqlite);
+  ensureAgentVisibilityColumn(sqlite);
   ensureTrustedHubsTable(sqlite);
   ensureClientTokensTable(sqlite);
   initializeMessageSearch(sqlite);
   return { sqlite, db };
+}
+
+function ensureAgentVisibilityColumn(sqlite: Database.Database): void {
+  const columns = sqlite.prepare("PRAGMA table_info(agents)").all() as Array<{ name: string }>;
+  if (!columns.some((column) => column.name === "visibility")) {
+    sqlite.exec("ALTER TABLE agents ADD COLUMN visibility TEXT NOT NULL DEFAULT 'private'");
+  }
 }
 
 export function ensureRoomStateColumns(sqlite: Database.Database): void {

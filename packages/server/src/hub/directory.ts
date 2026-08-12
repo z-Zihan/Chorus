@@ -180,14 +180,13 @@ export class DirectoryService {
 type DirectoryVisibility = DirectoryManifest["agents"][number]["visibility"];
 
 function agentVisibility(agent: Agent): DirectoryVisibility {
-  const visibility = (agent as Agent & { visibility?: unknown }).visibility;
-  return visibility === "public" || visibility === "room" || visibility === "trusted"
-    ? visibility
-    : "trusted";
+  return agent.visibility === "public" || agent.visibility === "room"
+    ? agent.visibility
+    : "private";
 }
 
 function isVisibleTo(visibility: DirectoryVisibility, audience: DirectoryAudience): boolean {
   if (visibility === "public") return true;
   if (visibility === "room") return audience.sharedRoom;
-  return audience.trusted;
+  return false;
 }

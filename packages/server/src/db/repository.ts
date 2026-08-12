@@ -135,6 +135,7 @@ export class Repository {
       ownerType?: Agent["ownerType"];
       stale?: boolean;
       homeHubId?: string;
+      visibility?: Agent["visibility"];
     },
     credentialRef?: string | null,
   ): void {
@@ -147,6 +148,8 @@ export class Repository {
       agent.capabilities ?? safeJson<string[]>(current?.capabilities ?? null, []);
     const stale = agent.stale ?? current?.stale ?? false;
     const homeHubId = agent.homeHubId ?? current?.homeHubId ?? null;
+    const visibility =
+      agent.visibility ?? (current?.visibility as Agent["visibility"] | undefined) ?? "private";
     const storedConfig = ownerType === "remote" ? {} : persisted.config;
     const storedCredentialRef = ownerType === "remote" ? null : credentialRef;
     this.context.db
@@ -168,6 +171,7 @@ export class Repository {
         ownerId,
         ownerType,
         capabilities: JSON.stringify(capabilities),
+        visibility,
         stale,
         homeHubId,
         createdAt: now,
@@ -195,6 +199,7 @@ export class Repository {
           ownerId,
           ownerType,
           capabilities: JSON.stringify(capabilities),
+          visibility,
           stale,
           homeHubId,
           updatedAt: now,
@@ -518,6 +523,7 @@ export class Repository {
       ownerType: row.ownerType as Agent["ownerType"],
       owner: owner ? { id: owner.id, name: owner.name, kind: owner.kind } : undefined,
       capabilities,
+      visibility: normalizeAgentVisibility(row.visibility),
       stale: row.ownerType === "remote" ? row.stale : false,
       homeHubId: row.homeHubId ?? owner?.hubId ?? "",
       createdAt: row.createdAt,
@@ -874,6 +880,7 @@ export class Repository {
       catalogEntryId: agent.catalogEntryId ?? undefined,
       ownerId: membership.ownerId ?? undefined,
       ownerType: agent.ownerType as Agent["ownerType"],
+      visibility: normalizeAgentVisibility(agent.visibility),
       agentNameSnapshot: membership.agentNameSnapshot ?? undefined,
       ownerNameSnapshot: membership.ownerNameSnapshot ?? undefined,
       hubIdSnapshot: membership.hubIdSnapshot ?? undefined,
@@ -1223,6 +1230,10 @@ function safeJson<T>(value: string | null, fallback: T): T {
   } catch {
     return fallback;
   }
+}
+
+function normalizeAgentVisibility(value: unknown): Agent["visibility"] {
+  return value === "room" || value === "public" ? value : "private";
 }
 
 function toMessage(row: typeof messages.$inferSelect): Message {

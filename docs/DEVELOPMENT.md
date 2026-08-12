@@ -374,3 +374,23 @@ src-tauri/
 | `RELAY_HOST` | `127.0.0.1` | Relay 监听地址；非 loopback 时强制配置至少 32 字符的 JWT 密钥 |
 | `RELAY_TOKEN_TTL_SECONDS` | `86400` | Relay Hub Token 有效期；客户端通过私钥证明自动续期 |
 | `RELAY_OFFLINE_TTL_DAYS` | `7` | 离线消息保留天数 |
+| `RELAY_OFFLINE_RETENTION_MS` | 由 TTL 换算 | 以毫秒覆盖离线消息保留期 |
+| `RELAY_DB_PATH` | `./data/relay.db` | Relay SQLite 路径 |
+| `RELAY_LOG_LEVEL` | `info` | Relay 日志级别 |
+| `RELAY_CORS_ORIGINS` | 空 | 逗号分隔的 Relay CORS allowlist |
+| `RELAY_MAX_HUBS` | `1000` | Relay Hub 上限 |
+| `RELAY_MAX_MESSAGE_SIZE` | `262144` | 单信封最大字节数 |
+| `RELAY_MAX_MESSAGES_PER_HUB` | `1000` | 单 Hub 离线队列上限 |
+| `RELAY_MAX_MESSAGES_PER_MINUTE` | `60` | 单 Hub 每分钟 WebSocket 消息上限 |
+| `RELAY_MAX_ROOMS_PER_HUB` | `50` | 单 Hub 可创建 Room 上限 |
+| `RELAY_MAX_MEMBERS_PER_ROOM` | `100` | 单 Room Hub 成员上限 |
+| `RELAY_MAX_CHALLENGES_PER_MINUTE` | `10` | 单来源每分钟注册 challenge 上限 |
+| `RELAY_MAX_REGISTRATIONS_PER_MINUTE` | `30` | 单来源每分钟注册上限 |
+| `SERVER_LOG_FILE` | `data/logs/server.log` | 服务端日志文件 |
+| `SERVER_ANALYTICS_PROVIDER` | `noop` | 服务端 analytics provider |
+| `VITE_CHORUS_UPDATE_ENDPOINT` | 空 | 可选的桌面更新检查端点 |
+| `VITE_ANALYTICS_PROVIDER` | `noop` | 前端 analytics provider |
+| `CHORUS_CREDENTIAL_FILE` | `~/.chorus/credentials.enc` | 系统钥匙串不可用时的加密凭据文件 |
+| `CHORUS_NODE_BINARY` | 自动探测 | 跨目标构建时指定目标平台 Node sidecar |
+| `CHORUS_BETTER_SQLITE3_DIR` | 自动探测 | 跨目标构建时指定目标平台 better-sqlite3 目录 |
+| `OPENAI_API_KEY` | 空 | OpenAI adapter 可选的环境凭据 |

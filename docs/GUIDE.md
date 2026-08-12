@@ -129,7 +129,7 @@ Chorus 使用三层身份模型：
 
 ### 标准协议适配
 Chorus 支持三种标准协议端点：
-- `GET /.well-known/agent-card.json` — Google A2A Agent Card
+- `GET /.well-known/agent-card.json` — Google A2A Agent Card（仅公开 `public` Agent）
 - `GET /api/mcp/tools` — MCP Tool 列表
 - `GET /api/acp/services` — ACP 服务列表
 
@@ -151,11 +151,15 @@ Chorus 支持三种标准协议端点：
 ### 部署中继服务器
 在你的服务器上：
 ```bash
+docker build -t chorus/relay:local -f packages/relay/Dockerfile .
 docker run -d -p 3211:3211 \
-  -e RELAY_JWT_SECRET=your-secret \
+  -e RELAY_HOST=0.0.0.0 \
+  -e RELAY_JWT_SECRET=replace-with-at-least-32-random-characters \
   -v relay-data:/data \
-  chorus/relay:latest
+  chorus/relay:local
 ```
+
+仓库目前不承诺公开 registry 中存在 `chorus/relay:latest`；上述命令先从当前源码构建本地镜像。
 
 ### 连接中继服务器
 

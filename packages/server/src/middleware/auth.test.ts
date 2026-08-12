@@ -31,7 +31,7 @@ describe("API authentication", () => {
   it("rejects non-loopback requests without a token and accepts a valid token", async () => {
     const app = Fastify();
     const store = new TokenStore();
-    const created = store.create("remote", ["agents:read"], 60_000);
+    const created = store.create("remote", ["api:read"], 60_000);
     app.addHook("onRequest", authMiddleware(enabledAuth, store));
     app.get("/api/private", async () => ({ ok: true }));
 
@@ -49,6 +49,33 @@ describe("API authentication", () => {
     await app.close();
 
     expect(unauthorized.statusCode).toBe(401);
+    expect(authorized.statusCode).toBe(200);
+  });
+
+  it("enforces resource scopes for non-loopback client tokens", async () => {
+    const app = Fastify();
+    const store = new TokenStore();
+    const allowed = store.create("agent-reader", ["agents:read"], 60_000);
+    const denied = store.create("conversation-reader", ["conversations:read"], 60_000);
+    app.addHook("onRequest", authMiddleware(enabledAuth, store));
+    app.get("/api/agents", async () => ({ ok: true }));
+
+    const forbidden = await app.inject({
+      method: "GET",
+      url: "/api/agents",
+      remoteAddress: "203.0.113.10",
+      headers: { authorization: `Bearer ${denied.token}` },
+    });
+    const authorized = await app.inject({
+      method: "GET",
+      url: "/api/agents",
+      remoteAddress: "203.0.113.10",
+      headers: { authorization: `Bearer ${allowed.token}` },
+    });
+    await app.close();
+
+    expect(forbidden.statusCode).toBe(403);
+    expect(forbidden.json()).toEqual({ error: "Missing scope: agents:read" });
     expect(authorized.statusCode).toBe(200);
   });
 

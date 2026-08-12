@@ -15,14 +15,29 @@ describe("standard protocol routes", () => {
   });
 
   it("exposes local Agents as A2A, MCP, and ACP descriptors", async () => {
-    const [cards, tools, services] = await Promise.all([
+    const published = await request(app.server)
+      .patch("/api/agents/test-agent")
+      .send({ visibility: "public" });
+    expect(published.status).toBe(200);
+
+    const standardCards = await app.inject({
+      method: "GET",
+      url: "/.well-known/agent-card.json",
+    });
+    const [compatibilityCards, tools, services] = await Promise.all([
       request(app.server).get("/api/.well-known/agent-card.json"),
       request(app.server).get("/api/mcp/tools"),
       request(app.server).get("/api/acp/services"),
     ]);
 
-    expect(cards.status).toBe(200);
-    expect(cards.body).toContainEqual(
+    expect(standardCards.statusCode).toBe(200);
+    expect(compatibilityCards.status).toBe(200);
+    expect(standardCards.json().map((card: { name: string }) => card.name)).toEqual(["Test Agent"]);
+    expect(compatibilityCards.body.map((card: { name: string }) => card.name)).toEqual([
+      "Test Agent",
+      "Second Agent",
+    ]);
+    expect(standardCards.json()).toContainEqual(
       expect.objectContaining({
         name: "Test Agent",
         url: expect.stringMatching(/\/api\/agents\/test-agent$/),

@@ -291,7 +291,7 @@ Hub → Relay
   { type: "message", envelope: HubEnvelope }
   { type: "transport_receipt", messageId, recipientHubId, status: "persisted", timestamp, signature }
   { type: "room_cas", roomId, expectedRevision, expectedKeyEpoch, newRevision, newKeyEpoch }
-  { type: "contact_block", blockedHubIds, affectedRoomIds, timestamp, signature }
+  { type: "contact_block", blockedHubId }
   { type: "presence", status: "online" | "offline" }
   { type: "room:join", roomId }
   { type: "room:leave", roomId }
@@ -304,7 +304,7 @@ Relay → Hub
   { type: "presence", hubId, status }
   { type: "room:event", roomId, event, hubId }
   { type: "room_cas_result", roomId, accepted, revision, keyEpoch }
-  { type: "contact_blocked", blockedHubIds, affectedRoomIds }
+  { type: "contact_block_ack", blockedHubId, success }
   { type: "pong" }
 ```
 
@@ -312,9 +312,9 @@ Relay → Hub
 
 Relay 必须为每个 Room 原子持久化 `(revision, keyEpoch)`。`room_cas` 仅在当前值同时等于 `expectedRevision/expectedKeyEpoch` 且新值分别恰好加 `1` 时返回 `accepted: true`；否则返回当前计数器。Relay 只仲裁“谁先”，不得接收或解释 rekey event、Room key 或 `keyCommitment`，因此不越过 §5.1 的职责边界。
 
-`contact_block` 是经认证 Hub 发给 Relay 的明文路由控制通知，签名输入使用 RFC 8785 JCS。Relay 验证连接身份、签名和发送方对 `affectedRoomIds` 的现有路由 membership 后，必须立即停止这些 Room 中向 `blockedHubIds` 投递以及接受其发来的新流量；该帧不得包含联系人资料、正文或 Room key。`contact_blocked` 仅确认路由规则已安装。
+当前 `contact_block` 是已认证 WebSocket Hub 发给 Relay 的单目标明文路由控制帧。Relay 将 `(hubId, blockedHubId)` 持久化到 SQLite，并对两个方向的直接和 Room 路由立即生效；重连或 Relay 重启不会解除。帧不包含联系人资料、正文或 Room key，`contact_block_ack` 只确认规则已安装。多目标、Room 范围和帧级附加签名不是当前协议。
 
-All application traffic uses the encrypted envelope frame. The plaintext `transport_receipt` is a delivery-control exception limited to message ID and persistence status. The Relay atomically persists one `(revision, keyEpoch)` counter per room and accepts `room_cas` only when both expected values match and both new values increment by exactly one. It arbitrates ordering only and never receives or interprets rekey contents, keys, or commitments. A JCS-signed `contact_block` is a routing-only notice: after authenticating the sender and its room routing membership, the Relay immediately stops new traffic to and from the listed blocked Hubs in the affected rooms. Relay room membership remains routing state, never proof of User or Agent authorization.
+All application traffic uses the encrypted envelope frame. The plaintext `transport_receipt` is a delivery-control exception limited to message ID and persistence status. The Relay atomically persists one `(revision, keyEpoch)` counter per room. The authenticated single-target `contact_block` rule is persisted and applied symmetrically to direct and Room routing; it is not a signed multi-room policy document. Relay room membership remains routing state, never proof of User or Agent authorization.
 
 ### 5.4 Hub 注册与互认证 / Hub registration and mutual authentication
 
@@ -331,7 +331,10 @@ Registration authenticates each Hub to the Relay. Separate mutual challenge-resp
 ```yaml
 services:
   chorus-relay:
-    image: chorus/relay:latest
+    build:
+      context: ../..
+      dockerfile: packages/relay/Dockerfile
+    image: chorus-relay:local
     ports: ["3211:3211"]
     volumes: ["relay-data:/data"]
     environment:
@@ -643,7 +646,7 @@ queued → delivered → accepted → done
                     ├→ denied
                     └→ error
 queued ── TTL elapsed → expired
-queued ── 3 deliveries without receipt → failed
+queued ── routing rejection/error → failed
 ```
 
 | 状态 / State | 定义 / Definition |
@@ -655,7 +658,7 @@ queued ── 3 deliveries without receipt → failed
 | `done` | Agent/人类处理成功 / Processing completed successfully |
 | `error` | 已接受但执行失败 / Accepted, but execution failed |
 | `expired` | 默认 7 天 TTL 到期仍未完成投递 / Default seven-day TTL elapsed before delivery |
-| `failed` | 连续 3 次投递均未收到有效 transport receipt / Three delivery attempts completed without a valid transport receipt |
+| `failed` | 路由被 block 或 Relay 在处理时发生错误 / Routing was blocked or Relay processing failed |
 
 `queued` 不表示 Agent 已执行；`delivered` 也不表示调用获准。客户端不得让过期消息长期停留在 queued。
 
@@ -664,15 +667,15 @@ Queued is not executed, and delivered is not authorized. Expired and failed mess
 ### 9.3 离线存储 / Offline store
 
 - 目标 Hub 离线时，Relay 将完整加密 envelope 写入 SQLite `offline_messages`。
-- 每条离线记录包含 `deliveryAttempts`（初始为 `0`）、最后尝试时间和状态。Relay 每次实际发送该记录前原子执行 `deliveryAttempts + 1`；未收到 receipt 时按退避策略重投。
+- 当前记录只包含 ID、目标 Hub、加密 envelope、创建时间和过期时间；上线时批量重投，没有持久化 delivery-attempt 计数。
 - Hub 上线后收到批量 `offline_messages`；本地持久化成功才发送明文签名 `transport_receipt`。Relay 验证 receipt 后删除；加密 `delivery_ack` 仅发送给业务对端。
-- 三次投递仍无有效 receipt 时，Relay 将记录标记为 `failed`、停止自动重投，并在发送方可达时通知投递失败。管理员显式重试必须创建新的 envelope/message ID。
-- 默认 TTL 为 7 天，可通过 `RELAY_OFFLINE_TTL_DAYS` 配置。过期时若发送方可达则通知 `expired`。
+- block 或处理异常会向在线发送方返回 `failed`。三次重试阈值、管理员重试和持久化 attempt 状态尚未实现。
+- 默认 TTL 为 7 天，可通过 `RELAY_OFFLINE_TTL_DAYS` 配置。当前过期清理不会向发送方发送独立 `expired` 通知；客户端必须将超时作为本地终态处理。
 - receipt 可能在持久化后丢失，因此 Hub 必须用 `HubEnvelope.id` 和解密后的 `HubPayload.messageId` 做持久化去重与幂等处理；收到重复投递时不得重复展示、授权或执行，但必须重发 receipt。
-- 离线记录只含密文、`deliveryAttempts` 和路由元数据。幂等、顺序和 revoke 优先级遵循 §3.5。
+- 离线记录只含密文和必要路由/时间元数据。幂等、顺序和 revoke 优先级遵循 §3.5。
 - 单实例使用 WAL、同步刷盘和周期 checkpoint；多实例需要具备等价持久性语义。
 
-The Relay stores ciphertext durably while a target is offline and deletes it only after the target persists and returns a verified plaintext transport receipt. Each actual delivery increments `deliveryAttempts`; after three unacknowledged deliveries the record becomes `failed`. Receivers deduplicate both envelope and payload message IDs and re-emit receipts for duplicates. TTL, ordering, idempotency, and revoke precedence are protocol semantics, not implementation details.
+The Relay stores ciphertext durably while a target is offline and deletes it only after a verified transport receipt. Current storage has no persistent attempt counter or three-attempt terminal state, and expiry cleanup does not notify the sender. Receivers still deduplicate envelope and payload message IDs and re-emit receipts for duplicates.
 
 ### 9.4 TTL 过期后的恢复 / Recovery after TTL expiry
 
@@ -744,8 +747,8 @@ Unless stated otherwise, each row runs once over Relay and once over P2P, with c
 | E2E-05 | block 后共享 Room / Shared room after block | block 联系人，观察共享 Room，再由管理员正式移除 / Block a contact in a shared room, then have an admin remove them | TrustStore、`blocked`、`unavailable` 和停止双向新投递一致；历史保留；正式移除 revision+1 并 rekey / TrustStore, blocked/unavailable state, and routing stop agree; history remains; removal increments revision and rekeys |
 | E2E-06 | nonce 碰撞检测 / Nonce collision detection | 两个 Hub 在同 epoch 各发送多条消息，并注入重复 `(senderHubNonceId,counter)` / Two Hubs send within one epoch; inject a duplicate sender/counter tuple | 正常 nonce 为 8+4 bytes 且跨 Hub 唯一；重复 nonce 被拒绝并审计；counter 不回绕，rekey 后才归零 / Normal nonces are 8+4 bytes and unique across Hubs; duplicate is rejected/audited; no wrap; reset only after rekey |
 | E2E-07 | keyEpoch 在途解密 / In-flight epoch decryption | 延迟 epoch N 消息，完成 rekey 到 N+1 后分别在 5 分钟内外送达 / Delay an epoch-N message and deliver it inside and outside five minutes after rekey | 5 分钟内用 N key 解密但不再用其加密；超时后拒绝；N+1 消息只用 N+1 key；epoch 不匹配失败 / N decrypts only within grace and never encrypts; later delivery fails; N+1 uses only its key; epoch mismatch fails |
-| E2E-08 | receipt 丢失重投 / Lost receipt redelivery | 让接收方持久化后丢弃前两次 transport receipt / Drop the first two receipts after durable persistence | Relay attempts 为 1→2→3；业务仅处理一次；重复投递重发 receipt；第三次 receipt 后删除队列 / Attempts advance 1→2→3; application processes once; duplicate re-emits receipt; third receipt deletes queue |
-| E2E-09 | 三次无 receipt / Three missing receipts | 连续丢弃 3 次 transport receipt / Drop three consecutive receipts | 记录标记 `failed`、停止自动重投并通知发送方；加密 E2E ack 不能删除队列 / Record becomes failed, redelivery stops, sender is notified; encrypted E2E ack cannot delete queue |
+| E2E-08 | receipt 丢失重投 / Lost receipt redelivery | 接收方持久化后丢弃 receipt，断开并重新上线 / Drop the receipt after durable persistence, disconnect, and reconnect | Relay 重投同一密文；业务按 ID 只处理一次；有效签名 receipt 后删除队列。当前没有 attempt 计数 / Relay redelivers the same ciphertext; the application handles it once; a valid signed receipt deletes the queue. There is no attempt counter |
+| E2E-09 | 长期无 receipt / Persistently missing receipt | 持续丢弃 transport receipt，直到 TTL 清理 / Drop receipts until TTL cleanup | 当前会在每次重新上线时继续重投，TTL 清理后静默删除；不会形成三次失败终态或通知发送方，此项记录当前限制 / Current behavior redelivers on reconnect and silently removes the record at TTL; there is no three-attempt terminal state or sender notification |
 
 ---
 
@@ -763,10 +766,11 @@ Open the collaboration settings, enter an externally reachable Relay URL, and sa
 自部署 / Self-host:
 
 ```bash
+docker build -f packages/relay/Dockerfile -t chorus-relay:local .
 docker run -d -p 3211:3211 \
   -e RELAY_JWT_SECRET=replace-with-a-strong-secret \
   -v relay-data:/data \
-  chorus/relay:latest
+  chorus-relay:local
 ```
 
 生产环境在 Relay 前配置 TLS 反向代理。/ Put a TLS reverse proxy in front of a production Relay.
@@ -838,20 +842,31 @@ Local Hub 执行 Contact、owner、role、visibility、permission 和本地会�
 
 | 方法 / Method | 端点 / Endpoint | 语义 / Semantics |
 |---|---|---|
-| PATCH | `/api/hub/config` | 验证并持久化 Relay 配置；异步连接 / Validate and persist Relay config, then connect asynchronously |
+| GET/PATCH | `/api/hub/config` | 读取或持久化 Hub/Relay/P2P 配置；PATCH 本身不保证重连完成 / Read or persist Hub, Relay, and P2P config; PATCH does not imply reconnection completed |
 | GET | `/api/hub/status` | 返回连接状态、路径、延迟与最近错误 / Return connection state, path, latency, and latest error |
+| POST | `/api/hub/connect` | 按当前配置连接 Relay / Connect to the Relay using current config |
+| POST | `/api/hub/disconnect` | 断开 Relay / Disconnect from the Relay |
 | POST | `/api/trust/pair` | 按 Hub ID 创建目标绑定的一次性配对包；不请求目录 / Create a target-bound one-time package without directory access |
 | POST | `/api/trust/pairing-sessions/accept` | 接收配对包并开始双向确认 / Accept a package and begin mutual confirmation |
 | POST | `/api/trust/pairing-sessions/:id/approve` | SAS 核对后批准；双方批准才创建 Contact / Approve after SAS comparison; both sides are required |
-| GET | `/api/contacts` | 只列最小 Contact Card 和 presence / List minimal contact cards and presence |
-| POST | `/api/rooms` | 创建 `direct`/`group` Room 与 `type=room` 会话 / Create room and local room conversation |
-| POST | `/api/rooms/:id/invitations` | 管理员邀请已配对联系人 / Admin invites a paired contact |
-| POST | `/api/rooms/:id/invitations/:inviteId/accept` | 被邀请者明确接受 / Invitee explicitly accepts |
-| POST | `/api/rooms/:id/agents` | 所有者加入自己的 `room/public` Agent / Owner adds their own eligible agent |
-| DELETE | `/api/rooms/:id/agents/:agentId` | 所有者或管理员移除；只有所有者能重新加入 / Owner/admin removes; only owner may re-add |
+| GET | `/api/hub/contacts` | 只列最小 Contact Card 和 presence / List minimal contact cards and presence |
+| GET/POST | `/api/hub/rooms` | 列出或创建跨 Hub Room / List or create cross-Hub rooms |
+| GET | `/api/hub/rooms/:id` | 获取本地 Room 映射、Relay 成员和 Agent / Get local mapping, Relay members, and Agents |
+| POST | `/api/hub/rooms/:id/invite` | 邀请目标 Hub / Invite a target Hub |
+| POST | `/api/hub/rooms/:id/agents` | 加入符合 owner/visibility 规则的 Agent / Add an Agent under owner and visibility rules |
+| DELETE | `/api/hub/rooms/:id/agents/:agentId` | 按 owner/Room 管理规则移除 Agent / Remove an Agent under owner or Room-admin rules |
+| GET | `/api/hub/room-invitations` | 列出待处理邀请 / List pending invitations |
+| POST | `/api/hub/room-invitations/:id/accept` | 接受邀请 / Accept an invitation |
+| POST | `/api/hub/room-invitations/:id/decline` | 拒绝邀请 / Decline an invitation |
+| POST | `/api/hub/rooms` | 创建 Relay Room 与本地 `cross_hub` 会话 / Create a Relay room and local cross_hub conversation |
+| POST | `/api/hub/rooms/:id/invite` | 创建者邀请已配对联系人 / Creator invites a paired contact |
+| POST | `/api/hub/room-invitations/:id/accept` | 被邀请者明确接受 / Invitee explicitly accepts |
+| POST | `/api/hub/room-invitations/:id/decline` | 被邀请者拒绝 / Invitee declines |
+| POST | `/api/hub/rooms/:id/agents` | 所有者加入自己的 `room/public` Agent / Owner adds their own eligible agent |
+| DELETE | `/api/hub/rooms/:id/agents/:agentId` | 所有者或创建者移除 / Owner or creator removes |
 | GET | `/api/users` | Owner-aware User 发现；支持分页与 stale 状态 / Owner-aware user discovery with pagination/stale state |
 
-所有 mutation 端点必须校验经过认证的 actor，返回稳定错误码，并写入不含敏感正文的审计事件。客户端 token 必须有 hash、`clientId/userId`、scope、expiry 和 revoke；WebSocket 使用短期 ticket，默认只绑定 loopback。
+mutation 会校验 loopback/Bearer actor、Room/owner 权限并返回稳定错误码。跨设备完整审计事件仍在补齐，不能宣称所有 mutation 已写审计。客户端 token 具有 hash、`clientId/userId`、scope、expiry 和 revoke；WebSocket 客户端先申请短期 ticket。
 
 Every mutation authenticates its actor, returns stable error codes, and writes a content-safe audit event. Client tokens are hashed, scoped, expiring, and revocable; WebSockets use short-lived tickets and default to loopback binding.
 
@@ -897,7 +912,7 @@ As of 2026-08-04, transport and room foundations exist, and detailed task rows r
 2. 配对不会创建远程 Agent；owner-only 入房、管理员规则和 60 秒撤销通过验收。
 3. 可信远程调用默认 confirm，unknown/stale deny；重放不产生重复执行。
 4. 两台真实设备分别经 Relay 与 P2P 跑完 TEST-01，失败不产生半注册 User/Agent。
-5. Tauri macOS/Windows/Linux 生产构建验证 mDNS、P2P listener、系统权限和 Relay fallback。
+5. 对当前支持的 Tauri macOS/Windows 生产构建验证 mDNS、P2P listener、系统权限和 Relay fallback；Linux 尚未配置发布产物，不计入当前发布矩阵。
 6. Relay 通过持久性、TTL、ack-delete、速率限制、TLS、备份和日志隐私检查。
 
 Release requires identity correctness, zero pairing leakage, owner/admin enforcement, revocation and replay safety, a real two-device Relay/P2P matrix, packaged desktop validation, and Relay operational checks.

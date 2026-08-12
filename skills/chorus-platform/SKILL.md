@@ -25,7 +25,7 @@ Base URL: http://localhost:3210
 Content-Type: application/json
 ```
 
-当前为本地信任模式（无需认证）。未来版本将支持 scoped client tokens。
+Loopback 请求默认受本机信任边界保护。非本机访问必须启用认证，并使用只展示一次、服务端仅保存哈希的 scoped client token。Token 由本机调用 `POST /api/tokens` 创建；常用 scope 包括 `agents:read`、`conversations:read|write`、`messages:read|write`、`hub:read|write` 和 `ws:connect`。
 
 ---
 
@@ -78,7 +78,7 @@ GET /api/agents
 
 ### 2.2 查询远程 Agent（跨设备）
 
-当 Hub 连接 Relay Server 后，已配对的远程用户会自动广播其 Agent 目录。
+配对本身只交换最小联系人资料，不会自动广播 Agent。只有所有者标记为 `public` 的 Agent，或由所有者明确加入共同 Room 的 `room` Agent，才会出现在远程发现结果中。
 
 ```http
 GET /api/agents?includeRemote=true
@@ -245,10 +245,10 @@ DELETE /api/conversations/{conversationId}/members/{agentId}
 
 ## 四、WebSocket 实时流 / WebSocket Streaming
 
-如需实时接收 Agent 回复（流式输出），连接 WebSocket：
+如需实时接收 Agent 回复（流式输出），先调用 `POST /api/tokens/ticket` 获取五分钟有效、仅含 `ws:connect` scope 的短期 ticket，再连接 WebSocket。Loopback 开发连接也使用同一流程：
 
 ```
-WS ws://localhost:3210/ws?conversationId={conversationId}
+WS ws://localhost:3210/ws?conversationId={conversationId}&token={ticket}
 ```
 
 **事件类型：**
@@ -270,11 +270,11 @@ Chorus 桌面端作为 Hub 连接 Relay Server。连接流程：
 1. 用户在设置中填入 Relay 地址（如 `wss://relay.example.com/ws`）
 2. Hub 生成 Ed25519 密钥对，向 Relay 注册
 3. 与其他 Hub 建立信任关系（配对码 / 公钥指纹核验）
-4. 信任建立后，双方交换 Agent 目录（加密，经签名验证）
+4. 信任建立后只创建联系人；Agent 目录必须由所有者按联系人或 Room 范围主动披露
 
 ### 5.2 给远程 Agent 发消息
 
-远程 Agent 注册后，使用方式与本地 Agent 完全一致：
+远程 Agent 只有在当前 Room 已授权后才可寻址；发送方式与本地 Agent 相同，但仍会执行 Room membership、所有权、可见性与 A2A 权限检查：
 
 ```http
 POST /api/conversations/{conversationId}/messages
@@ -297,7 +297,7 @@ Chorus 自动通过 Relay 将消息加密转发到目标 Hub。
 
 ### 5.4 目录发现协议
 
-Hub 上线后向已配对 Hub 发送 `directory_announce`：
+所有者发布 `public` Agent 或把 `room` Agent 加入指定 Room 后，Hub 才发送受范围约束的 `directory_announce`：
 
 ```typescript
 interface DirectoryManifest {
@@ -317,14 +317,14 @@ interface DirectoryManifest {
     type: string;
     capabilities: string[];
     status: "online" | "busy" | "offline";
-    visibility: "trusted" | "room" | "public";
+    visibility: "room" | "public";
   }>;
   revokedAgentIds: string[];
   signature: string;       // User key 签名
 }
 ```
 
-- Agent 可见性：`private`（不可发现）、`trusted`（仅已配对 Hub）、`room`（仅群聊成员）、`public`（所有已配对 Hub）
+- Agent 可见性：`private`（默认且不可发现）、`room`（仅所有者明确加入的 Room）、`public`（已配对联系人可发现，但不自动授予调用权）
 - 撤销 Agent 时发送 `directory_revoke`，接收方立即移除该 Agent
 
 ---
@@ -398,8 +398,10 @@ GET /api/conversations/{conversationId}/a2a-mode
 # 设置会话 A2A 权限
 PATCH /api/conversations/{conversationId}/a2a-mode
 Content-Type: application/json
-{ "mode": "confirm" }
+{ "mode": "mention" }
 ```
+
+调用审批策略是独立端点：`GET|PATCH /api/conversations/{conversationId}/a2a-permission`，值为 `auto | confirm | deny`。
 
 ### 6.2 信任建立
 

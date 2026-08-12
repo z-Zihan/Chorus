@@ -50,7 +50,7 @@ Chorus 坚持 local-first：聊天记录默认保存在本机，CLI 在本机运
 - 🔑 **信任管理**：Hub 间配对码认证、`pending/trusted/blocked` 信任状态、公钥变化自动重配对。
 - 🌐 **跨设备协作**：自托管 Relay + 局域网 P2P 直连 + 端到端加密 + 群组密钥管理。P2P 模式无需 Relay，同局域网自动发现（需用户确认连接）。
 - 📡 **P2P 直连**：mDNS 局域网设备发现，Ed25519 握手认证，消息签名验证，自动重连。
-- 📡 **签名目录发现**：Hub 间交换签名 Agent 目录，支持版本/TTL/撤销、可见性过滤（trusted/room/public）。
+- 📡 **签名目录发现**：Agent 默认 `private`；所有者仅向已配对联系人发布 `public` Agent，或向共同 Room 发布 `room/public` Agent，目录支持签名、版本、TTL 与撤销。
 - 📮 **离线消息**：queued → delivered → accepted/denied → done/error 状态机，TTL 7 天，幂等投递。
 - 🔌 **标准协议适配**：Agent 能力映射到 Google A2A Agent Card、MCP Tool、ACP Service。
 - 🛠️ **外部 Agent 接入**：通过 `GET /api/skill` 发现 Chorus，REST API 完整接入，Scoped Client Token 认证。
@@ -99,8 +99,8 @@ Windows 打包细节见 [Windows 构建指南](docs/WINDOWS_BUILD.md)。
 pnpm format:check
 pnpm lint
 pnpm typecheck
-pnpm test       # Shared 9 + Relay 18 + Server 144 = 171
-pnpm test:e2e   # Playwright Chromium，当前 18 项
+pnpm test       # Shared + Relay + Server 单元/集成测试
+pnpm test:e2e   # Playwright Chromium
 pnpm build
 cargo test --manifest-path src-tauri/Cargo.toml
 cargo check --manifest-path src-tauri/Cargo.toml
@@ -236,4 +236,4 @@ Chorus 启动后暴露 `GET /api/skill` 端点，返回完整的 Platform Skill 
 
 ### Chorus 支持哪些标准协议？
 
-Agent 能力可映射到 Google A2A Agent Card（`/.well-known/agent-card.json`）、MCP Tool 列表（`/api/mcp/tools`）、ACP 服务列表（`/api/acp/services`）。
+Agent 能力可映射到 Google A2A Agent Card（`/.well-known/agent-card.json`，仅发布 `public` Agent）、MCP Tool 列表（`/api/mcp/tools`）、ACP 服务列表（`/api/acp/services`）。

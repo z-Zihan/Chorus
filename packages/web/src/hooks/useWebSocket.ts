@@ -3,6 +3,7 @@ import type { ClientEvent, Message, ServerEvent } from "@chorus/shared";
 import { useChatStore } from "@/store/chatStore";
 import { useAgentStore } from "@/store/agentStore";
 import { getWsUrl } from "@/services/env";
+import { api } from "@/services/api";
 import { logger } from "@/utils/logger";
 import { track } from "@/utils/analytics";
 
@@ -234,9 +235,19 @@ export function useWebSocket() {
       }
     };
 
-    const connect = () => {
+    const connect = async () => {
       if (!mounted) return;
-      const wsUrl = getWsUrl();
+      let ticket: string;
+      try {
+        ticket = (await api.createWebSocketTicket()).token;
+      } catch (error) {
+        logger.error("Unable to create WebSocket ticket", error);
+        if (mounted) setTimeout(() => void connect(), reconnectDelay.current);
+        return;
+      }
+      if (!mounted) return;
+      const wsUrl = new URL(getWsUrl(), window.location.href);
+      wsUrl.searchParams.set("token", ticket);
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
@@ -276,13 +287,13 @@ export function useWebSocket() {
         if (!mounted) return;
         const delay = reconnectDelay.current;
         reconnectDelay.current = Math.min(delay * 2, RECONNECT_MAX);
-        setTimeout(connect, delay);
+        setTimeout(() => void connect(), delay);
       };
 
       ws.onerror = () => ws.close();
     };
 
-    connect();
+    void connect();
 
     return () => {
       mounted = false;

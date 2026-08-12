@@ -89,6 +89,11 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
   const [isLoadingHub, setIsLoadingHub] = useState(false);
   const [hubConfigError, setHubConfigError] = useState(false);
   const [isSavingHub, setIsSavingHub] = useState(false);
+  const [p2pStatus, setP2PStatus] = useState<Awaited<ReturnType<typeof api.getP2PStatus>> | null>(
+    null,
+  );
+  const [isLoadingP2P, setIsLoadingP2P] = useState(false);
+  const [pendingP2PHubId, setPendingP2PHubId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<SettingsTab>("appearance");
   const [isVerticalTabs, setIsVerticalTabs] = useState(() =>
     typeof window !== "undefined" ? window.matchMedia("(min-width: 640px)").matches : false,
@@ -161,11 +166,37 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
     }
   }, []);
 
+  const loadP2PStatus = useCallback(async () => {
+    setIsLoadingP2P(true);
+    try {
+      setP2PStatus(await api.getP2PStatus());
+    } catch {
+      setP2PStatus(null);
+    } finally {
+      setIsLoadingP2P(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (!open) return;
     void loadHubConfig();
     void loadCredentialStatus();
-  }, [loadCredentialStatus, loadHubConfig, open]);
+    void loadP2PStatus();
+  }, [loadCredentialStatus, loadHubConfig, loadP2PStatus, open]);
+
+  const handleP2PDecision = async (hubId: string, approve: boolean) => {
+    setPendingP2PHubId(hubId);
+    try {
+      if (approve) await api.connectP2PDevice(hubId);
+      else await api.dismissP2PDevice(hubId);
+      await loadP2PStatus();
+      addToast(t(approve ? "settings:p2pApproved" : "settings:p2pDismissed"), "success");
+    } catch {
+      addToast(t("settings:p2pActionFailed"), "error");
+    } finally {
+      setPendingP2PHubId(null);
+    }
+  };
 
   const handleCheckForUpdates = async () => {
     if (!updateSupported) {
@@ -551,6 +582,64 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
                             className="relative h-11 w-11 border-0 bg-transparent before:absolute before:inset-x-0 before:top-2.5 before:h-6 before:rounded-full before:bg-[var(--bg-active)] data-[state=checked]:bg-transparent data-[state=checked]:before:bg-[var(--accent-color)] sm:h-6 sm:bg-[var(--bg-active)] sm:before:hidden sm:data-[state=checked]:bg-[var(--accent-color)]"
                           />
                         </div>
+                        {hubConfig.p2pEnabled && (
+                          <div className="space-y-2 rounded-lg border border-[var(--border-color)] bg-[var(--bg-surface)] p-3">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-xs font-medium text-[var(--text-primary)]">
+                                {t("settings:p2pDiscovered")}
+                              </span>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="min-h-11 sm:min-h-8"
+                                onClick={() => void loadP2PStatus()}
+                                disabled={isLoadingP2P}
+                              >
+                                <RefreshCw aria-hidden="true" className="h-3.5 w-3.5" />
+                                {t("common:buttons.refresh")}
+                              </Button>
+                            </div>
+                            {p2pStatus?.discovered.map((peer) => (
+                              <div
+                                key={peer.hubId}
+                                className="flex flex-col gap-2 rounded-md border border-[var(--border-subtle)] p-2 sm:flex-row sm:items-center sm:justify-between"
+                              >
+                                <div className="min-w-0">
+                                  <p className="truncate text-xs text-[var(--text-primary)]">
+                                    {peer.displayName}
+                                  </p>
+                                  <p className="truncate font-mono text-[10px] text-[var(--text-muted)]">
+                                    {peer.hubId}
+                                  </p>
+                                </div>
+                                <div className="flex gap-2">
+                                  <Button
+                                    size="sm"
+                                    className="min-h-11 sm:min-h-8"
+                                    disabled={pendingP2PHubId === peer.hubId}
+                                    onClick={() => void handleP2PDecision(peer.hubId, true)}
+                                  >
+                                    {t("settings:p2pApprove")}
+                                  </Button>
+                                  <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    className="min-h-11 sm:min-h-8"
+                                    disabled={pendingP2PHubId === peer.hubId}
+                                    onClick={() => void handleP2PDecision(peer.hubId, false)}
+                                  >
+                                    {t("settings:p2pDismiss")}
+                                  </Button>
+                                </div>
+                              </div>
+                            ))}
+                            {!isLoadingP2P && (p2pStatus?.discovered.length ?? 0) === 0 && (
+                              <p className="text-xs text-[var(--text-muted)]">
+                                {t("settings:p2pNoneDiscovered")}
+                              </p>
+                            )}
+                          </div>
+                        )}
                         <Button
                           variant="secondary"
                           size="sm"

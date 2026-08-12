@@ -416,19 +416,15 @@ test("low-frequency dialogs and destructive confirmation remain keyboard reachab
   await catalogDialog.getByRole("button", { name: "关闭" }).click();
 
   await page.keyboard.press("Control+,");
-  const agentSettings = page.getByRole("dialog", { name: "Agent 设置" });
-  await expect(agentSettings).toBeVisible();
-  await agentSettings.getByRole("button", { name: "查看日志" }).click();
+  const settingsDialog = page.getByRole("dialog", { name: "设置" });
+  await expect(settingsDialog).toBeVisible();
+  await settingsDialog.getByRole("tab", { name: "诊断" }).click();
+  await settingsDialog.getByRole("button", { name: "查看日志" }).click();
   const logDialog = page.getByRole("dialog", { name: "诊断日志" });
   await expect(logDialog.getByRole("textbox", { name: "搜索日志" })).toBeVisible();
   await expectMobileTargets(page, '[role="dialog"]');
   await page.keyboard.press("Escape");
   await expect(logDialog).toBeHidden();
-  await page.keyboard.press("Escape");
-
-  await page.getByRole("button", { name: "打开侧栏" }).click();
-  await page.getByRole("button", { name: "设置", exact: true }).click();
-  const settingsDialog = page.getByRole("dialog", { name: "设置" });
   await settingsDialog.getByRole("tab", { name: "安全" }).click();
   await settingsDialog.getByRole("button", { name: "清除所有凭据" }).click();
   const confirmation = page.getByRole("alertdialog", { name: "清除全部已保存凭据？" });

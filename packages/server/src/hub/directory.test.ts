@@ -27,7 +27,7 @@ describe("DirectoryService", () => {
       updatedAt: 1,
     };
     const agents = [
-      agentFixture("trusted-agent", "trusted"),
+      agentFixture("private-agent", "private"),
       agentFixture("room-agent", "room"),
       agentFixture("public-agent", "public"),
     ];
@@ -54,15 +54,15 @@ describe("DirectoryService", () => {
       signature: "",
     });
     expect(manifest?.expiresAt).toBe((manifest?.issuedAt ?? 0) + 10 * 60 * 1000);
-    expect(manifest?.agents.map(({ id }) => id)).toEqual(["trusted-agent", "public-agent"]);
+    expect(manifest?.agents.map(({ id }) => id)).toEqual(["public-agent"]);
     expect(manifest?.agents[0]).toEqual({
-      id: "trusted-agent",
-      name: "trusted-agent name",
-      description: "trusted-agent description",
+      id: "public-agent",
+      name: "public-agent name",
+      description: "public-agent description",
       type: "mock",
       capabilities: [],
       status: "online",
-      visibility: "trusted",
+      visibility: "public",
     });
 
     const roomManifest = service.buildLocalDirectory({ trusted: false, sharedRoom: true });
@@ -353,7 +353,7 @@ function mockService(publicKey: string): DirectoryService {
 
 function agentFixture(
   id: string,
-  visibility: DirectoryManifest["agents"][number]["visibility"],
+  visibility: Exclude<DirectoryManifest["agents"][number]["visibility"], "trusted">,
 ): Agent & { visibility: typeof visibility } {
   return {
     id,

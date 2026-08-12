@@ -54,6 +54,7 @@ export class AgentRegistry {
   private readonly knownHubs = new Map<string, HubInfo>();
   private readonly remoteAgents = new Map<string, RemoteAgent>();
   private readonly remoteAgentRooms = new Map<string, Set<string>>();
+  private readonly roomHubMembers = new Map<string, Set<string>>();
   private configWatcher?: ConfigWatcher;
   private healthCheckTimer?: NodeJS.Timeout;
   private healthCheckRunning = false;
@@ -68,6 +69,7 @@ export class AgentRegistry {
       this.setHubPresence(hubId, status, publicKey ?? hubId, displayName);
     });
     relayClient?.onRoomMembers((roomId, members) => {
+      this.roomHubMembers.set(roomId, new Set(members.map(({ hubId }) => hubId)));
       this.clearRemoteAgentsForRoom(roomId);
       for (const member of members) {
         this.setHubPresence(
@@ -122,6 +124,10 @@ export class AgentRegistry {
 
   getKnownHubs(): HubInfo[] {
     return [...this.knownHubs.values()];
+  }
+
+  isHubInRoom(roomId: string, hubId: string): boolean {
+    return this.roomHubMembers.get(roomId)?.has(hubId) ?? false;
   }
 
   registerRemoteAgent(
@@ -299,7 +305,7 @@ export class AgentRegistry {
 
   async update(
     id: string,
-    input: Partial<Pick<AgentConfig, "name" | "description" | "avatar" | "config">>,
+    input: Partial<Pick<AgentConfig, "name" | "description" | "avatar" | "config" | "visibility">>,
   ): Promise<Agent | undefined> {
     const current = this.entries.get(id);
     const existing =
@@ -503,6 +509,8 @@ export class AgentRegistry {
       ownerType: row?.ownerType as Agent["ownerType"],
       owner: owner ? { id: owner.id, name: owner.name, kind: owner.kind } : undefined,
       capabilities: parseCapabilities(row?.capabilities),
+      visibility:
+        row?.visibility === "room" || row?.visibility === "public" ? row.visibility : "private",
       stale: row?.ownerType === "remote" ? row.stale : false,
       homeHubId: row?.homeHubId ?? owner?.hubId ?? "",
       createdAt: row?.createdAt ?? Date.now(),
@@ -527,6 +535,8 @@ export class AgentRegistry {
       ownerType: row?.ownerType as Agent["ownerType"],
       owner: owner ? { id: owner.id, name: owner.name, kind: owner.kind } : undefined,
       capabilities: parseCapabilities(row?.capabilities),
+      visibility:
+        row?.visibility === "room" || row?.visibility === "public" ? row.visibility : "private",
       stale: row?.ownerType === "remote" ? row.stale : false,
       homeHubId: row?.homeHubId ?? owner?.hubId ?? "",
       createdAt: row?.createdAt ?? Date.now(),

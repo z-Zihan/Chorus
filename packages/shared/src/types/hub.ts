@@ -126,7 +126,8 @@ export interface DirectoryManifest {
     type: string;
     capabilities: string[];
     status: "online" | "busy" | "offline" | "error";
-    visibility: "trusted" | "room" | "public";
+    /** `trusted` is accepted only for protocol-v1 compatibility; new local agents use private/room/public. */
+    visibility: "private" | "trusted" | "room" | "public";
   }>;
   revokedAgentIds: string[];
   signature: string;

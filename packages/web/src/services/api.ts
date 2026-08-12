@@ -159,6 +159,10 @@ async function requestBlob(path: string, silent = false): Promise<Blob> {
 export const api = {
   // Health
   health: () => request<{ ok: boolean }>("/health"),
+  createWebSocketTicket: () =>
+    request<{ token: string; id: string; expiresInMs: number }>("/tokens/ticket", {
+      method: "POST",
+    }),
 
   // Hub
   getHubStatus: () => request<HubStatusResponse>("/hub/status", undefined, true),
@@ -176,7 +180,7 @@ export const api = {
     }),
   updateAgent: (
     id: string,
-    data: Partial<Pick<AgentConfig, "name" | "description" | "avatar" | "config">>,
+    data: Partial<Pick<AgentConfig, "name" | "description" | "avatar" | "config" | "visibility">>,
   ) =>
     request<Agent>(`/agents/${id}`, {
       method: "PATCH",

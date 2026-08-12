@@ -35,6 +35,8 @@ pnpm tauri build
 
 ## 产物位置 / Output
 
+以下文件名是 `0.1.0`、x64 构建的示例；版本、架构、语言与 Tauri 版本可能改变文件名，请以对应目录中的实际产物为准：
+
 ```
 src-tauri/target/release/bundle/
 ├── msi/

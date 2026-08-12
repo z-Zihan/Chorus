@@ -126,6 +126,7 @@ describe("HubMessageRouter execution acknowledgements", () => {
     const registry = {
       getHubPublicKey: vi.fn(() => sender.publicKey),
       setHubPublicKey: vi.fn(),
+      isHubInRoom: vi.fn(() => true),
     } as unknown as AgentRegistry;
     const runtime = {
       handleHubMessage: vi.fn().mockResolvedValue("Remote result"),
@@ -156,7 +157,13 @@ describe("HubMessageRouter execution acknowledgements", () => {
       { id: "local-user", name: "Local User" },
       {} as DirectoryService,
       trustStore,
-      { getAgentRow: vi.fn(), listRoomIds: vi.fn(() => []) } as unknown as Repository,
+      {
+        getAgentRow: vi.fn(),
+        listRoomIds: vi.fn(() => []),
+        listConversations: vi.fn(() => [
+          { id: "local-room", type: "cross_hub", relayRoomId: "conversation-1" },
+        ]),
+      } as unknown as Repository,
     );
     const payload: HubPayload = {
       protocolVersion: 2,

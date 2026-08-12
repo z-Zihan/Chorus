@@ -71,6 +71,13 @@
       "when": 1785859200000,
       "tag": "0009_owner_proof_resync",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1786505797918,
+      "tag": "0010_purple_dagger",
+      "breakpoints": true
     }
   ]
 }

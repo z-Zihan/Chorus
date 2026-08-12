@@ -8,6 +8,7 @@ const agent: Agent = {
   description: "Finds and summarizes sources",
   type: "mock",
   status: "online",
+  visibility: "private",
   disabled: false,
   capabilities: ["research", "summarize"],
   createdAt: 1,

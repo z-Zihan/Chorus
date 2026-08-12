@@ -100,10 +100,7 @@ function AppShell() {
       { key: "Ctrl+K", callback: () => setIsSearchOpen(true) },
       {
         key: "Ctrl+,",
-        callback: () => {
-          if (selectedAgentId) clearSelectedAgent();
-          else if (agents[0]) selectAgent(agents[0].id);
-        },
+        callback: () => setIsSettingsOpen(true),
       },
       {
         key: "Escape",

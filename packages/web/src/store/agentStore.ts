@@ -33,7 +33,7 @@ interface AgentState {
   fetchHealthStatus: () => Promise<void>;
   updateAgent: (
     agentId: string,
-    data: Partial<Pick<AgentConfig, "name" | "description" | "avatar" | "config">>,
+    data: Partial<Pick<AgentConfig, "name" | "description" | "avatar" | "config" | "visibility">>,
   ) => Promise<Agent>;
   updateAgentStatus: (agentId: string, status: AgentStatus, error?: string) => void;
   updateAgentStatuses: (statuses: AgentStatusSnapshot[]) => void;

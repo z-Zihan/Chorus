@@ -12,10 +12,45 @@ export function authMiddleware(auth: AuthConfig, tokenStore?: TokenStore): onReq
     if (!pathname?.startsWith("/api/") || !auth.enabled || isLoopbackRequest(request)) return;
 
     const token = bearerToken(request.headers.authorization);
-    if (!token || !verifyAuthToken(token, auth, tokenStore)) {
+    const verified = token ? verifyAuthToken(token, auth, tokenStore) : null;
+    if (!verified) {
       return reply.code(401).send({ error: "Unauthorized" });
     }
+    const requiredScope = requiredApiScope(request.method, pathname);
+    if (
+      verified !== "configured" &&
+      requiredScope &&
+      !tokenHasRequiredScope(verified, requiredScope)
+    ) {
+      return reply.code(403).send({ error: `Missing scope: ${requiredScope}` });
+    }
   };
+}
+
+function tokenHasRequiredScope(token: ClientToken, scope: string): boolean {
+  if (token.scopes.includes("*") || token.scopes.includes(scope)) return true;
+  const [resource, action] = scope.split(":");
+  return Boolean(resource && action && token.scopes.includes(`${resource}:*`));
+}
+
+export function requiredApiScope(method: string, pathname: string): string | null {
+  if (pathname === "/api/health" || pathname === "/api/tokens/ticket") return null;
+  const read = method === "GET" || method === "HEAD";
+  if (pathname.startsWith("/api/agents") || pathname.startsWith("/api/users")) {
+    return read ? "agents:read" : "agents:write";
+  }
+  if (pathname.startsWith("/api/conversations") || pathname.startsWith("/api/a2a")) {
+    if (/\/messages(?:\/|$)/u.test(pathname)) return read ? "messages:read" : "messages:write";
+    return read ? "conversations:read" : "conversations:write";
+  }
+  if (pathname.startsWith("/api/hub") || pathname.startsWith("/api/trust")) {
+    return read ? "hub:read" : "hub:write";
+  }
+  if (pathname.startsWith("/api/search") || pathname.startsWith("/api/export")) {
+    return "conversations:read";
+  }
+  if (pathname.startsWith("/api/tokens")) return "tokens:manage";
+  return read ? "api:read" : "api:write";
 }
 
 export function verifyAuthToken(

@@ -90,12 +90,20 @@ async function main(): Promise<void> {
     60 * 60 * 1_000,
   );
   cleanupTimer.unref();
+  const checkpointTimer = setInterval(
+    () => {
+      database.sqlite.pragma("wal_checkpoint(PASSIVE)");
+    },
+    5 * 60 * 1_000,
+  );
+  checkpointTimer.unref();
 
   let closing = false;
   const close = async () => {
     if (closing) return;
     closing = true;
     clearInterval(cleanupTimer);
+    clearInterval(checkpointTimer);
     registry.shutdown();
     await app.close();
     database.sqlite.close();
