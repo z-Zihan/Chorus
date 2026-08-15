@@ -160,6 +160,45 @@ describe("conversation routes", () => {
     expect(response.status).toBe(400);
   });
 
+  it("gets and persists the global A2A collaboration limits", async () => {
+    const initial = await request(app.server).get("/api/a2a/settings");
+    expect(initial.status).toBe(200);
+    expect(initial.body).toEqual({ maxRounds: 12, callTimeoutMinutes: 5 });
+
+    const updated = await request(app.server)
+      .patch("/api/a2a/settings")
+      .send({ maxRounds: 24, callTimeoutMinutes: 8 });
+    expect(updated.status).toBe(200);
+    expect(updated.body).toEqual({ maxRounds: 24, callTimeoutMinutes: 8 });
+
+    const persisted = await request(app.server).get("/api/a2a/settings");
+    expect(persisted.body).toEqual({ maxRounds: 24, callTimeoutMinutes: 8 });
+  });
+
+  it("keeps PATCH compatible with clients that only update the round limit", async () => {
+    const response = await request(app.server).patch("/api/a2a/settings").send({ maxRounds: 18 });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ maxRounds: 18, callTimeoutMinutes: 5 });
+  });
+
+  it.each([0, 51, 1.5, "12"])("rejects invalid A2A max rounds: %s", async (maxRounds) => {
+    const response = await request(app.server).patch("/api/a2a/settings").send({ maxRounds });
+
+    expect(response.status).toBe(400);
+  });
+
+  it.each([0, 31, 1.5, "5"])(
+    "rejects invalid A2A call timeout minutes: %s",
+    async (callTimeoutMinutes) => {
+      const response = await request(app.server)
+        .patch("/api/a2a/settings")
+        .send({ callTimeoutMinutes });
+
+      expect(response.status).toBe(400);
+    },
+  );
+
   it("updates and persists the conversation A2A mode", async () => {
     const created = await request(app.server)
       .post("/api/conversations")

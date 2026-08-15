@@ -7,7 +7,7 @@
 | Agent | online、checking、busy、offline、needs auth、stale、disabled、installing、install error | 健康检查、登录、重新检测、编辑 |
 | 会话列表 | loading、empty、results、no search result、archived、load error | 新建、清除搜索、重试 |
 | 消息 | sending、queued、delivered、thinking、streaming、partial、stopped、done、denied、timeout、error | 停止、重试、复制错误、切换 Agent |
-| A2A | off、mention、call、waiting confirm、running、depth limit、cancelled、done、error | 修改模式、允许/拒绝、重试 |
+| A2A | off、mention、call、waiting confirm、running、round limit、call timeout、task timeout、depth limit、cancelled、done、error | 修改模式、修改轮次/单次调用超时、允许/拒绝、缩小任务后重试 |
 | Relay | not configured、saving、connecting、connected、reconnecting、disconnected、error | 配置、重试、诊断 |
 | P2P | disabled、discovering、discovered、awaiting approval、connecting、connected、rejected、error | 开启、批准/拒绝、重试 |
 | 配对 | idle、creating、code ready、waiting peer、verifying、trusted、expired、invalid、cancelled | 复制配对包、重新生成、取消 |

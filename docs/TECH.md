@@ -300,14 +300,14 @@ class FriendshipRegistry {
  */
 interface A2ABusOptions {
   maxDepth: number;          // 最大调用深度，默认 5
-  chainTimeoutMs: number;    // 链总超时，默认 60000 (60s)
+  callTimeoutMs: number;     // 单次 A2A 调用超时，默认 300000 (5min)
   maxConcurrency: number;    // 单个 Agent 同时被调用的上限，默认 3
 }
 
 // 默认防护参数
 const DEFAULT_A2A_OPTIONS: A2ABusOptions = {
   maxDepth: 5,
-  chainTimeoutMs: 60_000,
+  callTimeoutMs: 5 * 60_000,
   maxConcurrency: 3,
 };
 
@@ -366,7 +366,7 @@ function propagateCancel(threadId: string): void {
 //   }
 //   // 4. 超时 + 执行
 //   const timeoutController = new AbortController();
-//   const timer = setTimeout(() => timeoutController.abort(), options.chainTimeoutMs);
+//   const timer = setTimeout(() => timeoutController.abort(), options.callTimeoutMs);
 //   try {
 //     const targetAdapter = registry.getAdapter(to);
 //     yield* targetAdapter.handleA2ACall(from, message, context);
@@ -1061,7 +1061,7 @@ first_response_completed { elapsedMs, success }
 
 ### 8.4 Prompt-based A2A for CLI Adapters
 
-CLI adapters (Claude Code, Codex) don't support OpenAI's tool-calling parameter. Chorus injects a system prompt teaching the CLI agent to use the `[A2A_CALL: target: message]` format. After CLI output completes, the adapter parses calls, executes them via `a2aBus`, and feeds the responses back to the CLI agent. The process is limited to 3 rounds. See `packages/server/src/agent/chorus-skill.ts` for the full skill text.
+CLI adapters (Claude Code, Codex) don't support OpenAI's tool-calling parameter. Chorus injects a system prompt teaching the CLI agent to use the `[A2A_CALL: target: message]` format. After CLI output completes, the adapter parses calls, executes them via `a2aBus`, and feeds the responses back to the CLI agent. CLI and OpenAI count every actual Agent-to-Agent call against the global `a2a.maxRounds` handoff budget (default 12, configurable from 1–50 through `GET|PATCH /api/a2a/settings`), even when one model response requests multiple calls. Local and cross-Hub calls use the same `a2a.callTimeoutMinutes` task snapshot (default 5, configurable from 1–30). A collaboration run defaults to a 20-minute ceiling and uses `max(20 minutes, call timeout)` so a valid per-call setting is never preempted by a shorter task timer. Mention-mode handoffs share the same run limits and stop the whole user-task chain when a limit is reached. See `packages/server/src/agent/chorus-skill.ts` for the full skill text.
 
 ### 8.5 Credential Storage Architecture
 

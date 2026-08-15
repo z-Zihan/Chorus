@@ -1,4 +1,5 @@
 import type {
+  A2ACollaborationSettings,
   Agent,
   AgentConfig,
   CliDetection,
@@ -241,6 +242,14 @@ export const api = {
   getPlugins: (silent = false) => request<PluginInfo[]>("/plugins", undefined, silent),
 
   // A2A mode per conversation
+  getA2ACollaborationSettings: (silent = false) =>
+    request<A2ACollaborationSettings>("/a2a/settings", undefined, silent),
+  setA2ACollaborationSettings: (settings: A2ACollaborationSettings, silent = false) =>
+    request<A2ACollaborationSettings>(
+      "/a2a/settings",
+      { method: "PATCH", body: JSON.stringify(settings) },
+      silent,
+    ),
   getA2AMode: (conversationId: string, silent = false) =>
     request<{ mode: A2AMode }>(`/conversations/${conversationId}/a2a-mode`, undefined, silent),
   setA2AMode: (conversationId: string, mode: A2AMode, silent = false) =>

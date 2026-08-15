@@ -70,6 +70,10 @@ export interface ConversationContext {
   a2aThreadId?: string;
   a2aCallerName?: string;
   a2aContextSummary?: string;
+  /** Maximum automatic Agent-to-Agent handoffs/tool rounds for this user task. */
+  maxA2ARounds?: number;
+  /** Maximum wall-clock time for one Agent-to-Agent call. */
+  a2aCallTimeoutMs?: number;
   parentMessageId?: string;
   difyConversationId?: string;
   signal?: AbortSignal;

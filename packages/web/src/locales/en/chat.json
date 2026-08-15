@@ -45,6 +45,8 @@
   "a2aFailed": "Failed",
   "a2aCancel": "Cancel call",
   "a2aCancelled": "A2A call cancelled",
+  "a2aRoundLimitReached": "Automatic collaboration stopped at the {{count}}-round limit. Refine and resend the task, or change the limit in Settings.",
+  "a2aTaskTimeoutReached": "Automatic collaboration stopped at the {{count}}-minute task limit. Narrow the task and resend it.",
   "hubDelivery": {
     "transport": "Transport",
     "execution": "Execution",

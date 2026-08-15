@@ -4,12 +4,16 @@ import type { AgentRegistry } from "./registry";
 import { logger } from "../utils/logger";
 import type { HubMessageRouter } from "../hub/message-router";
 import type { RelayClient } from "../hub/relay-client";
+import { buildAgentHandoff, findLatestUserObjective } from "./handoff";
 
 export interface A2ABusOptions {
   maxDepth: number;
-  chainTimeoutMs: number;
+  callTimeoutMs: number;
   maxConcurrency: number;
 }
+
+const MIN_CALL_TIMEOUT_MS = 60_000;
+const MAX_CALL_TIMEOUT_MS = 30 * 60_000;
 
 export interface A2AAuthorizationRequest {
   conversationId: string;
@@ -50,7 +54,7 @@ export class A2ABus implements A2ABusLike {
     private readonly registry: AgentRegistry,
     private readonly options: A2ABusOptions = {
       maxDepth: 5,
-      chainTimeoutMs: 60_000,
+      callTimeoutMs: 5 * 60_000,
       maxConcurrency: 3,
     },
     private readonly relayClient?: RelayClient,
@@ -99,6 +103,13 @@ export class A2ABus implements A2ABusLike {
       };
       return;
     }
+    const handoffMessage = buildAgentHandoff({
+      objective: findLatestUserObjective(context.history, message),
+      request: message,
+      fromAgent: this.registry.get(fromAgentId)?.name ?? fromAgentId,
+      toAgent: this.registry.get(toAgentId)?.name ?? toAgentId,
+      history: context.history,
+    });
     const remoteHubId = this.registry.getRemoteAgentHub(toAgentId);
     if (remoteHubId) {
       if (!this.hubMessageRouter) {
@@ -120,7 +131,7 @@ export class A2ABus implements A2ABusLike {
         remoteHubId,
         fromAgentId,
         remoteAgentId,
-        message,
+        handoffMessage,
         { ...context, callStack: [...stack, toAgentId], a2aThreadId: threadId },
         (update) =>
           this.onRemoteDelivery?.({
@@ -163,7 +174,19 @@ export class A2ABus implements A2ABusLike {
     }
 
     this.concurrency.set(toAgentId, active + 1);
-    const timeout = AbortSignal.timeout(this.options.chainTimeoutMs);
+    const callTimeoutMs = validCallTimeout(context.a2aCallTimeoutMs)
+      ? context.a2aCallTimeoutMs
+      : this.options.callTimeoutMs;
+    const timeoutController = new AbortController();
+    const timeout = setTimeout(() => {
+      timeoutController.abort(
+        new DOMException(
+          `Agent call timed out after ${Math.ceil(callTimeoutMs / 60_000)} minutes`,
+          "TimeoutError",
+        ),
+      );
+    }, callTimeoutMs);
+    timeout.unref?.();
     const controller = new AbortController();
     const parentThreadId = this.callsByStack.get(stackKey(stack))?.at(-1);
     const nextStack = [...stack, toAgentId];
@@ -175,7 +198,7 @@ export class A2ABus implements A2ABusLike {
     if (parentThreadId) this.activeCalls.get(parentThreadId)?.children.add(threadId);
     const signal = AbortSignal.any([
       controller.signal,
-      timeout,
+      timeoutController.signal,
       ...(context.signal ? [context.signal] : []),
     ]);
     const startedAt = Date.now();
@@ -184,7 +207,7 @@ export class A2ABus implements A2ABusLike {
     try {
       const callerName = this.registry.get(fromAgentId)?.name ?? fromAgentId;
       const contextSummary = summarizeContext(context.history);
-      stream = adapter.handleA2ACall(fromAgentId, message, {
+      stream = adapter.handleA2ACall(fromAgentId, handoffMessage, {
         ...context,
         callStack: nextStack,
         a2aThreadId: undefined,
@@ -202,6 +225,7 @@ export class A2ABus implements A2ABusLike {
       logger.error({ err: error, fromAgentId, toAgentId, threadId }, "A2A call failed");
       throw error;
     } finally {
+      clearTimeout(timeout);
       // Ensure the adapter generator is closed even when we bailed on abort/timeout
       stream?.return(undefined).catch(() => {});
       const durationMs = Date.now() - startedAt;
@@ -225,6 +249,15 @@ export class A2ABus implements A2ABusLike {
     call.controller.abort(new DOMException("A2A call cancelled", "AbortError"));
     return true;
   }
+}
+
+function validCallTimeout(value: number | undefined): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isInteger(value) &&
+    value >= MIN_CALL_TIMEOUT_MS &&
+    value <= MAX_CALL_TIMEOUT_MS
+  );
 }
 
 function summarizeContext(history: ConversationContext["history"]): string {

@@ -38,7 +38,7 @@ interface PromptA2AResponse extends PromptA2ACall {
 }
 
 const A2A_CALL_PATTERN = /\[A2A_CALL:\s*([^:\]\r\n]+?)\s*:\s*([\s\S]*?)\]/gu;
-const MAX_A2A_ROUNDS = 3;
+const DEFAULT_MAX_A2A_HANDOFFS = 12;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -316,7 +316,8 @@ export class CliAdapter extends BaseAdapter {
 
     const systemPrompt = buildA2ASystemPrompt(callableAgentIds);
     let prompt = `${systemPrompt}\n\n${message}`;
-    let a2aRounds = 0;
+    let a2aHandoffs = 0;
+    const maxA2AHandoffs = context.maxA2ARounds ?? DEFAULT_MAX_A2A_HANDOFFS;
 
     while (true) {
       const output = yield* this.runCli(prompt, context, cfg, false);
@@ -328,15 +329,14 @@ export class CliAdapter extends BaseAdapter {
         yield { type: "done", content: "" };
         return;
       }
-      if (a2aRounds >= MAX_A2A_ROUNDS) {
-        throw new Error(`CLI exceeded the maximum of ${MAX_A2A_ROUNDS} A2A rounds`);
-      }
-
       const responses: PromptA2AResponse[] = [];
       for (const call of calls) {
+        if (a2aHandoffs >= maxA2AHandoffs) {
+          throw new Error(`CLI exceeded the maximum of ${maxA2AHandoffs} A2A handoffs`);
+        }
         responses.push(yield* this.executeA2ACall(call, callableAgentIds, context));
+        a2aHandoffs += 1;
       }
-      a2aRounds += 1;
       prompt = buildA2AFollowUpPrompt(systemPrompt, message, visibleOutput, responses);
     }
   }

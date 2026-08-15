@@ -82,15 +82,19 @@ export default {
 | `call` | 注入 A2A_CALL prompt，同步调用，调用方拿到返回值继续推理 | 需要协作后继续处理的任务 |
 | `off` | 关闭 A2A，@mention 只是文本不触发转发 | 纯单 Agent 对话 |
 
+自动协作默认最多 **12 轮**。1 轮表示一次 Agent → Agent 自动交接；达到上限后 Chorus 会写入停止提示，不再触发下一位 Agent。单次 Agent → Agent 调用默认允许 **5 分钟**，可配置 1–30 分钟；整条自动协作任务默认最多运行 20 分钟，且不会短于用户配置的单次调用时间。轮次和单次调用超时都可在 **设置 → 隐私与权限** 中修改，新值从下一条用户任务生效。
+
 切换方式：会话设置中切换，或通过 API：
 ```http
 PATCH /api/conversations/:id/a2a-mode
 { "mode": "call" }
 ```
 
+全局协作限制 API：`GET|PATCH /api/a2a/settings`，PATCH body 可包含 `{ "maxRounds": 12, "callTimeoutMinutes": 5 }`；为兼容旧客户端，也允许只更新其中一个字段。
+
 ### Agent 间通信（A2A）机制
-- **群聊 @mention 转发**（`mention` 模式）：Agent 回复中 @了其他 Agent → 自动创建 agent→agent 消息 → 目标 Agent 独立回复。每个 Agent 的回复都是对话中的独立消息
-- **A2A_CALL 同步调用**（`call` 模式）：Agent 输出 `[A2A_CALL: target: message]` → 系统解析并调用目标 Agent → 拿到返回值后调用方继续推理。支持多轮调用（最多 3 轮）
+- **群聊 @mention 转发**（`mention` 模式）：Agent 回复中 @了其他 Agent → 自动创建 agent→agent 消息 → 目标 Agent 独立回复。每次交接都携带原始目标、近期上下文、具体请求和交付标准，并受可配置轮次上限保护
+- **A2A_CALL 同步调用**（`call` 模式）：Agent 输出 `[A2A_CALL: target: message]` → 系统解析并调用目标 Agent → 拿到返回值后调用方继续推理。每次实际调用计为一次交接并使用同一项自动协作设置（默认 12）
 - **A2A Bus**（编程式调用）：支持 OpenAI tool-calling 格式的 API Agent 可通过函数调用直接调用其他 Agent
 - **跨设备 A2A**：通过 Relay Server，不同设备上的 Agent 也可以互相通信
 

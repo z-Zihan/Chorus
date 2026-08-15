@@ -55,7 +55,7 @@ const CALL_AGENT_TOOL = {
   },
 } as const;
 
-const MAX_TOOL_ROUNDS = 8;
+const DEFAULT_MAX_A2A_HANDOFFS = 12;
 
 export class OpenAIAdapter extends BaseAdapter {
   readonly id: string;
@@ -133,7 +133,9 @@ export class OpenAIAdapter extends BaseAdapter {
       { role: "user", content: message },
     ];
 
-    for (let roundIndex = 0; roundIndex < MAX_TOOL_ROUNDS; roundIndex += 1) {
+    const maxA2AHandoffs = context.maxA2ARounds ?? DEFAULT_MAX_A2A_HANDOFFS;
+    let a2aHandoffs = 0;
+    for (let roundIndex = 0; roundIndex < maxA2AHandoffs + 1; roundIndex += 1) {
       const round = yield* this.streamCompletion(messages, context.signal, toolsEnabled);
       if (round.tokensUsed) {
         yield { type: "pipeline", content: "", metadata: { tokensUsed: round.tokensUsed } };
@@ -150,7 +152,11 @@ export class OpenAIAdapter extends BaseAdapter {
       });
 
       for (const toolCall of round.toolCalls) {
+        if (a2aHandoffs >= maxA2AHandoffs) {
+          throw new Error(`OpenAI exceeded the maximum of ${maxA2AHandoffs} A2A handoffs`);
+        }
         const result = yield* this.executeToolCall(toolCall, callableAgentIds, context);
+        a2aHandoffs += 1;
         messages.push({
           role: "tool",
           tool_call_id: toolCall.id,
@@ -159,7 +165,7 @@ export class OpenAIAdapter extends BaseAdapter {
       }
     }
 
-    throw new Error(`OpenAI exceeded the maximum of ${MAX_TOOL_ROUNDS} tool-calling rounds`);
+    throw new Error(`OpenAI exceeded the maximum of ${maxA2AHandoffs} A2A handoffs`);
   }
 
   private async *streamCompletion(

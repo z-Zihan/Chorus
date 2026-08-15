@@ -2,6 +2,13 @@ export type ConversationType = "dm" | "group" | "cross_hub";
 export type A2AMode = "mention" | "call" | "off";
 export type A2APolicy = "auto" | "confirm" | "deny";
 
+export interface A2ACollaborationSettings {
+  /** One round is one automatic Agent-to-Agent handoff. */
+  maxRounds: number;
+  /** Maximum wall-clock time for one Agent-to-Agent call. */
+  callTimeoutMinutes: number;
+}
+
 export interface Conversation {
   id: string;
   title: string;

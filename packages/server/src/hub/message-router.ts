@@ -22,7 +22,9 @@ import { OfflineStore } from "./offline-store.js";
 import { ResyncService } from "./resync.js";
 import type { PairingService } from "./pairing-service.js";
 
-const REMOTE_CALL_TIMEOUT_MS = 120_000;
+const DEFAULT_REMOTE_CALL_TIMEOUT_MS = 5 * 60_000;
+const MIN_REMOTE_CALL_TIMEOUT_MS = 60_000;
+const MAX_REMOTE_CALL_TIMEOUT_MS = 30 * 60_000;
 const MAX_SEEN_MESSAGES = 1_000;
 const OFFLINE_PURGE_INTERVAL_MS = 60 * 60 * 1000;
 
@@ -338,7 +340,11 @@ export class HubMessageRouter {
         executionTerminal: false,
       });
     }
-    const response = this.waitForResponse(messageId, context.signal);
+    const response = this.waitForResponse(
+      messageId,
+      context.signal,
+      normalizeRemoteCallTimeout(context.a2aCallTimeoutMs),
+    );
     const payload: OutboundPayload = {
       messageType: "a2a_call",
       conversationId: context.conversationId,
@@ -350,6 +356,8 @@ export class HubMessageRouter {
         targetAgentId: toAgentId,
         callStack: context.callStack,
         a2aThreadId: context.a2aThreadId,
+        maxA2ARounds: context.maxA2ARounds,
+        a2aCallTimeoutMs: context.a2aCallTimeoutMs,
       },
     };
     try {
@@ -380,6 +388,8 @@ export class HubMessageRouter {
         history: [],
         callStack,
         a2aThreadId: stringMetadata(payload.metadata, "a2aThreadId"),
+        maxA2ARounds: numberMetadata(payload.metadata, "maxA2ARounds"),
+        a2aCallTimeoutMs: timeoutMetadata(payload.metadata, "a2aCallTimeoutMs"),
       });
       await this.sendDeliveryAck(fromHubId, payload, envelopeId, "done");
       await this.sendResponse(fromHubId, payload, content, false, relayClient);
@@ -566,15 +576,19 @@ export class HubMessageRouter {
     );
   }
 
-  private waitForResponse(messageId: string, signal?: AbortSignal): Promise<string> {
+  private waitForResponse(
+    messageId: string,
+    signal?: AbortSignal,
+    timeoutMs = DEFAULT_REMOTE_CALL_TIMEOUT_MS,
+  ): Promise<string> {
     return new Promise<string>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.settlePending(
           messageId,
           "",
-          new Error("Remote Agent call timed out after 120 seconds"),
+          new Error(`Remote Agent call timed out after ${Math.ceil(timeoutMs / 60_000)} minutes`),
         );
-      }, REMOTE_CALL_TIMEOUT_MS);
+      }, timeoutMs);
       timer.unref();
       const pending: PendingMessage = { resolve, reject, timer, signal };
       if (signal) {
@@ -686,6 +700,33 @@ function stringMetadata(
 ): string | undefined {
   const value = metadata?.[key];
   return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function numberMetadata(
+  metadata: Record<string, unknown> | undefined,
+  key: string,
+): number | undefined {
+  const value = metadata?.[key];
+  return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 50
+    ? value
+    : undefined;
+}
+
+function timeoutMetadata(
+  metadata: Record<string, unknown> | undefined,
+  key: string,
+): number | undefined {
+  const value = metadata?.[key];
+  return typeof value === "number" &&
+    Number.isInteger(value) &&
+    value >= MIN_REMOTE_CALL_TIMEOUT_MS &&
+    value <= MAX_REMOTE_CALL_TIMEOUT_MS
+    ? value
+    : undefined;
+}
+
+function normalizeRemoteCallTimeout(value: number | undefined): number {
+  return timeoutMetadata({ value }, "value") ?? DEFAULT_REMOTE_CALL_TIMEOUT_MS;
 }
 
 function requiredString(

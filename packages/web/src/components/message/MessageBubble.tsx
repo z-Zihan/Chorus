@@ -111,10 +111,26 @@ export function MessageBubble({ message, agentName, agentAvatar, isGroup = false
 
   // System message — centered gray text
   if (message.fromType === "agent" && message.content.startsWith("[system]")) {
+    const systemContent = (() => {
+      if (message.metadata?.systemNotice === "a2a_round_limit") {
+        return t("chat:a2aRoundLimitReached", {
+          count: Number(message.metadata.a2aMaxRounds ?? 12),
+        });
+      }
+      if (message.metadata?.systemNotice === "a2a_task_timeout") {
+        return t("chat:a2aTaskTimeoutReached", {
+          count: Number(message.metadata.a2aTaskTimeoutMinutes ?? 20),
+        });
+      }
+      return message.content.replace("[system]", "").trim();
+    })();
     return (
       <div className="flex justify-center py-2">
-        <span className="rounded-full bg-[var(--bg-elevated)] px-3 py-1 text-xs text-[var(--text-tertiary)]">
-          {message.content.replace("[system]", "").trim()}
+        <span
+          role="status"
+          className="max-w-[90%] rounded-full bg-[var(--bg-elevated)] px-3 py-1 text-center text-xs leading-5 text-[var(--text-tertiary)]"
+        >
+          {systemContent}
         </span>
       </div>
     );

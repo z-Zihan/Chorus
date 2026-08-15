@@ -45,6 +45,8 @@
   "a2aFailed": "失败",
   "a2aCancel": "取消调用",
   "a2aCancelled": "A2A 调用已取消",
+  "a2aRoundLimitReached": "自动协作已达到 {{count}} 轮上限并停止。你可以调整任务要求后重新发送，或在设置中修改上限。",
+  "a2aTaskTimeoutReached": "自动协作已达到 {{count}} 分钟总时限并停止。请缩小任务范围后重新发送。",
   "hubDelivery": {
     "transport": "传输",
     "execution": "执行",

@@ -88,6 +88,7 @@ describe("OpenAIAdapter tool calling", () => {
           availableAgentIds: ["writer", "reviewer"],
           a2aBus,
           callStack: ["writer"],
+          maxA2ARounds: 1,
         }),
       ),
     );
@@ -147,5 +148,58 @@ describe("OpenAIAdapter tool calling", () => {
       { type: "done", content: "" },
     ]);
     expect(request).not.toHaveProperty("tools");
+  });
+
+  it("counts A2A handoffs independently from model completion rounds", async () => {
+    const fetchMock = vi.fn(async () =>
+      streamResponse([
+        {
+          choices: [
+            {
+              delta: {
+                tool_calls: [
+                  {
+                    index: 0,
+                    id: "call_1",
+                    type: "function",
+                    function: {
+                      name: "call_agent",
+                      arguments: '{"agent_id":"reviewer","message":"Review this"}',
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+        "[DONE]",
+      ]),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const call = vi.fn();
+    const a2aBus: A2ABusLike = {
+      async *call() {
+        call();
+        yield { type: "text", content: "Evidence" };
+        yield { type: "done", content: "" };
+      },
+    };
+    const adapter = new OpenAIAdapter("writer", "Writer");
+    await adapter.init({ apiKey: "test-key" });
+
+    await expect(
+      collect(
+        adapter.handleMessage(
+          "Please review",
+          context({
+            availableAgentIds: ["writer", "reviewer"],
+            a2aBus,
+            maxA2ARounds: 2,
+          }),
+        ),
+      ),
+    ).rejects.toThrow("maximum of 2 A2A handoffs");
+    expect(call).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 });

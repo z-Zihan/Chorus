@@ -6,6 +6,8 @@ type FixtureMode = "default" | "onboarding-error" | "onboarding-load-error" | "c
 interface FixtureState {
   mode: FixtureMode;
   dmConversationAttempts: number;
+  a2aMaxRounds: number;
+  a2aCallTimeoutMinutes: number;
 }
 
 const fixtureStates = new WeakMap<Page, FixtureState>();
@@ -117,7 +119,12 @@ function json(route: Route, body: unknown, status = 200) {
 }
 
 async function installApiFixture(page: Page) {
-  const fixtureState: FixtureState = { mode: "default", dmConversationAttempts: 0 };
+  const fixtureState: FixtureState = {
+    mode: "default",
+    dmConversationAttempts: 0,
+    a2aMaxRounds: 12,
+    a2aCallTimeoutMinutes: 5,
+  };
   fixtureStates.set(page, fixtureState);
   await page.addInitScript(() => {
     localStorage.setItem("chorus-lang", "zh-CN");
@@ -183,6 +190,20 @@ async function installApiFixture(page: Page) {
       return json(route, { totalCalls: 1, successRate: 1, avgLatencyMs: 12, lastCallAt: now });
     }
     if (path === "/agents") return json(route, agents);
+    if (path === "/a2a/settings") {
+      if (method === "PATCH") {
+        const body = route.request().postDataJSON() as {
+          maxRounds: number;
+          callTimeoutMinutes: number;
+        };
+        fixtureState.a2aMaxRounds = body.maxRounds;
+        fixtureState.a2aCallTimeoutMinutes = body.callTimeoutMinutes;
+      }
+      return json(route, {
+        maxRounds: fixtureState.a2aMaxRounds,
+        callTimeoutMinutes: fixtureState.a2aCallTimeoutMinutes,
+      });
+    }
     if (/^\/conversations\/[^/]+\/a2a-mode$/u.test(path)) {
       return json(route, { mode: "mention" });
     }
@@ -340,6 +361,44 @@ test("mobile dialogs, settings pages and touch targets remain reachable", async 
     await expectMobileTargets(page, '[role="dialog"]');
   }
   await expectNoHorizontalOverflow(page);
+});
+
+test("A2A collaboration limits are visible, validated, and saved from settings", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/");
+  await page.getByRole("button", { name: "设置", exact: true }).click();
+  const settingsDialog = page.getByRole("dialog", { name: "设置" });
+  await settingsDialog.getByRole("tab", { name: "隐私", exact: true }).click();
+
+  const maxRounds = settingsDialog.getByRole("spinbutton", { name: "自动协作轮次上限" });
+  const callTimeout = settingsDialog.getByRole("spinbutton", { name: "单次 Agent 调用超时" });
+  await expect(maxRounds).toHaveValue("12");
+  await expect(callTimeout).toHaveValue("5");
+  await maxRounds.fill("20");
+  await callTimeout.fill("8");
+  await settingsDialog.getByRole("button", { name: "保存" }).click();
+  await expect(page.getByText("自动协作限制已保存。", { exact: true })).toBeVisible();
+  await expect(maxRounds).toHaveValue("20");
+  await expect(callTimeout).toHaveValue("8");
+
+  await maxRounds.fill("51");
+  await settingsDialog.getByRole("button", { name: "保存" }).click();
+  await expect(settingsDialog.getByRole("alert")).toContainText("请输入 1 到 50 之间的整数");
+
+  await maxRounds.fill("20");
+  await expect(settingsDialog.getByRole("alert")).toBeHidden();
+  await expect(maxRounds).not.toHaveAttribute("aria-invalid");
+  await expect(settingsDialog.getByRole("button", { name: "保存" })).toBeDisabled();
+
+  await callTimeout.fill("31");
+  await settingsDialog.getByRole("button", { name: "保存" }).click();
+  await expect(settingsDialog.getByRole("alert")).toContainText("请输入 1 到 30 之间的整数");
+  await callTimeout.fill("8");
+  await expect(settingsDialog.getByRole("alert")).toBeHidden();
+  await expect(callTimeout).not.toHaveAttribute("aria-invalid");
+  await expectNoSeriousAxeViolations(page);
 });
 
 test("mobile group member menu has named and full-size actions", async ({ page }) => {

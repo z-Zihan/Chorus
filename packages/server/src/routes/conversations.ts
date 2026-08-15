@@ -1,6 +1,12 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import type { AgentRuntime } from "../agent/runtime.js";
+import {
+  MAX_A2A_CALL_TIMEOUT_MINUTES,
+  MAX_A2A_MAX_ROUNDS,
+  MIN_A2A_CALL_TIMEOUT_MINUTES,
+  MIN_A2A_MAX_ROUNDS,
+  type AgentRuntime,
+} from "../agent/runtime.js";
 import type { AgentRegistry } from "../agent/registry.js";
 import type { Repository } from "../db/repository.js";
 
@@ -54,6 +60,17 @@ const a2aConfirmationSchema = z.object({
   threadId: z.string().trim().min(1),
   approved: z.boolean(),
 });
+const a2aCollaborationSettingsSchema = z
+  .object({
+    maxRounds: z.number().int().min(MIN_A2A_MAX_ROUNDS).max(MAX_A2A_MAX_ROUNDS).optional(),
+    callTimeoutMinutes: z
+      .number()
+      .int()
+      .min(MIN_A2A_CALL_TIMEOUT_MINUTES)
+      .max(MAX_A2A_CALL_TIMEOUT_MINUTES)
+      .optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, "At least one setting is required");
 
 export function registerConversationRoutes(
   app: FastifyInstance,
@@ -61,6 +78,19 @@ export function registerConversationRoutes(
   registry: AgentRegistry,
   runtime: AgentRuntime,
 ): void {
+  app.get("/api/a2a/settings", async () => runtime.getA2ACollaborationSettings());
+
+  app.patch("/api/a2a/settings", async (request, reply) => {
+    const parsed = a2aCollaborationSettingsSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        error: "Invalid A2A collaboration settings",
+        issues: parsed.error.flatten(),
+      });
+    }
+    return runtime.setA2ACollaborationSettings(parsed.data);
+  });
+
   app.get("/api/conversations", async (request, reply) => {
     const parsed = conversationQuerySchema.safeParse(request.query);
     if (!parsed.success) return reply.code(400).send({ error: "Invalid query" });

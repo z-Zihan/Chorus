@@ -194,4 +194,40 @@ describe("CliAdapter", () => {
       { type: "done", content: "" },
     ]);
   });
+
+  it("counts every A2A handoff even when one CLI response requests several", async () => {
+    const call = vi.fn();
+    const a2aBus: A2ABusLike = {
+      async *call() {
+        call();
+        yield { type: "text" as const, content: "Evidence" };
+        yield { type: "done" as const, content: "" };
+      },
+    };
+    const adapter = new CliAdapter("writer", "Writer");
+    await adapter.init({
+      command: process.execPath,
+      args: [
+        "-e",
+        "process.stdout.write('[A2A_CALL: reviewer: Review this][A2A_CALL: reviewer: Review again]')",
+      ],
+      input: "argument",
+      output: "plain",
+    });
+
+    await expect(
+      collect(
+        adapter.handleMessage(
+          "Please review",
+          context({
+            a2aMode: "call",
+            availableAgentIds: ["writer", "reviewer"],
+            a2aBus,
+            maxA2ARounds: 1,
+          }),
+        ),
+      ),
+    ).rejects.toThrow("maximum of 1 A2A handoffs");
+    expect(call).toHaveBeenCalledOnce();
+  });
 });

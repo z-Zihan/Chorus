@@ -13,6 +13,7 @@ pnpm-debug.log*
 src-tauri/target/
 src-tauri/gen/
 packages/server/build/
+packages/server/data/
 src-tauri/Cargo.lock
 src-tauri/binaries/chorus-node-*
 src-tauri/runtime/

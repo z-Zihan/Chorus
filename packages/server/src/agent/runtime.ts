@@ -1,5 +1,11 @@
 import { randomUUID } from "node:crypto";
-import type { AppConfig, Message, MessageStatus, StreamChunk } from "@chorus/shared";
+import type {
+  A2ACollaborationSettings,
+  AppConfig,
+  Message,
+  MessageStatus,
+  StreamChunk,
+} from "@chorus/shared";
 import { parseMentions, truncateHistory } from "@chorus/shared";
 import type { Repository } from "../db/repository";
 import type { EventHub } from "../ws/events";
@@ -11,6 +17,32 @@ import type { AgentRegistry } from "./registry";
 import { logger } from "../utils/logger";
 import type { HubMessageRouter } from "../hub/message-router";
 import type { RelayClient } from "../hub/relay-client";
+import { buildAgentHandoff } from "./handoff";
+
+export const DEFAULT_A2A_MAX_ROUNDS = 12;
+export const MIN_A2A_MAX_ROUNDS = 1;
+export const MAX_A2A_MAX_ROUNDS = 50;
+export const DEFAULT_A2A_CALL_TIMEOUT_MINUTES = 5;
+export const MIN_A2A_CALL_TIMEOUT_MINUTES = 1;
+export const MAX_A2A_CALL_TIMEOUT_MINUTES = 30;
+export const DEFAULT_A2A_TASK_TIMEOUT_MS = 20 * 60_000;
+const A2A_MAX_ROUNDS_SETTING = "a2a.maxRounds";
+const A2A_CALL_TIMEOUT_MINUTES_SETTING = "a2a.callTimeoutMinutes";
+
+interface CollaborationRun {
+  id: string;
+  conversationId: string;
+  objective: string;
+  maxRounds: number;
+  callTimeoutMs: number;
+  taskTimeoutMs: number;
+  roundsUsed: number;
+  controller: AbortController;
+  taskTimeout?: ReturnType<typeof setTimeout>;
+  messageIds: Set<string>;
+  limitNotified: boolean;
+  timeoutNotified: boolean;
+}
 
 export class AgentRuntime {
   private readonly controllers = new Map<string, AbortController>();
@@ -24,6 +56,8 @@ export class AgentRuntime {
       abort?: () => void;
     }
   >();
+  private readonly collaborationRuns = new Map<string, CollaborationRun>();
+  private readonly collaborationRunByMessageId = new Map<string, string>();
   private readonly a2aBus: A2ABus;
   private readonly a2aPermissions: A2APermissions;
   private readonly metrics = new AdapterMetrics();
@@ -55,6 +89,62 @@ export class AgentRuntime {
 
   setA2APermission(conversationId: string, mode: A2APermissionMode): void {
     this.a2aPermissions.setPermission(conversationId, mode);
+  }
+
+  getA2ACollaborationSettings(): A2ACollaborationSettings {
+    const storedMaxRounds = Number(this.repository.getSetting(A2A_MAX_ROUNDS_SETTING));
+    const storedCallTimeoutMinutes = Number(
+      this.repository.getSetting(A2A_CALL_TIMEOUT_MINUTES_SETTING),
+    );
+    return {
+      maxRounds:
+        Number.isInteger(storedMaxRounds) &&
+        storedMaxRounds >= MIN_A2A_MAX_ROUNDS &&
+        storedMaxRounds <= MAX_A2A_MAX_ROUNDS
+          ? storedMaxRounds
+          : DEFAULT_A2A_MAX_ROUNDS,
+      callTimeoutMinutes:
+        Number.isInteger(storedCallTimeoutMinutes) &&
+        storedCallTimeoutMinutes >= MIN_A2A_CALL_TIMEOUT_MINUTES &&
+        storedCallTimeoutMinutes <= MAX_A2A_CALL_TIMEOUT_MINUTES
+          ? storedCallTimeoutMinutes
+          : DEFAULT_A2A_CALL_TIMEOUT_MINUTES,
+    };
+  }
+
+  setA2ACollaborationSettings(
+    settings: Partial<A2ACollaborationSettings>,
+  ): A2ACollaborationSettings {
+    if (
+      settings.maxRounds !== undefined &&
+      (!Number.isInteger(settings.maxRounds) ||
+        settings.maxRounds < MIN_A2A_MAX_ROUNDS ||
+        settings.maxRounds > MAX_A2A_MAX_ROUNDS)
+    ) {
+      throw new RangeError(
+        `A2A max rounds must be an integer from ${MIN_A2A_MAX_ROUNDS} to ${MAX_A2A_MAX_ROUNDS}`,
+      );
+    }
+    if (
+      settings.callTimeoutMinutes !== undefined &&
+      (!Number.isInteger(settings.callTimeoutMinutes) ||
+        settings.callTimeoutMinutes < MIN_A2A_CALL_TIMEOUT_MINUTES ||
+        settings.callTimeoutMinutes > MAX_A2A_CALL_TIMEOUT_MINUTES)
+    ) {
+      throw new RangeError(
+        `A2A call timeout must be an integer from ${MIN_A2A_CALL_TIMEOUT_MINUTES} to ${MAX_A2A_CALL_TIMEOUT_MINUTES} minutes`,
+      );
+    }
+    if (settings.maxRounds !== undefined) {
+      this.repository.setSetting(A2A_MAX_ROUNDS_SETTING, String(settings.maxRounds));
+    }
+    if (settings.callTimeoutMinutes !== undefined) {
+      this.repository.setSetting(
+        A2A_CALL_TIMEOUT_MINUTES_SETTING,
+        String(settings.callTimeoutMinutes),
+      );
+    }
+    return this.getA2ACollaborationSettings();
   }
 
   confirmA2A(threadId: string, approved: boolean): boolean {
@@ -187,11 +277,20 @@ export class AgentRuntime {
     this.repository.saveMessage(userMessage);
     this.events.publish(conversationId, { type: "message", message: userMessage });
 
-    await Promise.all(
-      targetAgentIds.map((agentId) =>
-        this.routeMessageToAgent(conversationId, agentId, content, mentions),
-      ),
-    );
+    const a2aMode = conversation.a2aMode ?? "mention";
+    const collaborationRun =
+      conversation.agentIds.length > 1 && a2aMode !== "off"
+        ? this.createCollaborationRun(conversationId, userMessage.id, content)
+        : undefined;
+    try {
+      await Promise.all(
+        targetAgentIds.map((agentId) =>
+          this.routeMessageToAgent(conversationId, agentId, content, mentions, collaborationRun),
+        ),
+      );
+    } finally {
+      if (collaborationRun) this.finishCollaborationRun(collaborationRun);
+    }
   }
 
   private async routeMessageToAgent(
@@ -199,6 +298,7 @@ export class AgentRuntime {
     agentId: string,
     content: string,
     mentionedAgents: string[],
+    collaborationRun?: CollaborationRun,
   ): Promise<void> {
     const adapter = this.registry.getAdapter(agentId);
     if (!adapter || this.registry.getStatus(agentId) !== "online") {
@@ -248,7 +348,8 @@ export class AgentRuntime {
     });
     this.repository.saveMessage(reply);
     this.events.publish(conversationId, { type: "message", message: reply });
-    await this.streamReply(reply, content, mentionedAgents, adapter);
+    if (collaborationRun) this.trackCollaborationMessage(collaborationRun, reply.id);
+    await this.streamReply(reply, content, mentionedAgents, adapter, collaborationRun);
   }
 
   private async routeAgentMessage(
@@ -257,6 +358,7 @@ export class AgentRuntime {
     toAgentId: string,
     content: string,
     parentMessageId?: string,
+    collaborationRun?: CollaborationRun,
   ): Promise<void> {
     const conversation = this.repository.getConversation(conversationId);
     if (
@@ -272,6 +374,15 @@ export class AgentRuntime {
       return;
     }
 
+    if (collaborationRun) {
+      if (collaborationRun.controller.signal.aborted) return;
+      if (collaborationRun.roundsUsed >= collaborationRun.maxRounds) {
+        this.publishCollaborationLimit(collaborationRun);
+        return;
+      }
+      collaborationRun.roundsUsed += 1;
+    }
+
     const agentMessage = createMessage({
       conversationId,
       fromType: "agent",
@@ -281,14 +392,39 @@ export class AgentRuntime {
       content,
       status: "done",
       parentId: parentMessageId,
+      metadata: collaborationRun
+        ? {
+            a2aRunId: collaborationRun.id,
+            a2aRound: collaborationRun.roundsUsed,
+            a2aMaxRounds: collaborationRun.maxRounds,
+          }
+        : undefined,
     });
     this.repository.saveMessage(agentMessage);
     this.events.publish(conversationId, { type: "message", message: agentMessage });
 
-    await this.routeMessageToAgent(conversationId, toAgentId, content, []);
+    const routedContent = collaborationRun
+      ? buildAgentHandoff({
+          objective: collaborationRun.objective,
+          request: content,
+          fromAgent: this.registry.get(fromAgentId)?.name ?? fromAgentId,
+          toAgent: this.registry.get(toAgentId)?.name ?? toAgentId,
+          history: this.repository.listMessages(conversationId),
+          round: collaborationRun.roundsUsed,
+          maxRounds: collaborationRun.maxRounds,
+        })
+      : content;
+    await this.routeMessageToAgent(conversationId, toAgentId, routedContent, [], collaborationRun);
   }
 
   cancel(messageId: string): void {
+    const collaborationRunId = this.collaborationRunByMessageId.get(messageId);
+    const collaborationRun = collaborationRunId
+      ? this.collaborationRuns.get(collaborationRunId)
+      : undefined;
+    collaborationRun?.controller.abort(
+      new DOMException("Agent collaboration cancelled", "AbortError"),
+    );
     const controller = this.controllers.get(messageId);
     if (controller) controller.abort();
     else this.a2aBus.cancel(messageId);
@@ -305,8 +441,12 @@ export class AgentRuntime {
     content: string,
     mentionedAgents: string[],
     adapter: NonNullable<ReturnType<AgentRegistry["getAdapter"]>>,
+    collaborationRun?: CollaborationRun,
   ): Promise<void> {
     const controller = new AbortController();
+    const signal = collaborationRun
+      ? AbortSignal.any([controller.signal, collaborationRun.controller.signal])
+      : controller.signal;
     const chunks: StreamChunk[] = [];
     let output = "";
     let agentMessagesToRoute: Array<{ agentId: string; content: string }> = [];
@@ -337,7 +477,7 @@ export class AgentRuntime {
       let augmentedContent = content;
       if (a2aMode === "mention" && conversation?.type === "group" && otherAgentIds.length > 0) {
         const agentNames = otherAgentIds.map((id) => this.registry.get(id)?.name ?? id);
-        augmentedContent = `${content}\n\n--- System: You are in a group chat with: [${agentNames.join(", ")}]. If you want to ask another agent something, mention them with @AgentName in your response.`;
+        augmentedContent = `${content}\n\n--- System: You are in a group chat with: [${agentNames.join(", ")}]. Mention another Agent only when a concrete unresolved subtask requires that Agent. The mention must include useful context, the specific question, and the expected deliverable. Never mention an Agent for greetings, thanks, acknowledgements, or open-ended conversation. If the objective is complete, answer the user directly without another mention.`;
       }
       for await (const chunk of adapter.handleMessage(augmentedContent, {
         conversationId: reply.conversationId,
@@ -347,8 +487,12 @@ export class AgentRuntime {
         availableAgentIds: adapterAvailableAgentIds,
         a2aBus: a2aMode === "off" ? undefined : this.a2aBus,
         callStack: [adapter.id],
+        maxA2ARounds: collaborationRun?.maxRounds ?? this.getA2ACollaborationSettings().maxRounds,
+        a2aCallTimeoutMs:
+          collaborationRun?.callTimeoutMs ??
+          this.getA2ACollaborationSettings().callTimeoutMinutes * 60_000,
         parentMessageId: reply.id,
-        signal: controller.signal,
+        signal,
       })) {
         chunks.push(chunk);
         if (chunk.type === "text" && !chunk.threadId) output += chunk.content;
@@ -365,7 +509,7 @@ export class AgentRuntime {
       }
     } catch (error) {
       const cancelled =
-        controller.signal.aborted || (error instanceof DOMException && error.name === "AbortError");
+        signal.aborted || (error instanceof DOMException && error.name === "AbortError");
       const status: MessageStatus = output ? "partial" : "error";
       const detail = cancelled ? "生成已停止" : messageFromError(error);
       if (!cancelled) {
@@ -403,6 +547,7 @@ export class AgentRuntime {
       });
     }
 
+    if (collaborationRun?.controller.signal.aborted) return;
     for (const agentMessage of agentMessagesToRoute) {
       await this.routeAgentMessage(
         reply.conversationId,
@@ -410,8 +555,109 @@ export class AgentRuntime {
         agentMessage.agentId,
         agentMessage.content,
         reply.id,
+        collaborationRun,
       );
     }
+  }
+
+  private createCollaborationRun(
+    conversationId: string,
+    rootMessageId: string,
+    objective: string,
+  ): CollaborationRun {
+    const settings = this.getA2ACollaborationSettings();
+    const controller = new AbortController();
+    const callTimeoutMs = settings.callTimeoutMinutes * 60_000;
+    const taskTimeoutMs = Math.max(DEFAULT_A2A_TASK_TIMEOUT_MS, callTimeoutMs);
+    const run: CollaborationRun = {
+      id: randomUUID(),
+      conversationId,
+      objective,
+      maxRounds: settings.maxRounds,
+      callTimeoutMs,
+      taskTimeoutMs,
+      roundsUsed: 0,
+      controller,
+      messageIds: new Set(),
+      limitNotified: false,
+      timeoutNotified: false,
+    };
+    run.taskTimeout = setTimeout(() => {
+      this.publishCollaborationTimeout(run);
+      controller.abort(new DOMException("Agent collaboration task timed out", "TimeoutError"));
+    }, taskTimeoutMs);
+    run.taskTimeout.unref?.();
+    this.collaborationRuns.set(run.id, run);
+    this.trackCollaborationMessage(run, rootMessageId);
+    return run;
+  }
+
+  private trackCollaborationMessage(run: CollaborationRun, messageId: string): void {
+    run.messageIds.add(messageId);
+    this.collaborationRunByMessageId.set(messageId, run.id);
+  }
+
+  private finishCollaborationRun(run: CollaborationRun): void {
+    if (run.taskTimeout) clearTimeout(run.taskTimeout);
+    this.collaborationRuns.delete(run.id);
+    for (const messageId of run.messageIds) this.collaborationRunByMessageId.delete(messageId);
+  }
+
+  private publishCollaborationLimit(run: CollaborationRun): void {
+    if (run.limitNotified) return;
+    run.limitNotified = true;
+    const notice = createMessage({
+      conversationId: run.conversationId,
+      fromType: "agent",
+      fromId: "chorus-system",
+      content: `[system] Automatic collaboration stopped at the ${run.maxRounds}-round limit.`,
+      status: "done",
+      metadata: {
+        systemNotice: "a2a_round_limit",
+        a2aRunId: run.id,
+        a2aRound: run.roundsUsed,
+        a2aMaxRounds: run.maxRounds,
+      },
+    });
+    this.repository.saveMessage(notice);
+    this.events.publish(run.conversationId, { type: "message", message: notice });
+    logger.warn(
+      {
+        conversationId: run.conversationId,
+        runId: run.id,
+        roundsUsed: run.roundsUsed,
+        maxRounds: run.maxRounds,
+      },
+      "Agent collaboration reached the round limit",
+    );
+  }
+
+  private publishCollaborationTimeout(run: CollaborationRun): void {
+    if (run.timeoutNotified) return;
+    run.timeoutNotified = true;
+    const timeoutMinutes = Math.round(run.taskTimeoutMs / 60_000);
+    const notice = createMessage({
+      conversationId: run.conversationId,
+      fromType: "agent",
+      fromId: "chorus-system",
+      content: `[system] Automatic collaboration stopped after the ${timeoutMinutes}-minute task limit.`,
+      status: "done",
+      metadata: {
+        systemNotice: "a2a_task_timeout",
+        a2aRunId: run.id,
+        a2aTaskTimeoutMinutes: timeoutMinutes,
+      },
+    });
+    this.repository.saveMessage(notice);
+    this.events.publish(run.conversationId, { type: "message", message: notice });
+    logger.warn(
+      {
+        conversationId: run.conversationId,
+        runId: run.id,
+        timeoutMinutes,
+      },
+      "Agent collaboration reached the task timeout",
+    );
   }
 
   private finish(
