@@ -96,6 +96,22 @@ export interface HubRoom extends Conversation {
 
 let lastOfflineToastAt = 0;
 
+// Set by the chat store at module init (registering directly would create an
+// api → store → api import cycle).
+type ConversationNotFoundHandler = (conversationId: string) => void;
+let conversationNotFoundHandler: ConversationNotFoundHandler | null = null;
+
+export function registerConversationNotFoundHandler(handler: ConversationNotFoundHandler): void {
+  conversationNotFoundHandler = handler;
+}
+
+function reportConversationNotFound(path: string, error: string): void {
+  if (error !== "Conversation not found" || !conversationNotFoundHandler) return;
+  const match = /\/conversations\/([^/?#]+)/.exec(path);
+  const conversationId = match?.[1];
+  if (conversationId) conversationNotFoundHandler(decodeURIComponent(conversationId));
+}
+
 async function request<T>(path: string, options?: RequestInit, silent = false): Promise<T> {
   let res: Response;
   try {
@@ -132,6 +148,7 @@ async function request<T>(path: string, options?: RequestInit, silent = false): 
     try {
       const parsed = JSON.parse(body) as { error?: string; message?: string };
       message = parsed.error ?? parsed.message ?? message;
+      if (res.status === 404 && parsed.error) reportConversationNotFound(path, parsed.error);
     } catch {
       // Keep the plain-text response as the error message.
     }

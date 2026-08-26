@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { ClientEvent, Conversation, ConversationType, Message } from "@chorus/shared";
-import { api } from "@/services/api";
+import { api, registerConversationNotFoundHandler } from "@/services/api";
 import { useAgentStore } from "@/store/agentStore";
 import { StreamManager } from "@/store/streamManager";
 import { useUIStore } from "@/store/uiStore";
@@ -93,6 +93,8 @@ interface ChatState {
   toggleArchive: (id: string) => Promise<boolean>;
   deleteConversation: (id: string) => Promise<boolean>;
   deleteConversations: (ids: string[]) => Promise<number | null>;
+  /** Drop a conversation deleted outside this client, navigating away if open. */
+  purgeConversation: (id: string) => void;
 }
 
 function sortConversations(items: Conversation[]): Conversation[] {
@@ -160,6 +162,15 @@ export const useChatStore = create<ChatState>((set, get) => {
         const firstConversation = data[0] ?? allGroups[0];
         if (!get().currentConversationId && firstConversation) {
           get().setCurrentConversation(firstConversation.id);
+        }
+        // Reconcile: the open conversation may have been deleted outside this
+        // client (e.g. another session using the REST API).
+        const currentId = get().currentConversationId;
+        if (
+          currentId &&
+          ![...data, ...allGroups, ...archived].some((item) => item.id === currentId)
+        ) {
+          get().purgeConversation(currentId);
         }
       } catch (e) {
         logger.error("Failed to fetch conversations", e);
@@ -663,6 +674,64 @@ export const useChatStore = create<ChatState>((set, get) => {
       }
     },
 
+    /**
+     * Remove a conversation that was deleted outside this client (e.g. via the
+     * REST API from another session). Keeps list state consistent and navigates
+     * away when the deleted conversation is currently open.
+     */
+    purgeConversation: (id) => {
+      const state = get();
+      const known = [
+        ...state.conversations,
+        ...state.groupConversations,
+        ...state.archivedConversations,
+      ].some((conversation) => conversation.id === id);
+      if (!known) return;
+
+      const deletedIndex = [
+        ...state.conversations,
+        ...state.groupConversations,
+        ...state.archivedConversations,
+      ].findIndex((conversation) => conversation.id === id);
+      const conversations = state.conversations.filter((conversation) => conversation.id !== id);
+      const groupConversations = state.groupConversations.filter(
+        (conversation) => conversation.id !== id,
+      );
+      const archivedConversations = state.archivedConversations.filter(
+        (conversation) => conversation.id !== id,
+      );
+
+      if (state.currentConversationId !== id) {
+        set({ conversations, groupConversations, archivedConversations });
+        return;
+      }
+
+      streamManager.clearStreamTimer();
+      streamManager.abortFallback();
+      messagesRequestId += 1;
+      const activeConversations = [...conversations, ...groupConversations];
+      const nextConversation =
+        activeConversations[deletedIndex] ??
+        activeConversations[deletedIndex - 1] ??
+        activeConversations[0] ??
+        null;
+
+      set({
+        conversations,
+        groupConversations,
+        archivedConversations,
+        currentConversationId: nextConversation?.id ?? null,
+        messages: [],
+        a2aThreads: {},
+        isLoadingMessages: Boolean(nextConversation),
+        isStreaming: false,
+        streamingMessageId: null,
+      });
+      if (nextConversation) {
+        void get().fetchMessages(nextConversation.id);
+      }
+    },
+
     deleteConversations: async (ids) => {
       if (ids.length === 0) return 0;
       try {
@@ -707,4 +776,10 @@ export const useChatStore = create<ChatState>((set, get) => {
       }
     },
   };
+});
+
+// A conversation the server no longer knows about was deleted outside this
+// client; purge it so views stop polling a dead id.
+registerConversationNotFoundHandler((conversationId) => {
+  useChatStore.getState().purgeConversation(conversationId);
 });
