@@ -131,6 +131,13 @@ export async function getCredentialStorageBackend(): Promise<CredentialStorageBa
 async function resolveBackend(): Promise<NativeBackend | "file"> {
   if (selectedBackend) return selectedBackend;
 
+  // Explicit opt-out for isolated instances (local multi-hub testing, CI,
+  // headless servers where the user keychain should not be shared).
+  if (process.env.CHORUS_CREDENTIAL_BACKEND?.trim() === "file") {
+    selectedBackend = "file";
+    return selectedBackend;
+  }
+
   if (process.platform === "darwin" && (await commandExists("security"))) {
     selectedBackend = "macos-keychain";
     return selectedBackend;

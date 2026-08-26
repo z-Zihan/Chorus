@@ -39,8 +39,20 @@ export function searchMessages(
   query: string,
   filters: MessageSearchFilters = {},
 ): MessageSearchResult[] {
-  const clauses = ["messages_fts MATCH @query"];
-  const parameters: Record<string, string | number> = { query: toFtsQuery(query) };
+  // The FTS index uses the default unicode61 tokenizer, which cannot segment
+  // CJK text (a whole sentence becomes one token), so substring queries in
+  // Chinese/Japanese/Korean never match. Fall back to LIKE for those queries.
+  const containsCjk =
+    /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u.test(query);
+  const clauses: string[] = [];
+  const parameters: Record<string, string | number> = {};
+  if (containsCjk) {
+    clauses.push("m.content LIKE @query ESCAPE '\\'");
+    parameters.query = `%${query.replace(/[\\%_]/gu, (char) => `\\${char}`)}%`;
+  } else {
+    clauses.push("messages_fts MATCH @query");
+    parameters.query = toFtsQuery(query);
+  }
 
   if (filters.conversationId) {
     clauses.push("m.conversation_id = @conversationId");
@@ -60,18 +72,30 @@ export function searchMessages(
   }
   parameters.limit = Math.min(Math.max(filters.limit ?? 50, 1), 200);
 
-  const rows = context.sqlite
-    .prepare(
-      `
-    SELECT m.rowid, m.*
-    FROM messages_fts
-    JOIN messages m ON m.rowid = messages_fts.rowid
-    WHERE ${clauses.join(" AND ")}
-    ORDER BY bm25(messages_fts), m.created_at DESC
-    LIMIT @limit
-  `,
-    )
-    .all(parameters) as MessageRow[];
+  const rows = containsCjk
+    ? (context.sqlite
+        .prepare(
+          `
+        SELECT m.rowid, m.*
+        FROM messages m
+        WHERE ${clauses.join(" AND ")}
+        ORDER BY m.created_at DESC
+        LIMIT @limit
+      `,
+        )
+        .all(parameters) as MessageRow[])
+    : (context.sqlite
+        .prepare(
+          `
+        SELECT m.rowid, m.*
+        FROM messages_fts
+        JOIN messages m ON m.rowid = messages_fts.rowid
+        WHERE ${clauses.join(" AND ")}
+        ORDER BY bm25(messages_fts), m.created_at DESC
+        LIMIT @limit
+      `,
+        )
+        .all(parameters) as MessageRow[]);
 
   const contextStatement = (direction: "before" | "after") =>
     context.sqlite.prepare(`
