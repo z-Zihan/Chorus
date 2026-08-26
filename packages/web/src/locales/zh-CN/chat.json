@@ -65,22 +65,29 @@
   "a2aForwardedMessage": "转发了消息",
   "unknownAgent": "未知 Agent",
   "a2aMode": {
-    "title": "A2A 模式",
-    "description": "控制 Agent 之间如何通信",
-    "label": "A2A：{{mode}}",
-    "unavailable": "A2A 模式不可用",
-    "loadFailed": "无法核验 A2A 模式，Chorus 不会假设默认权限。",
+    "title": "Agent 协作模式",
+    "description": "决定本会话中的 Agent 之间如何配合",
+    "howToChoose": "怎么选：多数情况用 @转发，让 Agent 各自独立回答；想让一个 Agent 拿着问题去问另一个、汇总后给你答案，就用同步调用。",
+    "label": "协作：{{mode}}",
+    "unavailable": "协作模式不可用",
+    "loadFailed": "无法核验协作模式，Chorus 不会假设默认权限。",
     "mention": {
       "label": "@转发",
-      "description": "Agent 回复中 @其他 Agent 时自动转发"
+      "short": "@转发",
+      "description": "回复中 @了谁，就自动转给谁",
+      "detail": "像群里 @人：Agent 回复里出现 @其他 Agent 时自动转发，对方独立作答，双方互不等待。适合让多个 Agent 各自给出观点。"
     },
     "call": {
       "label": "同步调用",
-      "description": "Agent 通过 A2A_CALL 协议同步调用其他 Agent"
+      "short": "同步调用",
+      "description": "一个 Agent 直接请另一个帮忙，等结果",
+      "detail": "像同事帮你查完资料再汇报：发起方拿到对方的回答后继续推理，最后给你整合过的答案。适合有明确子任务、需要汇总结论的场景。"
     },
     "off": {
       "label": "关闭",
-      "description": "不触发 Agent 间通信"
+      "short": "关闭",
+      "description": "Agent 之间不通信",
+      "detail": "屏蔽一切 Agent 间通信，@提及只当普通文字。适合只想分别和每个 Agent 单独对话。"
     }
   },
   "a2aPermission": {
@@ -125,6 +132,5 @@
   "removeMemberMessage": "{{name}} 将不再参与此会话的新消息；已有消息会保留。",
   "removingMember": "移除中…",
   "relayDisconnected": "Relay 已断开，正在重连...",
-  "relayError": "Relay 连接错误",
-  "a2aTooltipFirst": "Agent 可以在这里协作。点击切换 A2A 模式：@转发、同步调用或关闭。"
+  "relayError": "Relay 连接错误"
 }

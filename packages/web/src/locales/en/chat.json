@@ -65,22 +65,29 @@
   "a2aForwardedMessage": "forwarded message",
   "unknownAgent": "Unknown Agent",
   "a2aMode": {
-    "title": "A2A Mode",
-    "description": "Control how agents communicate with each other",
-    "label": "A2A: {{mode}}",
-    "unavailable": "A2A mode unavailable",
-    "loadFailed": "A2A mode could not be verified. Chorus will not assume a default permission.",
+    "title": "Agent collaboration",
+    "description": "How agents in this conversation work together",
+    "howToChoose": "Not sure? @Mention fits most cases — agents answer independently. Use Sync Call when one agent should fetch another's answer and hand you a combined result.",
+    "label": "Collab: {{mode}}",
+    "unavailable": "Collaboration mode unavailable",
+    "loadFailed": "Collaboration mode could not be verified. Chorus will not assume a default permission.",
     "mention": {
       "label": "@Mention",
-      "description": "Agent replies with @other agent → auto-forward"
+      "short": "@Mention",
+      "description": "Replies that @mention an agent are auto-forwarded",
+      "detail": "Like @-ing a teammate in a group chat: when a reply mentions another agent, it is forwarded automatically and the target answers on its own. Best for collecting independent opinions."
     },
     "call": {
       "label": "Sync Call",
-      "description": "Agent uses A2A_CALL protocol for synchronous calls"
+      "short": "Sync Call",
+      "description": "One agent asks another and waits for the answer",
+      "detail": "Like asking a colleague to look something up and report back: the caller continues reasoning with the answer and returns one combined result. Best for clear subtasks."
     },
     "off": {
       "label": "Off",
-      "description": "No agent-to-agent communication"
+      "short": "Off",
+      "description": "Agents never talk to each other",
+      "detail": "Blocks all agent-to-agent communication; @mentions are plain text. Best when you want separate one-on-one answers."
     }
   },
   "a2aPermission": {
@@ -125,6 +132,5 @@
   "removeMemberMessage": "{{name}} will stop participating in new messages in this conversation. Existing messages remain.",
   "removingMember": "Removing…",
   "relayDisconnected": "Relay disconnected. Reconnecting...",
-  "relayError": "Relay connection error",
-  "a2aTooltipFirst": "Agents can collaborate here. Click to switch A2A mode: @Mention, Sync Call, or Off."
+  "relayError": "Relay connection error"
 }

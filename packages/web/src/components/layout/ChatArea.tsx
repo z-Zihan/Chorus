@@ -5,6 +5,7 @@ import {
   Bot,
   Ban,
   Check,
+  ChevronDown,
   CircleAlert,
   Download,
   FileJson,
@@ -106,7 +107,6 @@ export function ChatArea() {
   const [isAddAgentOpen, setIsAddAgentOpen] = useState(false);
   const [pendingAddAgentId, setPendingAddAgentId] = useState<string | null>(null);
   const [addAgentError, setAddAgentError] = useState<string | null>(null);
-  const [showA2ATooltip, setShowA2ATooltip] = useState(false);
   const currentConversationIdForMode = currentConv?.id;
   const currentConversationTypeForMode = currentConv?.type;
 
@@ -302,162 +302,159 @@ export function ChatArea() {
             )}
           </div>
         </div>
-        <ConnectionStatus />
+        <div className="ml-auto flex items-center gap-1 md:gap-1.5">
+          <ConnectionStatus />
 
-        {currentConv?.type === "group" && (
-          <TooltipProvider delayDuration={250}>
-            <Tooltip open={showA2ATooltip || undefined}>
-              <TooltipTrigger asChild>
+          {currentConv && (currentConv.type === "group" || currentConv.type === "cross_hub") && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setIsAddAgentOpen(true)}
+              aria-label={t("sidebar:addMyAgent")}
+              title={t("sidebar:addMyAgent")}
+              className="hidden h-11 w-11 md:inline-flex md:h-8 md:w-8"
+            >
+              <Bot aria-hidden="true" className="h-4 w-4" />
+            </Button>
+          )}
+          {currentConv?.type === "group" && (
+            <DropdownMenu>
+              <TooltipProvider delayDuration={250}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className={`relative h-11 min-w-11 gap-1.5 px-2 md:h-8 md:px-2.5 ${a2aMode && a2aMode !== "off" ? "text-[var(--accent-hover)]" : "text-[var(--text-secondary)]"}`}
+                        aria-label={
+                          a2aMode
+                            ? t("chat:a2aMode.label", { mode: t(`chat:a2aMode.${a2aMode}.label`) })
+                            : t("chat:a2aMode.unavailable")
+                        }
+                      >
+                        <Network aria-hidden="true" className="h-4 w-4" />
+                        {a2aMode && (
+                          <span className="hidden text-xs font-medium lg:inline">
+                            {t(`chat:a2aMode.${a2aMode}.short`)}
+                          </span>
+                        )}
+                        <ChevronDown
+                          aria-hidden="true"
+                          className="hidden h-3.5 w-3.5 opacity-60 lg:inline"
+                        />
+                        {a2aModeError && (
+                          <CircleAlert
+                            aria-hidden="true"
+                            className="absolute right-0.5 top-0.5 h-3.5 w-3.5 text-[var(--status-error)]"
+                          />
+                        )}
+                      </Button>
+                    </DropdownMenuTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-[280px] text-xs">
+                    <p className="font-medium text-[var(--text-primary)]">
+                      {a2aMode
+                        ? t("chat:a2aMode.label", { mode: t(`chat:a2aMode.${a2aMode}.label`) })
+                        : t("chat:a2aMode.unavailable")}
+                    </p>
+                    {a2aMode && (
+                      <p className="mt-1 leading-5 text-[var(--text-tertiary)]">
+                        {t(`chat:a2aMode.${a2aMode}.detail`)}
+                      </p>
+                    )}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              <DropdownMenuContent align="end" className="w-[22rem] p-2">
+                <div className="px-2 pb-2 pt-1">
+                  <p className="text-sm font-medium text-[var(--text-primary)]">
+                    {t("chat:a2aMode.title")}
+                  </p>
+                  <p className="mt-0.5 text-xs text-[var(--text-tertiary)]">
+                    {t("chat:a2aMode.howToChoose")}
+                  </p>
+                </div>
+                {a2aModeError && (
+                  <div
+                    role="alert"
+                    className="mx-2 mb-2 rounded-lg bg-[var(--status-error)]/5 p-2 text-xs leading-5 text-[var(--text-secondary)]"
+                  >
+                    <p>{t("chat:a2aMode.loadFailed")}</p>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="mt-2 min-h-11 md:min-h-8"
+                      onClick={() => void retryA2AMode()}
+                    >
+                      {t("common:buttons.retry")}
+                    </Button>
+                  </div>
+                )}
+                {A2A_MODE_OPTIONS.map(({ value, icon: Icon }) => {
+                  const selected = value === a2aMode;
+                  return (
+                    <DropdownMenuItem
+                      key={value}
+                      disabled={!a2aMode || isA2AModeLoading}
+                      onSelect={() => void handleA2AModeChange(value)}
+                      className={`items-start gap-3 px-2.5 py-2.5 ${selected ? "bg-[var(--accent-subtle)]" : ""}`}
+                    >
+                      <span
+                        className={`mt-0.5 rounded-md p-1.5 ${selected ? "bg-[var(--accent-color)] text-white" : "bg-[var(--bg-elevated)] text-[var(--text-secondary)]"}`}
+                      >
+                        <Icon aria-hidden="true" className="h-4 w-4" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span
+                          className={`block text-sm font-medium ${selected ? "text-[var(--accent-hover)]" : "text-[var(--text-primary)]"}`}
+                        >
+                          {t(`chat:a2aMode.${value}.label`)}
+                        </span>
+                        <span className="mt-0.5 block text-xs leading-5 text-[var(--text-secondary)]">
+                          {t(`chat:a2aMode.${value}.description`)}
+                        </span>
+                        <span className="mt-1 block text-xs leading-5 text-[var(--text-tertiary)]">
+                          {t(`chat:a2aMode.${value}.detail`)}
+                        </span>
+                      </span>
+                      <span
+                        className={`mt-1 flex h-4 w-4 items-center justify-center rounded-full border ${selected ? "border-[var(--accent-color)] bg-[var(--accent-color)] text-white" : "border-[var(--border-color)]"}`}
+                      >
+                        {selected && <Check aria-hidden="true" className="h-3 w-3" />}
+                      </span>
+                    </DropdownMenuItem>
+                  );
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+          {currentConv && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
                 <Button
                   variant="ghost"
-                  size="icon"
-                  onClick={() => setShowA2ATooltip(false)}
-                  aria-label={t("chat:a2aMode.title")}
-                  title={t("chat:a2aMode.title")}
-                  className="hidden h-11 w-11 md:inline-flex md:h-8 md:w-8"
+                  size="sm"
+                  className="h-11 min-w-11 px-0 md:h-8 md:px-3"
+                  aria-label={t("common:export.title")}
                 >
-                  <Network aria-hidden="true" className="h-4 w-4" />
+                  <Download aria-hidden="true" className="h-4 w-4" />
+                  <span className="hidden sm:inline">{t("common:export.title")}</span>
                 </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" className="max-w-[200px] text-xs">
-                {t("chat:a2aTooltipFirst")}
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        )}
-        {currentConv && (currentConv.type === "group" || currentConv.type === "cross_hub") && (
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setIsAddAgentOpen(true)}
-            aria-label={t("sidebar:addMyAgent")}
-            title={t("sidebar:addMyAgent")}
-            className="hidden h-11 w-11 md:inline-flex md:h-8 md:w-8"
-          >
-            <Bot aria-hidden="true" className="h-4 w-4" />
-          </Button>
-        )}
-        {currentConv?.type === "group" && (
-          <DropdownMenu>
-            <TooltipProvider delayDuration={250}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className={`relative h-11 w-11 px-0 md:h-8 md:w-8 ${a2aMode && a2aMode !== "off" ? "text-[var(--accent-hover)]" : ""}`}
-                      aria-label={
-                        a2aMode
-                          ? t("chat:a2aMode.label", { mode: t(`chat:a2aMode.${a2aMode}.label`) })
-                          : t("chat:a2aMode.unavailable")
-                      }
-                    >
-                      <Network aria-hidden="true" className="h-4 w-4" />
-                      {a2aMode && a2aMode !== "off" && (
-                        <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-[var(--accent-color)]" />
-                      )}
-                      {a2aModeError && (
-                        <CircleAlert
-                          aria-hidden="true"
-                          className="absolute right-0 top-0 h-3.5 w-3.5 text-[var(--status-error)]"
-                        />
-                      )}
-                    </Button>
-                  </DropdownMenuTrigger>
-                </TooltipTrigger>
-                <TooltipContent>
-                  {a2aMode
-                    ? t("chat:a2aMode.label", { mode: t(`chat:a2aMode.${a2aMode}.label`) })
-                    : t("chat:a2aMode.unavailable")}
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-            <DropdownMenuContent align="end" className="w-80 p-2">
-              <div className="px-2 pb-2 pt-1">
-                <p className="text-sm font-medium text-[var(--text-primary)]">
-                  {t("chat:a2aMode.title")}
-                </p>
-                <p className="mt-0.5 text-xs text-[var(--text-tertiary)]">
-                  {t("chat:a2aMode.description")}
-                </p>
-              </div>
-              {a2aModeError && (
-                <div
-                  role="alert"
-                  className="mx-2 mb-2 rounded-lg bg-[var(--status-error)]/5 p-2 text-xs leading-5 text-[var(--text-secondary)]"
-                >
-                  <p>{t("chat:a2aMode.loadFailed")}</p>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="mt-2 min-h-11 md:min-h-8"
-                    onClick={() => void retryA2AMode()}
-                  >
-                    {t("common:buttons.retry")}
-                  </Button>
-                </div>
-              )}
-              {A2A_MODE_OPTIONS.map(({ value, icon: Icon }) => {
-                const selected = value === a2aMode;
-                return (
-                  <DropdownMenuItem
-                    key={value}
-                    disabled={!a2aMode || isA2AModeLoading}
-                    onSelect={() => void handleA2AModeChange(value)}
-                    className={`items-start gap-3 px-2.5 py-2.5 ${selected ? "bg-[var(--accent-subtle)]" : ""}`}
-                  >
-                    <span
-                      className={`mt-0.5 rounded-md p-1.5 ${selected ? "bg-[var(--accent-color)] text-white" : "bg-[var(--bg-elevated)] text-[var(--text-secondary)]"}`}
-                    >
-                      <Icon aria-hidden="true" className="h-4 w-4" />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span
-                        className={`block text-sm font-medium ${selected ? "text-[var(--accent-hover)]" : "text-[var(--text-primary)]"}`}
-                      >
-                        {t(`chat:a2aMode.${value}.label`)}
-                      </span>
-                      <span className="mt-0.5 block text-xs leading-5 text-[var(--text-tertiary)]">
-                        {t(`chat:a2aMode.${value}.description`)}
-                      </span>
-                    </span>
-                    <span
-                      className={`mt-1 flex h-4 w-4 items-center justify-center rounded-full border ${selected ? "border-[var(--accent-color)] bg-[var(--accent-color)] text-white" : "border-[var(--border-color)]"}`}
-                    >
-                      {selected && <Check aria-hidden="true" className="h-3 w-3" />}
-                    </span>
-                  </DropdownMenuItem>
-                );
-              })}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-        {currentConv && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-11 min-w-11 px-0 md:h-8 md:px-3"
-                aria-label={t("common:export.title")}
-              >
-                <Download aria-hidden="true" className="h-4 w-4" />
-                <span className="hidden sm:inline">{t("common:export.title")}</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={() => void handleExport("markdown")}>
-                <FileText aria-hidden="true" className="h-4 w-4" />
-                {t("common:export.markdown")}
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => void handleExport("json")}>
-                <FileJson aria-hidden="true" className="h-4 w-4" />
-                {t("common:export.json")}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={() => void handleExport("markdown")}>
+                  <FileText aria-hidden="true" className="h-4 w-4" />
+                  {t("common:export.markdown")}
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => void handleExport("json")}>
+                  <FileJson aria-hidden="true" className="h-4 w-4" />
+                  {t("common:export.json")}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </div>
       </header>
 
       {currentConv?.type === "cross_hub" &&

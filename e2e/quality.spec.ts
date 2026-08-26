@@ -573,7 +573,7 @@ test("group A2A and export menus expose named keyboard actions", async ({ page }
   await page.goto("/");
   await page.getByRole("button", { name: /^Fixture Group 不到/ }).click();
 
-  const a2aTrigger = page.getByRole("button", { name: "A2A：@转发" });
+  const a2aTrigger = page.getByRole("button", { name: "协作：@转发" });
   await a2aTrigger.focus();
   await a2aTrigger.press("Enter");
   await expect(page.getByRole("menuitem", { name: /同步调用/ })).toBeVisible();
