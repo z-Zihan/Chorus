@@ -5,7 +5,6 @@ import {
   Bot,
   Ban,
   Check,
-  ChevronDown,
   CircleAlert,
   Download,
   FileJson,
@@ -326,7 +325,7 @@ export function ChatArea() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        className={`relative h-11 min-w-11 gap-1.5 px-2 md:h-8 md:px-2.5 ${a2aMode && a2aMode !== "off" ? "text-[var(--accent-hover)]" : "text-[var(--text-secondary)]"}`}
+                        className={`relative h-11 min-w-11 px-2 md:h-8 md:w-8 md:px-0 ${a2aMode && a2aMode !== "off" ? "text-[var(--accent-hover)]" : "text-[var(--text-secondary)]"}`}
                         aria-label={
                           a2aMode
                             ? t("chat:a2aMode.label", { mode: t(`chat:a2aMode.${a2aMode}.label`) })
@@ -334,15 +333,6 @@ export function ChatArea() {
                         }
                       >
                         <Network aria-hidden="true" className="h-4 w-4" />
-                        {a2aMode && (
-                          <span className="hidden text-xs font-medium lg:inline">
-                            {t(`chat:a2aMode.${a2aMode}.short`)}
-                          </span>
-                        )}
-                        <ChevronDown
-                          aria-hidden="true"
-                          className="hidden h-3.5 w-3.5 opacity-60 lg:inline"
-                        />
                         {a2aModeError && (
                           <CircleAlert
                             aria-hidden="true"
