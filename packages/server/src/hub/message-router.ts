@@ -123,6 +123,9 @@ export class HubMessageRouter {
       void this.resyncService.requestAllRooms().catch((error: unknown) => {
         logger.warn({ err: error }, "Unable to request Room resync after Relay connection");
       });
+      void this.requestDirectories("relay-connect").catch((error: unknown) => {
+        logger.warn({ err: error }, "Unable to request directories after Relay connection");
+      });
     });
     this.removeRoomMembersListener = relayClient.onRoomMembers?.((roomId) => {
       if (!repository.listRoomIds().includes(roomId)) return;
@@ -149,6 +152,79 @@ export class HubMessageRouter {
 
   get pendingCount(): number {
     return this.pendingOutbound.size;
+  }
+
+  /**
+   * Ask trusted peers (and shared-Room members) for their agent directories.
+   * Inbound announce handlers ingest the manifests; this is the missing trigger
+   * that makes remote agents discoverable after pairing or reconnect.
+   */
+  async requestDirectories(reason: string): Promise<void> {
+    const peers = this.trustStore
+      .listTrusted()
+      .map((hub) => hub.hubId)
+      .filter((hubId) => hubId !== this.identity.hubId && !this.offlineHubIds.has(hubId));
+    for (const hubId of peers) {
+      await this.sendDirectoryRequest(hubId, undefined, reason);
+    }
+    // Room-scoped requests let peers answer with room-visible agents too.
+    for (const roomId of this.repository.listRoomIds()) {
+      const members = this.relayClient
+        .getOnlineRoomMembers(roomId)
+        .filter((member) => member.hubId !== this.identity.hubId);
+      for (const member of members) {
+        await this.sendDirectoryRequest(member.hubId, roomId, reason);
+      }
+    }
+  }
+
+  /** Push our signed directory to trusted peers after local agents change. */
+  async announceDirectory(): Promise<void> {
+    const directory = await this.directoryService.buildSignedLocalDirectory({
+      trusted: true,
+      sharedRoom: false,
+    });
+    if (!directory) {
+      logger.warn("Unable to announce directory: signed manifest is unavailable");
+      return;
+    }
+    for (const { hubId } of this.trustStore
+      .listTrusted()
+      .filter((hub) => hub.hubId !== this.identity.hubId)) {
+      try {
+        await this.handleOutbound(
+          hubId,
+          {
+            messageType: "directory_announce",
+            messageId: randomUUID(),
+            directory,
+          },
+          `directory-${randomUUID()}`,
+        );
+      } catch (error) {
+        logger.warn({ err: error, toHubId: hubId }, "Unable to announce directory to Hub");
+      }
+    }
+  }
+
+  private async sendDirectoryRequest(
+    toHubId: string,
+    roomId: string | undefined,
+    reason: string,
+  ): Promise<void> {
+    try {
+      await this.handleOutbound(
+        toHubId,
+        {
+          messageType: "directory_request",
+          messageId: randomUUID(),
+          metadata: { ...(roomId ? { roomId } : {}), reason },
+        },
+        roomId ?? `directory-${randomUUID()}`,
+      );
+    } catch (error) {
+      logger.warn({ err: error, toHubId, roomId }, "Unable to request directory from Hub");
+    }
   }
 
   destroy(): void {

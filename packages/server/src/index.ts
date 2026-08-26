@@ -128,6 +128,15 @@ async function main(): Promise<void> {
       pairingService,
     );
     runtime.setHubMessageRouter(messageRouter);
+    // Cross-hub directory discovery triggers: after pairing completes and
+    // whenever a local agent's visibility changes.
+    pairingService.onTrusted = (remoteHubId) => {
+      logger.info({ remoteHubId }, "Pairing trusted; requesting remote directory");
+      void messageRouter?.requestDirectories("pairing");
+    };
+    registry.onVisibilityChanged = () => {
+      void messageRouter?.announceDirectory();
+    };
     if (hubConfig.p2p.enabled) {
       const discovery = new P2PDiscovery();
       const p2pPort = hubConfig.p2p.port ?? 3212;

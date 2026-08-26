@@ -300,6 +300,11 @@ export class AgentRuntime {
     mentionedAgents: string[],
     collaborationRun?: CollaborationRun,
   ): Promise<void> {
+    const remoteHubId = this.registry.getRemoteAgentHub(agentId);
+    if (remoteHubId) {
+      await this.routeMessageToRemoteAgent(conversationId, agentId, content);
+      return;
+    }
     const adapter = this.registry.getAdapter(agentId);
     if (!adapter || this.registry.getStatus(agentId) !== "online") {
       const errorMessage = createMessage({
@@ -350,6 +355,67 @@ export class AgentRuntime {
     this.events.publish(conversationId, { type: "message", message: reply });
     if (collaborationRun) this.trackCollaborationMessage(collaborationRun, reply.id);
     await this.streamReply(reply, content, mentionedAgents, adapter, collaborationRun);
+  }
+
+  /**
+   * Deliver a user message to an Agent hosted on a paired Hub via the A2A bus
+   * (relay-encrypted RPC); the remote Hub executes and streams the reply back.
+   */
+  private async routeMessageToRemoteAgent(
+    conversationId: string,
+    agentId: string,
+    content: string,
+  ): Promise<void> {
+    const reply = createMessage({
+      conversationId,
+      fromType: "agent",
+      fromId: agentId,
+      toType: "user",
+      toId: "user",
+      content: "",
+      status: "thinking",
+    });
+    this.repository.saveMessage(reply);
+    this.events.publish(conversationId, { type: "message", message: reply });
+    this.events.publish(conversationId, {
+      type: "typing",
+      agentId,
+      conversationId,
+      isTyping: true,
+    });
+    const startedAt = Date.now();
+    let output = "";
+    try {
+      const history = this.repository.listMessages(conversationId);
+      for await (const chunk of this.a2aBus.call("user", agentId, content, {
+        conversationId,
+        history,
+        signal: new AbortController().signal,
+      })) {
+        if (chunk.type === "text" || chunk.type === "task_step") {
+          output += chunk.content;
+          this.events.publish(conversationId, {
+            type: "stream",
+            messageId: reply.id,
+            chunk: { type: "text", content: chunk.content },
+          });
+        } else if (chunk.type === "error") {
+          output += (output ? "\n" : "") + chunk.content;
+        }
+      }
+      this.finish(reply, output, "done", [], startedAt, agentId);
+    } catch (error) {
+      const detail = messageFromError(error);
+      logger.error({ err: error, conversationId, agentId }, "Remote agent call failed");
+      this.finish(reply, output || detail, output ? "partial" : "error", [], startedAt, agentId);
+    } finally {
+      this.events.publish(conversationId, {
+        type: "typing",
+        agentId,
+        conversationId,
+        isTyping: false,
+      });
+    }
   }
 
   private async routeAgentMessage(

@@ -58,6 +58,8 @@ export class AgentRegistry {
   private configWatcher?: ConfigWatcher;
   private healthCheckTimer?: NodeJS.Timeout;
   private healthCheckRunning = false;
+  /** Notified when local directory visibility changes; triggers a directory announce. */
+  onVisibilityChanged?: () => void;
 
   constructor(
     private readonly repository: Repository,
@@ -325,6 +327,7 @@ export class AgentRegistry {
       ...config,
       customizedFields: [...customizedFields],
     });
+    if (input.visibility !== undefined) this.onVisibilityChanged?.();
     return updated.disabled ? this.toDisabledAgent(updated) : this.registerInMemory(updated);
   }
 

@@ -2,7 +2,7 @@ import type { Agent, AgentConfig, DirectoryManifest } from "@chorus/shared";
 import type { AgentRegistry } from "../agent/registry.js";
 import { getUserKey } from "../credential-store.js";
 import type { Repository } from "../db/repository.js";
-import { signData, verifySignature } from "../identity/user-keys.js";
+import { deriveUserId, signData, verifySignature } from "../identity/user-keys.js";
 import { logger } from "../utils/logger.js";
 import { TrustStore } from "./trust-store.js";
 
@@ -52,7 +52,9 @@ export class DirectoryService {
       issuedAt,
       expiresAt: issuedAt + DIRECTORY_TTL_MS,
       user: {
-        id: localUser.id,
+        // The protocol identity is derived from the User public key; the DB
+        // row id (usr_local) is a local alias and must not leak onto the wire.
+        id: deriveUserId(localUser.publicKey),
         name: localUser.name,
         avatar: localUser.avatar,
         hubId: this.localHubId || localUser.hubId || "",

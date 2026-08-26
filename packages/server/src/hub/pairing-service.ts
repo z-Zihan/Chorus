@@ -92,6 +92,8 @@ interface PairingTransport {
 export class PairingService {
   private readonly sessions = new Map<string, PairingSession>();
   private readonly seenEnvelopeIds = new Set<string>();
+  /** Invoked when both sides approve; used to trigger directory discovery. */
+  onTrusted?: (remoteHubId: string) => void;
 
   constructor(
     private readonly identity: PairingHubIdentity,
@@ -339,6 +341,7 @@ export class PairingService {
       userName: session.remoteUser.userName,
       userPublicKey: session.remoteUser.userPublicKey,
     });
+    this.onTrusted?.(session.remoteHubId);
   }
 
   private requireActiveSession(sessionId: string): PairingSession {

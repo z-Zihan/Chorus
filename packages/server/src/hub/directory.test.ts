@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { AgentRegistry } from "../agent/registry.js";
 import { createDatabase, type DatabaseContext } from "../db/index.js";
 import { Repository } from "../db/repository.js";
-import { generateUserKeyPair } from "../identity/user-keys.js";
+import { deriveUserId, generateUserKeyPair } from "../identity/user-keys.js";
 import { DirectoryService } from "./directory.js";
 import { TrustStore } from "./trust-store.js";
 
@@ -45,7 +45,7 @@ describe("DirectoryService", () => {
       schemaVersion: 1,
       directoryVersion: 1,
       user: {
-        id: "usr_local",
+        id: deriveUserId(keyPair.publicKey),
         name: "Local User",
         hubId: "hub-local",
         publicKey: keyPair.publicKey,

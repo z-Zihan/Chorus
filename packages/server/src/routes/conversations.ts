@@ -185,7 +185,9 @@ export function registerConversationRoutes(
       ),
     ];
     if (agentIds.length === 0) return reply.code(409).send({ error: "NO_AGENT_AVAILABLE" });
-    if (agentIds.some((agentId) => !registry.get(agentId))) {
+    if (
+      agentIds.some((agentId) => !registry.get(agentId) && !registry.getRemoteAgentHub(agentId))
+    ) {
       return reply.code(400).send({ error: "Agent not found" });
     }
     const conversation = repository.createConversation(
@@ -228,7 +230,9 @@ export function registerConversationRoutes(
       return reply.code(400).send({ error: "Invalid members", issues: parsed.error.flatten() });
     }
     const agentIds = [...new Set(parsed.data.agentIds)];
-    if (agentIds.some((agentId) => !registry.get(agentId))) {
+    if (
+      agentIds.some((agentId) => !registry.get(agentId) && !registry.getRemoteAgentHub(agentId))
+    ) {
       return reply.code(404).send({ error: "Agent not found" });
     }
     if (new Set([...conversation.agentIds, ...agentIds]).size > 20) {
