@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { ConversationContext, StreamChunk } from "@chorus/shared";
 import { BaseAdapter, messageFromError } from "../adapter";
 import { buildOpenAIA2APrompt } from "../chorus-skill";
+import { resolveA2ATarget } from "./a2a-target";
 
 interface OpenAIToolCall {
   id: string;
@@ -117,7 +118,9 @@ export class OpenAIAdapter extends BaseAdapter {
     ];
     const callableAgentIds = availableAgentIds.filter((agentId) => agentId !== this.id);
     const toolsEnabled = availableAgentIds.length > 1 && callableAgentIds.length > 0;
-    const directory = toolsEnabled ? buildOpenAIA2APrompt(callableAgentIds) : "";
+    const directory = toolsEnabled
+      ? buildOpenAIA2APrompt(callableAgentIds, context.agentNames)
+      : "";
     const messages: OpenAIMessage[] = [
       {
         role: "system",
@@ -271,11 +274,13 @@ export class OpenAIAdapter extends BaseAdapter {
         throw new Error(`Unsupported tool: ${toolCall.function.name}`);
       }
       const args = JSON.parse(toolCall.function.arguments) as Record<string, unknown>;
-      agentId = typeof args.agent_id === "string" ? args.agent_id.trim() : "";
+      const requestedAgentId = typeof args.agent_id === "string" ? args.agent_id.trim() : "";
       request = typeof args.message === "string" ? args.message.trim() : "";
-      if (!agentId || !request) throw new Error("call_agent requires agent_id and message");
-      if (!callableAgentIds.includes(agentId)) {
-        throw new Error(`Agent ${agentId} is not available in this conversation`);
+      if (!requestedAgentId || !request)
+        throw new Error("call_agent requires agent_id and message");
+      agentId = resolveA2ATarget(requestedAgentId, callableAgentIds, context.agentNames) ?? "";
+      if (!agentId) {
+        throw new Error(`Agent ${requestedAgentId} is not available in this conversation`);
       }
       if (!context.a2aBus) throw new Error("A2A bus is unavailable");
 

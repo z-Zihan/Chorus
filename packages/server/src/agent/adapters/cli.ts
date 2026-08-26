@@ -5,6 +5,7 @@ import { access } from "node:fs/promises";
 import { delimiter, isAbsolute, resolve } from "node:path";
 import type { ConversationContext, StreamChunk } from "@chorus/shared";
 import { BaseAdapter, messageFromError } from "../adapter";
+import { resolveA2ATarget } from "./a2a-target";
 
 type CliInputMode = "stdin" | "argument";
 type CliOutputMode = "jsonl" | "codex-json" | "plain" | "json";
@@ -314,7 +315,7 @@ export class CliAdapter extends BaseAdapter {
       return;
     }
 
-    const systemPrompt = buildA2ASystemPrompt(callableAgentIds);
+    const systemPrompt = buildA2ASystemPrompt(callableAgentIds, context.agentNames);
     let prompt = `${systemPrompt}\n\n${message}`;
     let a2aHandoffs = 0;
     const maxA2AHandoffs = context.maxA2ARounds ?? DEFAULT_MAX_A2A_HANDOFFS;
@@ -372,7 +373,12 @@ ${message}`;
     let callStarted = false;
 
     try {
-      if (!callableAgentIds.includes(call.targetAgentId)) {
+      const targetAgentId = resolveA2ATarget(
+        call.targetAgentId,
+        callableAgentIds,
+        context.agentNames,
+      );
+      if (!targetAgentId) {
         throw new Error(`Agent ${call.targetAgentId} is not available in this conversation`);
       }
       if (!context.a2aBus) throw new Error("A2A bus is unavailable");
@@ -383,12 +389,12 @@ ${message}`;
         content: call.message,
         threadId,
         sourceAgentId: this.id,
-        metadata: { to: call.targetAgentId, request: call.message },
+        metadata: { to: targetAgentId, request: call.message },
       };
 
       let output = "";
       let failed = false;
-      for await (const chunk of context.a2aBus.call(this.id, call.targetAgentId, call.message, {
+      for await (const chunk of context.a2aBus.call(this.id, targetAgentId, call.message, {
         ...context,
         a2aThreadId: threadId,
       })) {
@@ -401,7 +407,7 @@ ${message}`;
           type: "a2a_response",
           content: chunk.content,
           threadId,
-          sourceAgentId: call.targetAgentId,
+          sourceAgentId: targetAgentId,
           metadata: {
             ...chunk.metadata,
             chunkType: chunk.type,
@@ -612,9 +618,15 @@ ${message}`;
   }
 }
 
-function buildA2ASystemPrompt(callableAgentIds: string[]): string {
+function buildA2ASystemPrompt(
+  callableAgentIds: string[],
+  agentNames?: Record<string, string>,
+): string {
+  const directory = callableAgentIds
+    .map((id) => (agentNames?.[id] ? `${id} (${agentNames[id]})` : id))
+    .join(", ");
   return [
-    `You are in a multi-agent workspace. Other available agents: [${callableAgentIds.join(", ")}].`,
+    `You are in a multi-agent workspace. Other available agents: [${directory}].`,
     "If you need help from another agent, include this exact format in your response:",
     "[A2A_CALL: target_agent_id: your_message_to_that_agent]",
     "You can make multiple A2A calls. After each call, wait for the response before continuing.",

@@ -94,11 +94,17 @@ export class OnboardingService {
   }
 
   private async createWorkspace(detectionId: string): Promise<OnboardingStatus> {
-    const detection = this.detector.find(detectionId);
+    // The live detector cache can expire between status reads and a select,
+    // so fall back to detections persisted in the current state.
+    const detection =
+      this.detector.find(detectionId) ??
+      this.state.detections.find((candidate) => candidate.id === detectionId);
     if (!detection) {
       return this.setState({
         step: "error",
-        detections: this.detector.getCachedDetections(),
+        detections: this.state.detections.length
+          ? this.state.detections
+          : this.detector.getCachedDetections(),
         code: "CLI_NOT_FOUND",
         recoverable: true,
       });

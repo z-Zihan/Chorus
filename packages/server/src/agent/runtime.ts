@@ -477,7 +477,7 @@ export class AgentRuntime {
       let augmentedContent = content;
       if (a2aMode === "mention" && conversation?.type === "group" && otherAgentIds.length > 0) {
         const agentNames = otherAgentIds.map((id) => this.registry.get(id)?.name ?? id);
-        augmentedContent = `${content}\n\n--- System: You are in a group chat with: [${agentNames.join(", ")}]. Mention another Agent only when a concrete unresolved subtask requires that Agent. The mention must include useful context, the specific question, and the expected deliverable. Never mention an Agent for greetings, thanks, acknowledgements, or open-ended conversation. If the objective is complete, answer the user directly without another mention.`;
+        augmentedContent = `${content}\n\n--- System: You are in a group chat with: [${agentNames.join(", ")}]. To address another Agent, include the plain text "@Name" in your reply; the workspace routes it automatically. Do not use any built-in agent, subagent, or delegation tooling for this. Mention another Agent only when a concrete unresolved subtask requires that Agent. The mention must include useful context, the specific question, and the expected deliverable. Never mention an Agent for greetings, thanks, acknowledgements, or open-ended conversation. If the objective is complete, answer the user directly without another mention.`;
       }
       for await (const chunk of adapter.handleMessage(augmentedContent, {
         conversationId: reply.conversationId,
@@ -485,6 +485,12 @@ export class AgentRuntime {
         a2aMode,
         mentionedAgents: a2aMode === "off" ? [] : mentionedAgents,
         availableAgentIds: adapterAvailableAgentIds,
+        agentNames: Object.fromEntries(
+          availableAgentIds.flatMap((id) => {
+            const agent = this.registry.get(id);
+            return agent ? [[id, agent.name] as const] : [];
+          }),
+        ),
         a2aBus: a2aMode === "off" ? undefined : this.a2aBus,
         callStack: [adapter.id],
         maxA2ARounds: collaborationRun?.maxRounds ?? this.getA2ACollaborationSettings().maxRounds,

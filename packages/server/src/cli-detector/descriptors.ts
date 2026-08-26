@@ -64,7 +64,12 @@ export const CLI_DESCRIPTORS: CliDescriptor[] = [
     adapterTemplate: {
       input: "argument",
       output: "codex-json",
-      args: ["exec", "--json", "--dangerously-bypass-approvals-and-sandbox"],
+      args: [
+        "exec",
+        "--json",
+        "--skip-git-repo-check",
+        "--dangerously-bypass-approvals-and-sandbox",
+      ],
     },
   },
   {

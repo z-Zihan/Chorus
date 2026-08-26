@@ -131,7 +131,13 @@ ${callableAgentIds.map((id) => `- ${id}`).join("\n")}
 /**
  * Build the system prompt addition for OpenAI adapters.
  */
-export function buildOpenAIA2APrompt(availableAgentIds: string[]): string {
+export function buildOpenAIA2APrompt(
+  availableAgentIds: string[],
+  agentNames?: Record<string, string>,
+): string {
   if (availableAgentIds.length <= 1) return "";
-  return `\n${CHORUS_SKILL}\n\n## 当前可用的 Agent\n${availableAgentIds.map((id) => `- ${id}`).join("\n")}`;
+  const directory = availableAgentIds
+    .map((id) => (agentNames?.[id] ? `- ${id} (${agentNames[id]})` : `- ${id}`))
+    .join("\n");
+  return `\n${CHORUS_SKILL}\n\n## 当前可用的 Agent\n${directory}`;
 }

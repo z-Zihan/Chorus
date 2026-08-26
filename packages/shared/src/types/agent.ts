@@ -65,6 +65,8 @@ export interface ConversationContext {
   a2aMode?: A2AMode;
   mentionedAgents?: string[];
   availableAgentIds?: string[];
+  /** Display names for the available agents (agent id → name), used for A2A target resolution. */
+  agentNames?: Record<string, string>;
   a2aBus?: A2ABusLike;
   callStack?: string[];
   a2aThreadId?: string;
