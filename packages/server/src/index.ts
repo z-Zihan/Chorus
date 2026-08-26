@@ -234,6 +234,7 @@ async function main(): Promise<void> {
     pairingService,
     tokenStore,
     config.auth,
+    events,
   );
   registerWebSocket(app, events, runtime, registry, config.auth, tokenStore);
 

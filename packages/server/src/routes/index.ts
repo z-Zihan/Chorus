@@ -22,6 +22,7 @@ import { registerMetricsRoutes } from "./metrics.js";
 import { registerHubRoutes, type HubRouteDependencies } from "./hub.js";
 import { registerSkillRoutes } from "./skill.js";
 import { logger } from "../utils/logger.js";
+import type { EventHub } from "../ws/events.js";
 import type { TrustStore } from "../hub/trust-store.js";
 import { registerTrustRoutes } from "./trust.js";
 import type { TokenStore } from "../auth/token-store.js";
@@ -47,6 +48,7 @@ export function registerRoutes(
   pairingService?: PairingService,
   tokenStore?: TokenStore,
   auth: AppConfig["auth"] = { enabled: false, tokens: {} },
+  events?: EventHub,
 ): void {
   registerHealthRoutes(app);
   registerSkillRoutes(app);
@@ -68,7 +70,7 @@ export function registerRoutes(
   registerAgentRoutes(app, registry, repository);
   registerStandardRoutes(app, registry);
   registerMetricsRoutes(app, registry, runtime);
-  registerConversationRoutes(app, repository, registry, runtime);
+  registerConversationRoutes(app, repository, registry, runtime, events);
   registerCleanupRoutes(app, repository);
   registerExportRoutes(app, repository);
   registerSearchRoutes(app, repository.context, repository);

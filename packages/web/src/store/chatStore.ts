@@ -95,6 +95,8 @@ interface ChatState {
   deleteConversations: (ids: string[]) => Promise<number | null>;
   /** Drop a conversation deleted outside this client, navigating away if open. */
   purgeConversation: (id: string) => void;
+  /** Sync sidebar meta for a message that arrived over WebSocket. */
+  applyExternalMessage: (conversationId: string, message: Message) => void;
 }
 
 function sortConversations(items: Conversation[]): Conversation[] {
@@ -730,6 +732,37 @@ export const useChatStore = create<ChatState>((set, get) => {
       if (nextConversation) {
         void get().fetchMessages(nextConversation.id);
       }
+    },
+
+    applyExternalMessage: (conversationId, message) => {
+      const state = get();
+      const isKnown = [
+        ...state.conversations,
+        ...state.groupConversations,
+        ...state.archivedConversations,
+      ].some((conversation) => conversation.id === conversationId);
+      if (!isKnown) {
+        // Conversation created outside this client (REST API / another session).
+        void get().fetchConversations();
+        return;
+      }
+      const refresh = (items: Conversation[]) =>
+        sortConversations(
+          items.map((conversation) =>
+            conversation.id === conversationId
+              ? {
+                  ...conversation,
+                  lastMessage: message.content || conversation.lastMessage,
+                  updatedAt: message.timestamp || conversation.updatedAt,
+                }
+              : conversation,
+          ),
+        );
+      set({
+        conversations: refresh(state.conversations),
+        groupConversations: refresh(state.groupConversations),
+        archivedConversations: refresh(state.archivedConversations),
+      });
     },
 
     deleteConversations: async (ids) => {

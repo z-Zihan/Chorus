@@ -66,5 +66,12 @@ export type ServerEvent =
   | { type: "agent_status"; eventId: string; agentId: string; status: AgentStatus; error?: string }
   | { type: "agent_status_batch"; eventId: string; statuses: AgentStatusSnapshot[] }
   | { type: "typing"; eventId: string; agentId: string; conversationId: string; isTyping: boolean }
+  | {
+      /** Broadcast to every client so sessions can refresh stale conversation lists. */
+      type: "conversation_activity";
+      eventId: string;
+      conversationId: string;
+      updatedAt: number;
+    }
   | { type: "error"; eventId: string; message: string; messageId?: string }
   | { type: "pong"; eventId: string };

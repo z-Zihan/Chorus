@@ -9,6 +9,7 @@ import {
 } from "../agent/runtime.js";
 import type { AgentRegistry } from "../agent/registry.js";
 import type { Repository } from "../db/repository.js";
+import type { EventHub } from "../ws/events.js";
 
 const createConversationSchema = z.object({
   title: z
@@ -77,6 +78,7 @@ export function registerConversationRoutes(
   repository: Repository,
   registry: AgentRegistry,
   runtime: AgentRuntime,
+  events?: EventHub,
 ): void {
   app.get("/api/a2a/settings", async () => runtime.getA2ACollaborationSettings());
 
@@ -192,6 +194,7 @@ export function registerConversationRoutes(
       agentIds,
       parsed.data.relayRoomId,
     );
+    events?.publishConversationActivity(conversation.id);
     reply.code(201);
     return conversation;
   });

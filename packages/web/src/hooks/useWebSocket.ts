@@ -10,6 +10,7 @@ const RECONNECT_BASE = 1000;
 const RECONNECT_MAX = 30000;
 const HEARTBEAT_MS = 30000;
 const PONG_TIMEOUT_MS = 10000;
+const ACTIVITY_REFRESH_MS = 2000;
 
 export function useWebSocket(enabled = true) {
   const wsRef = useRef<WebSocket | null>(null);
@@ -18,6 +19,7 @@ export function useWebSocket(enabled = true) {
   const pongTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastEventId = useRef<string | null>(null);
   const pendingEvents = useRef<ClientEvent[]>([]);
+  const activityRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const addMessage = useChatStore((s) => s.addMessage);
   const appendStreamChunk = useChatStore((s) => s.appendStreamChunk);
@@ -73,11 +75,27 @@ export function useWebSocket(enabled = true) {
       if (event.eventId) lastEventId.current = event.eventId;
 
       switch (event.type) {
-        case "message":
-          if (event.message.conversationId === useChatStore.getState().currentConversationId) {
+        case "message": {
+          const chatState = useChatStore.getState();
+          if (event.message.conversationId === chatState.currentConversationId) {
             addMessage(event.message);
+          } else {
+            chatState.applyExternalMessage(event.message.conversationId, event.message);
           }
           break;
+        }
+
+        case "conversation_activity": {
+          // Conversation-level signal for sessions viewing another conversation:
+          // refresh the list (throttled) so new/renamed/reordered items appear.
+          if (event.conversationId === useChatStore.getState().currentConversationId) break;
+          if (activityRefreshTimer.current) break;
+          activityRefreshTimer.current = setTimeout(() => {
+            activityRefreshTimer.current = null;
+            void useChatStore.getState().fetchConversations();
+          }, ACTIVITY_REFRESH_MS);
+          break;
+        }
 
         case "stream": {
           const { messageId, chunk } = event;
@@ -287,6 +305,10 @@ export function useWebSocket(enabled = true) {
       mounted = false;
       stopHeartbeat();
       wsRef.current?.close();
+      if (activityRefreshTimer.current) {
+        clearTimeout(activityRefreshTimer.current);
+        activityRefreshTimer.current = null;
+      }
       if (useChatStore.getState().webSocketSend === sendEvent) {
         setWebSocketSend(null);
       }

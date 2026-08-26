@@ -45,7 +45,29 @@ export class EventHub {
         this.send(socket, event);
       }
     }
+    // Messages are also delivered per-conversation, so sessions viewing another
+    // conversation need a broadcast signal to refresh their conversation list.
+    if (conversationId && payload.type === "message") {
+      const activity: ServerEvent = {
+        type: "conversation_activity",
+        eventId: randomUUID(),
+        conversationId,
+        updatedAt: Date.now(),
+      };
+      for (const socket of this.sockets) this.send(socket, activity);
+    }
     return event;
+  }
+
+  /** Broadcast a list-level activity signal (no message content) to all clients. */
+  publishConversationActivity(conversationId: string): void {
+    const activity: ServerEvent = {
+      type: "conversation_activity",
+      eventId: randomUUID(),
+      conversationId,
+      updatedAt: Date.now(),
+    };
+    for (const socket of this.sockets) this.send(socket, activity);
   }
 
   sendDirect(socket: WebSocket, payload: ServerEventPayload): void {
