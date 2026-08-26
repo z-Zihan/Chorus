@@ -356,13 +356,10 @@ export function ChatArea() {
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
-              <DropdownMenuContent align="end" className="w-[22rem] p-2">
+              <DropdownMenuContent align="end" className="w-72 p-2">
                 <div className="px-2 pb-2 pt-1">
                   <p className="text-sm font-medium text-[var(--text-primary)]">
                     {t("chat:a2aMode.title")}
-                  </p>
-                  <p className="mt-0.5 text-xs text-[var(--text-tertiary)]">
-                    {t("chat:a2aMode.howToChoose")}
                   </p>
                 </div>
                 {a2aModeError && (
@@ -388,7 +385,7 @@ export function ChatArea() {
                       key={value}
                       disabled={!a2aMode || isA2AModeLoading}
                       onSelect={() => void handleA2AModeChange(value)}
-                      className={`items-start gap-3 px-2.5 py-2.5 ${selected ? "bg-[var(--accent-subtle)]" : ""}`}
+                      className={`group/a2a relative items-start gap-3 px-2.5 py-2 ${selected ? "bg-[var(--accent-subtle)]" : ""}`}
                     >
                       <span
                         className={`mt-0.5 rounded-md p-1.5 ${selected ? "bg-[var(--accent-color)] text-white" : "bg-[var(--bg-elevated)] text-[var(--text-secondary)]"}`}
@@ -401,17 +398,24 @@ export function ChatArea() {
                         >
                           {t(`chat:a2aMode.${value}.label`)}
                         </span>
-                        <span className="mt-0.5 block text-xs leading-5 text-[var(--text-secondary)]">
+                        <span className="mt-0.5 block text-xs leading-5 text-[var(--text-tertiary)]">
                           {t(`chat:a2aMode.${value}.description`)}
-                        </span>
-                        <span className="mt-1 block text-xs leading-5 text-[var(--text-tertiary)]">
-                          {t(`chat:a2aMode.${value}.detail`)}
                         </span>
                       </span>
                       <span
                         className={`mt-1 flex h-4 w-4 items-center justify-center rounded-full border ${selected ? "border-[var(--accent-color)] bg-[var(--accent-color)] text-white" : "border-[var(--border-color)]"}`}
                       >
                         {selected && <Check aria-hidden="true" className="h-3 w-3" />}
+                      </span>
+                      {/* Detail panel: pure CSS on hover/keyboard highlight — no overlay layer,
+                          so Escape keeps closing the menu. */}
+                      <span className="pointer-events-none absolute right-full top-0 z-50 mr-2 hidden w-60 rounded-lg border border-[var(--border-color)] bg-[var(--bg-elevated)] p-3 text-xs leading-5 shadow-xl group-data-[highlighted]/a2a:block">
+                        <span className="block font-medium text-[var(--text-primary)]">
+                          {t(`chat:a2aMode.${value}.label`)}
+                        </span>
+                        <span className="mt-1 block text-[var(--text-tertiary)]">
+                          {t(`chat:a2aMode.${value}.detail`)}
+                        </span>
                       </span>
                     </DropdownMenuItem>
                   );
