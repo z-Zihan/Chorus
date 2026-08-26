@@ -162,6 +162,9 @@ export const scheduledTasks = sqliteTable("scheduled_tasks", {
   prompt: text("prompt").notNull(),
   enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
   createdAt: integer("created_at").notNull(),
+  lastRunAt: integer("last_run_at"),
+  lastResult: text("last_result"),
+  nextRunAt: integer("next_run_at"),
 });
 
 export const messages = sqliteTable(

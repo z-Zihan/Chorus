@@ -68,12 +68,21 @@ async function main(): Promise<void> {
   const { sqlite, db } = createDatabase(dbPath);
   const repository = new Repository({ sqlite, db });
   const tokenStore = new TokenStore(repository);
-  const localUser = await repository.getOrCreateLocalUser("本机用户");
+  const hubConfig: HubConfig = config.hub ?? {
+    enabled: true,
+    displayName: "My Device",
+    relay: { url: "" },
+    p2p: { enabled: false, port: 3212, discovery: "none" },
+  };
+  // The protocol user shares the Hub display name so paired contacts show a
+  // meaningful label instead of a generic per-install default.
+  const localUser = await repository.getOrCreateLocalUser(hubConfig.displayName);
   if (!localUser.publicKey) throw new Error("Local User public key is unavailable");
   const localProtocolUser = {
     id: deriveUserId(localUser.publicKey),
     name: localUser.name,
   };
+  const localUserName = () => repository.getUser("usr_local")?.name ?? localProtocolUser.name;
   const hubIdentity = new HubIdentity(resolve(rootDir, "data/hub-keypair.json"));
   const relayClient = new RelayClient();
   let p2pDiscovery: P2PDiscovery | undefined;
@@ -98,12 +107,6 @@ async function main(): Promise<void> {
   await pluginLoader.initPlugins({ registry, repository, events, logger });
   const runtime = new AgentRuntime(repository, registry, events, config, relayClient);
   let connectHub: (() => Promise<void>) | undefined;
-  const hubConfig: HubConfig = config.hub ?? {
-    enabled: true,
-    displayName: "My Device",
-    relay: { url: "" },
-    p2p: { enabled: false, port: 3212, discovery: "none" },
-  };
   if (hubIdentity && relayClient) {
     const identity = hubIdentity;
     const client = relayClient;
@@ -111,13 +114,7 @@ async function main(): Promise<void> {
     const manager = new ConnectionManager(listener, client);
     connectionManager = manager;
     const directoryService = new DirectoryService(repository, registry, identity.hubId, trustStore);
-    pairingService = new PairingService(
-      identity,
-      client,
-      trustStore,
-      repository,
-      localProtocolUser.name,
-    );
+    pairingService = new PairingService(identity, client, trustStore, repository, localUserName);
     messageRouter = new HubMessageRouter(
       identity,
       registry,
@@ -242,9 +239,14 @@ async function main(): Promise<void> {
   if (hasAgentsAtStartup) await onboarding.bootstrap();
 
   if (connectHub) {
-    void connectHub().catch((error: unknown) => {
-      app.log.warn({ err: error }, "Initial Relay connection failed");
-    });
+    if (!hubConfig.relay.url.trim()) {
+      // Local-only setup — an unconfigured Relay is the normal default, not a failure.
+      logger.info("Relay URL not configured; cross-device messaging is disabled");
+    } else {
+      void connectHub().catch((error: unknown) => {
+        app.log.warn({ err: error }, "Initial Relay connection failed");
+      });
+    }
   }
 
   const webDist = resolve(rootDir, "packages/web/dist");

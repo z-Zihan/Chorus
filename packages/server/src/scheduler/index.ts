@@ -12,6 +12,9 @@ export interface ScheduledAgentTask {
   prompt: string;
   enabled: boolean;
   createdAt: number;
+  lastRunAt?: number | null;
+  lastResult?: string | null;
+  nextRunAt?: number | null;
 }
 
 export class Scheduler {
@@ -48,7 +51,7 @@ export class Scheduler {
     this.repository.saveScheduledTask(task);
     this.tasks.set(task.id, task);
     this.start(task);
-    return task;
+    return this.tasks.get(task.id) ?? task;
   }
 
   cancel(taskId: string): boolean {
@@ -69,8 +72,11 @@ export class Scheduler {
     this.repository.setScheduledTaskEnabled(taskId, enabled);
     this.tasks.set(taskId, updated);
     if (enabled) this.start(updated);
-    else this.stop(taskId);
-    return updated;
+    else {
+      this.stop(taskId);
+      this.markRun(taskId, { nextRunAt: null });
+    }
+    return this.tasks.get(taskId);
   }
 
   destroy(): void {
@@ -82,14 +88,19 @@ export class Scheduler {
     const job = cron.schedule(task.cronExpression, () => {
       void this.runtime
         .handleUserMessage(task.conversationId, task.prompt, [], task.agentId)
+        .then(() => {
+          this.markRun(task.id, { lastResult: "success" });
+        })
         .catch((error: unknown) => {
           logger.error(
             { err: error, taskId: task.id, agentId: task.agentId },
             "Scheduled task failed",
           );
+          this.markRun(task.id, { lastResult: "error" });
         });
     });
     this.jobs.set(task.id, job);
+    this.markRun(task.id, {});
   }
 
   private stop(taskId: string): void {
@@ -97,5 +108,32 @@ export class Scheduler {
     job?.stop();
     job?.destroy();
     this.jobs.delete(taskId);
+  }
+
+  /** Persist run metadata (fire time, outcome, next fire time) on a task. */
+  private markRun(
+    taskId: string,
+    outcome: { lastResult?: string; nextRunAt?: number | null },
+  ): void {
+    const task = this.tasks.get(taskId);
+    if (!task) return;
+    const job = this.jobs.get(taskId);
+    const lastResult =
+      outcome.lastResult ?? (task.lastResult === undefined ? null : task.lastResult);
+    const nextRunAt =
+      outcome.nextRunAt === undefined ? (job?.getNextRun()?.getTime() ?? null) : outcome.nextRunAt;
+    const lastRunAt = outcome.lastResult === undefined ? (task.lastRunAt ?? null) : Date.now();
+    const updated: ScheduledAgentTask = {
+      ...task,
+      lastRunAt,
+      lastResult,
+      nextRunAt,
+    };
+    this.tasks.set(taskId, updated);
+    this.repository.recordScheduledTaskRun(taskId, {
+      lastRunAt: lastRunAt ?? 0,
+      lastResult: lastResult ?? null,
+      nextRunAt,
+    });
   }
 }

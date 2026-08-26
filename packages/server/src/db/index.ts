@@ -40,8 +40,24 @@ export function createDatabase(dbPath: string) {
   ensureAgentVisibilityColumn(sqlite);
   ensureTrustedHubsTable(sqlite);
   ensureClientTokensTable(sqlite);
+  ensureScheduledTaskRunColumns(sqlite);
   initializeMessageSearch(sqlite);
   return { sqlite, db };
+}
+
+function ensureScheduledTaskRunColumns(sqlite: Database.Database): void {
+  const columns = sqlite.prepare("PRAGMA table_info(scheduled_tasks)").all() as Array<{
+    name: string;
+  }>;
+  if (!columns.some((column) => column.name === "last_run_at")) {
+    sqlite.exec("ALTER TABLE scheduled_tasks ADD COLUMN last_run_at INTEGER");
+  }
+  if (!columns.some((column) => column.name === "last_result")) {
+    sqlite.exec("ALTER TABLE scheduled_tasks ADD COLUMN last_result TEXT");
+  }
+  if (!columns.some((column) => column.name === "next_run_at")) {
+    sqlite.exec("ALTER TABLE scheduled_tasks ADD COLUMN next_run_at INTEGER");
+  }
 }
 
 function ensureAgentVisibilityColumn(sqlite: Database.Database): void {

@@ -53,7 +53,7 @@ describe("PairingService", () => {
       transport,
       trustStore,
       repository,
-      name,
+      () => name,
       generateUserKeyPair(),
     );
     return { database, repository, trustStore, transport, service, hubId: hubKey.publicKey };

@@ -320,6 +320,22 @@ export function ScheduledTasksSettings() {
                     <p className="mt-2 whitespace-pre-wrap break-words text-xs leading-5 text-[var(--text-secondary)]">
                       {task.prompt}
                     </p>
+                    <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] leading-4 text-[var(--text-muted)]">
+                      <span>
+                        {t("settings:scheduler.nextRun")}:{" "}
+                        {task.enabled && task.nextRunAt
+                          ? formatTaskTime(task.nextRunAt)
+                          : t("settings:scheduler.notScheduled")}
+                      </span>
+                      {task.lastRunAt && (
+                        <span>
+                          {t("settings:scheduler.lastRun")}: {formatTaskTime(task.lastRunAt)}
+                          {task.lastResult === "error"
+                            ? ` · ${t("settings:scheduler.lastRunError")}`
+                            : ""}
+                        </span>
+                      )}
+                    </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
                     <Switch
@@ -372,6 +388,15 @@ export function ScheduledTasksSettings() {
 
 function omitKey(values: Record<string, string>, key: string): Record<string, string> {
   return Object.fromEntries(Object.entries(values).filter(([entryKey]) => entryKey !== key));
+}
+
+function formatTaskTime(value: number): string {
+  return new Date(value).toLocaleString(undefined, {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function readSchedulerError(error: unknown, t: (key: string) => string): string {

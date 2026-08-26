@@ -10,6 +10,9 @@ export interface ScheduledTask {
   prompt: string;
   enabled: boolean;
   createdAt: number;
+  lastRunAt?: number | null;
+  lastResult?: string | null;
+  nextRunAt?: number | null;
 }
 
 export interface CreateScheduledTaskInput {

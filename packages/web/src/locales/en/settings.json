@@ -186,7 +186,11 @@
     "toggleNamed": "Enable or disable scheduled task for {{name}}",
     "deleteNamed": "Delete scheduled task for {{name}}",
     "deleteTitle": "Delete scheduled task?",
-    "deleteMessage": "This recurring task will stop and cannot be restored. Existing conversation messages will not be deleted."
+    "deleteMessage": "This recurring task will stop and cannot be restored. Existing conversation messages will not be deleted.",
+    "nextRun": "Next run",
+    "lastRun": "Last run",
+    "notScheduled": "Disabled",
+    "lastRunError": "failed"
   },
   "plugins": {
     "loadedTitle": "Loaded runtime plugins",

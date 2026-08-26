@@ -186,7 +186,11 @@
     "toggleNamed": "启用或停用 {{name}} 的定时任务",
     "deleteNamed": "删除 {{name}} 的定时任务",
     "deleteTitle": "删除定时任务？",
-    "deleteMessage": "该周期任务会立即停止且无法恢复；已有会话消息不会被删除。"
+    "deleteMessage": "该周期任务会立即停止且无法恢复；已有会话消息不会被删除。",
+    "nextRun": "下次运行",
+    "lastRun": "上次运行",
+    "notScheduled": "已停用",
+    "lastRunError": "失败"
   },
   "plugins": {
     "loadedTitle": "已加载的运行时插件",

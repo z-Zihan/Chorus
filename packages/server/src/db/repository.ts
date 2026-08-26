@@ -252,6 +252,18 @@ export class Repository {
     return transaction();
   }
 
+  /** Keep the protocol user's display name aligned with the Hub display name. */
+  renameLocalUser(name: string): User | undefined {
+    const trimmed = name.trim();
+    if (!trimmed) return undefined;
+    this.context.db
+      .update(users)
+      .set({ name: trimmed, updatedAt: Date.now() })
+      .where(eq(users.id, "usr_local"))
+      .run();
+    return this.getUser("usr_local");
+  }
+
   listUsers(filter: UserListFilter = {}): User[] {
     const rows = this.context.db.select().from(users).orderBy(asc(users.createdAt)).all();
     return rows.filter((row) => !filter.kind || row.kind === filter.kind).map(toUser);
@@ -647,6 +659,16 @@ export class Repository {
   setScheduledTaskEnabled(id: string, enabled: boolean): boolean {
     return (
       this.context.db.update(scheduledTasks).set({ enabled }).where(eq(scheduledTasks.id, id)).run()
+        .changes > 0
+    );
+  }
+
+  recordScheduledTaskRun(
+    id: string,
+    run: { lastRunAt: number; lastResult: string | null; nextRunAt: number | null },
+  ): boolean {
+    return (
+      this.context.db.update(scheduledTasks).set(run).where(eq(scheduledTasks.id, id)).run()
         .changes > 0
     );
   }

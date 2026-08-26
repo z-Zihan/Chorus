@@ -88,9 +88,10 @@ export function registerHubRoutes(app: FastifyInstance, dependencies: HubRouteDe
       nextConfig.displayName = body.displayName.trim();
     }
     if (body.relayUrl !== undefined) {
-      if (typeof body.relayUrl !== "string" || !body.relayUrl.trim()) {
-        return reply.code(400).send({ error: "relayUrl must be a non-empty string" });
+      if (typeof body.relayUrl !== "string") {
+        return reply.code(400).send({ error: "relayUrl must be a string" });
       }
+      // An empty URL clears the Relay configuration (local-only mode).
       nextConfig.relayUrl = body.relayUrl.trim();
     }
     if (body.p2pEnabled !== undefined) {
@@ -115,6 +116,8 @@ export function registerHubRoutes(app: FastifyInstance, dependencies: HubRouteDe
     hubConfig.p2p.enabled = nextConfig.p2pEnabled;
     hubConfig.p2p.port = nextConfig.p2pPort;
     repository.setSetting(HUB_CONFIG_SETTING_KEY, JSON.stringify(nextConfig));
+    // Keep the protocol user name in sync so paired contacts see the new label.
+    repository.renameLocalUser(nextConfig.displayName);
     return configResponse();
   });
 

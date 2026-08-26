@@ -98,7 +98,7 @@ export class PairingService {
     private readonly relayClient: PairingTransport,
     private readonly trustStore: TrustStore,
     private readonly repository: Repository,
-    private readonly localUserName: string,
+    private readonly localUserName: () => string,
     private readonly localUserKey?: UserKeyPair,
   ) {}
 
@@ -313,7 +313,7 @@ export class PairingService {
     if (!key) throw new Error("Local User identity is unavailable");
     const unsigned = {
       userId: deriveUserId(key.publicKey),
-      userName: this.localUserName,
+      userName: this.localUserName(),
       userPublicKey: key.publicKey,
       hubId: this.identity.hubId,
     };
