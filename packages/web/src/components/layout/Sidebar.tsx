@@ -411,7 +411,7 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
         }}
         className={`group relative flex flex-wrap items-center transition-colors ${nested ? "ml-5 border-l border-[var(--border-color)] pl-1" : "rounded-lg"} ${
           currentConversationId === conv.id
-            ? "bg-[var(--bg-active)] text-[var(--text-primary)]"
+            ? "bg-[var(--bg-selected)] text-[var(--text-primary)]"
             : "text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]"
         }`}
       >
@@ -444,7 +444,7 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
                   event.stopPropagation();
                   startRename(conv);
                 }}
-                className={`truncate font-medium ${nested ? "text-[13px]" : "text-sm"}`}
+                className={`min-w-0 truncate font-medium ${nested ? "text-[13px]" : "text-sm"}`}
               >
                 {conv.title || t("sidebar:untitledConversation")}
               </div>
@@ -458,9 +458,13 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
                   {t("common:status.offline")}
                 </span>
               )}
+              <span className="ml-auto shrink-0 pl-1 text-[11px] leading-4 tabular-nums text-[var(--text-muted)]">
+                {formatConversationTime(conv.updatedAt)}
+              </span>
             </div>
-            <div className="truncate text-xs text-[var(--text-muted)]">
-              {formatConversationTime(conv.updatedAt)}
+            <div className="mt-0.5 truncate text-xs leading-4 text-[var(--text-muted)]">
+              {conv.lastMessage?.replace(/\s+/g, " ").trim() ||
+                (conv.type === "dm" ? (conversationAgent?.name ?? "") : "")}
             </div>
           </div>
         </button>
@@ -620,32 +624,32 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
               className="min-h-6 min-w-0 flex-1 bg-transparent text-sm text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none"
             />
           </label>
-          <div className="grid grid-cols-[1.2fr_1fr_1fr] gap-1.5">
-            <Button
-              size="sm"
-              className="min-h-11 gap-1 whitespace-nowrap px-1.5 text-xs md:min-h-8"
-              onClick={() => void handleCreateConversation()}
-            >
-              <Plus aria-hidden="true" className="hidden h-3.5 w-3.5 sm:block" />
-              {t("sidebar:newChat")}
-            </Button>
+          <Button
+            size="sm"
+            className="min-h-11 w-full gap-1.5 md:min-h-9"
+            onClick={() => void handleCreateConversation()}
+          >
+            <Plus aria-hidden="true" className="h-4 w-4" />
+            {t("sidebar:newChat")}
+          </Button>
+          <div className="grid grid-cols-2 gap-1.5">
             <Button
               variant="secondary"
               size="sm"
-              className="min-h-11 gap-1 whitespace-nowrap px-1.5 text-xs md:min-h-8"
+              className="min-h-11 gap-1.5 md:min-h-9"
               onClick={openCreateGroupDialog}
               aria-label={t("common:group.createGroup")}
             >
-              <Users aria-hidden="true" className="hidden h-3.5 w-3.5 sm:block" />
+              <Users aria-hidden="true" className="h-4 w-4" />
               {t("sidebar:newGroup")}
             </Button>
             <Button
               variant="secondary"
               size="sm"
-              className="min-h-11 gap-1 whitespace-nowrap px-1.5 text-xs md:min-h-8"
+              className="min-h-11 gap-1.5 md:min-h-9"
               onClick={() => setIsAddFriendOpen(true)}
             >
-              <UserPlus aria-hidden="true" className="hidden h-3.5 w-3.5 sm:block" />
+              <UserPlus aria-hidden="true" className="h-4 w-4" />
               {t("sidebar:addFriendShort")}
             </Button>
           </div>
