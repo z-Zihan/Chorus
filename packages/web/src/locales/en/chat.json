@@ -1,7 +1,6 @@
 {
   "messageInputLabel": "Message",
   "inputPlaceholderShort": "Type a message…",
-  "chooseConversation": "Select a conversation to start chatting",
   "workspaceReadyTitle": "Your conversations, in one place",
   "workspaceReadyDescription": "Start a focused chat, bring several agents into a group, or continue a recent conversation from the sidebar.",
   "configureAgent": "Configure an agent",
@@ -11,7 +10,6 @@
     "label": "Choose an agent",
     "all": "All",
     "allAgents": "All Agents",
-    "broadcastWarning": "Will send to all online Agents",
     "search": "Search agents…",
     "noAgents": "No online agents",
     "selectAgents": "Select agents",
@@ -39,6 +37,7 @@
     "title": "Message status",
     "description": "Local sending, Relay transport, and target execution are separate. Delivery does not mean the Agent has completed."
   },
+  "typingIndicator": "{{names}} is typing…",
   "a2aChain": "A2A call chain",
   "a2aRunning": "Running",
   "a2aCompleted": "Completed",
@@ -62,8 +61,6 @@
       "error": "Failed"
     }
   },
-  "a2aForwardedMessage": "forwarded message",
-  "unknownAgent": "Unknown Agent",
   "a2aMode": {
     "title": "Agent collaboration",
     "description": "How agents in this conversation work together",
@@ -131,6 +128,5 @@
   "removeMemberTitle": "Remove this Agent?",
   "removeMemberMessage": "{{name}} will stop participating in new messages in this conversation. Existing messages remain.",
   "removingMember": "Removing…",
-  "relayDisconnected": "Relay disconnected. Reconnecting...",
-  "relayError": "Relay connection error"
+  "relayDisconnected": "Relay disconnected. Reconnecting..."
 }

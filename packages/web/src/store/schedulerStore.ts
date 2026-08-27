@@ -1,26 +1,10 @@
 import { create } from "zustand";
+import type { CreateScheduledTaskInput, ScheduledAgentTask } from "@chorus/shared";
 import { api } from "@/services/api";
 import { logger } from "@/utils/logger";
 
-export interface ScheduledTask {
-  id: string;
-  agentId: string;
-  conversationId: string | null;
-  cronExpression: string;
-  prompt: string;
-  enabled: boolean;
-  createdAt: number;
-  lastRunAt?: number | null;
-  lastResult?: string | null;
-  nextRunAt?: number | null;
-}
-
-export interface CreateScheduledTaskInput {
-  agentId: string;
-  cronExpression: string;
-  prompt: string;
-  conversationId?: string;
-}
+export type ScheduledTask = ScheduledAgentTask;
+export type { CreateScheduledTaskInput };
 
 interface SchedulerState {
   tasks: ScheduledTask[];

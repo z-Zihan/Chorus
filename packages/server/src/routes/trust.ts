@@ -1,11 +1,14 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
+import type { RelayClient } from "../hub/relay-client.js";
 import type { TrustStore } from "../hub/trust-store.js";
 import type { PairingService } from "../hub/pairing-service.js";
+import { logger } from "../utils/logger.js";
 
 export function registerTrustRoutes(
   app: FastifyInstance,
   trustStore: TrustStore,
   pairingService?: PairingService,
+  relayClient?: RelayClient,
 ): void {
   app.get("/api/trust", async () => trustStore.listTrusted());
 
@@ -49,6 +52,14 @@ export function registerTrustRoutes(
     const hubId = readRequiredString(request.body, "hubId", reply);
     if (!hubId) return;
     trustStore.block(hubId);
+    // Sync the block to the relay so it stops holding (and later delivering)
+    // the blocked Hub's offline traffic for us; local-only blocking kept the
+    // relay quota consumed. Best-effort: relay-side enforcement is the backstop.
+    try {
+      relayClient?.sendContactBlock(hubId);
+    } catch (error) {
+      logger.warn({ err: error, hubId }, "Unable to sync contact block to relay");
+    }
     return { success: true, hub: trustStore.get(hubId) };
   });
 

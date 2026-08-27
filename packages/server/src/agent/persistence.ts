@@ -1,25 +1,22 @@
-import type { AgentConfig, PersistedAgentConfig } from "@chorus/shared";
+import type {
+  AgentConfig,
+  CredentialAgentStatus,
+  CredentialStatus,
+  PersistedAgentConfig,
+} from "@chorus/shared";
 import {
   deleteCredential,
   getCredential,
   getCredentialStorageBackend,
   hasCredential,
   setCredential,
-  type CredentialStorageBackend,
 } from "../credential-store.js";
 import type { Repository } from "../db/repository.js";
 
 type AgentChanges = Partial<Omit<PersistedAgentConfig, "id">>;
 
-export interface StoredCredentialStatus {
-  id: string;
-  name: string;
-}
-
-export interface CredentialStatus {
-  backend: CredentialStorageBackend;
-  agents: StoredCredentialStatus[];
-}
+export type { CredentialStatus };
+export type StoredCredentialStatus = CredentialAgentStatus;
 
 export async function persistAgent(
   repository: Repository,

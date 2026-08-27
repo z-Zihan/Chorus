@@ -4,7 +4,9 @@ import { constants } from "node:fs";
 import { access } from "node:fs/promises";
 import { delimiter, isAbsolute, resolve } from "node:path";
 import type { ConversationContext, StreamChunk } from "@chorus/shared";
+import { DEFAULT_A2A_MAX_ROUNDS } from "@chorus/shared";
 import { BaseAdapter, messageFromError } from "../adapter";
+import { buildA2ASystemPrompt } from "../chorus-skill";
 import { resolveA2ATarget } from "./a2a-target";
 
 type CliInputMode = "stdin" | "argument";
@@ -39,7 +41,7 @@ interface PromptA2AResponse extends PromptA2ACall {
 }
 
 const A2A_CALL_PATTERN = /\[A2A_CALL:\s*([^:\]\r\n]+?)\s*:\s*([\s\S]*?)\]/gu;
-const DEFAULT_MAX_A2A_HANDOFFS = 12;
+const DEFAULT_MAX_A2A_HANDOFFS = DEFAULT_A2A_MAX_ROUNDS;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -221,7 +223,12 @@ export class CliAdapter extends BaseAdapter {
   readonly id: string;
   readonly name: string;
   override readonly description: string;
-  private child: ChildProcess | null = null;
+  /**
+   * All live CLI children. The bus allows concurrent calls to a busy agent, so
+   * several processes can run at once — a single field would let a later spawn
+   * shadow an earlier one and strand it past destroy().
+   */
+  private readonly children = new Set<ChildProcess>();
 
   constructor(id: string, name: string, description = "CLI Agent") {
     super();
@@ -460,7 +467,8 @@ ${message}`;
       stdio: ["pipe", "pipe", "pipe"],
       shell: process.platform === "win32",
     });
-    this.child = child;
+    this.children.add(child);
+    child.once("close", () => this.children.delete(child));
     let timedOut = false;
 
     const abortHandler = () => {
@@ -515,7 +523,7 @@ ${message}`;
     } finally {
       clearTimeout(timeout);
       context.signal?.removeEventListener("abort", abortHandler);
-      this.child = null;
+      this.children.delete(child);
     }
   }
 
@@ -609,28 +617,11 @@ ${message}`;
   }
 
   destroy(): void {
-    if (this.child && !this.child.killed) {
-      this.child.kill("SIGTERM");
-      setTimeout(() => {
-        if (this.child && !this.child.killed) this.child.kill("SIGKILL");
-      }, 3000);
+    for (const child of this.children) {
+      terminate(child);
     }
+    this.children.clear();
   }
-}
-
-function buildA2ASystemPrompt(
-  callableAgentIds: string[],
-  agentNames?: Record<string, string>,
-): string {
-  const directory = callableAgentIds
-    .map((id) => (agentNames?.[id] ? `${id} (${agentNames[id]})` : id))
-    .join(", ");
-  return [
-    `You are in a multi-agent workspace. Other available agents: [${directory}].`,
-    "If you need help from another agent, include this exact format in your response:",
-    "[A2A_CALL: target_agent_id: your_message_to_that_agent]",
-    "You can make multiple A2A calls. After each call, wait for the response before continuing.",
-  ].join("\n");
 }
 
 function parseA2ACalls(output: string): PromptA2ACall[] {

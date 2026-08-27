@@ -1,4 +1,5 @@
 import type { HubEnvelope } from "@chorus/shared";
+import { DEFAULT_OFFLINE_RETENTION_MS } from "@chorus/shared";
 
 export type DeliveryStatus = "queued" | "delivered" | "accepted" | "denied" | "done" | "error";
 
@@ -14,7 +15,7 @@ export interface OfflineMessage {
   expiresAt: number;
 }
 
-export const DEFAULT_OFFLINE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+export const DEFAULT_OFFLINE_TTL_MS = DEFAULT_OFFLINE_RETENTION_MS;
 
 export class OfflineStore {
   private readonly messages = new Map<string, OfflineMessage>();
@@ -51,22 +52,33 @@ export class OfflineStore {
     message.deliveredAt ??= this.now();
   }
 
-  /** Mark as accepted or denied by the recipient. */
+  /** Mark as accepted or denied by the recipient. Terminal: no flipping between settled states. */
   markSettled(messageId: string, status: "accepted" | "denied"): void {
     const message = this.messages.get(messageId);
-    if (!message || !["queued", "delivered", "accepted", "denied"].includes(message.status)) {
-      return;
-    }
+    if (!message || !["queued", "delivered"].includes(message.status)) return;
     message.status = status;
     message.settledAt = this.now();
   }
 
-  /** Mark as done or error after processing. */
+  /** Mark as done or error after processing. Never overrides a settled denial. */
   markComplete(messageId: string, status: "done" | "error"): void {
     const message = this.messages.get(messageId);
-    if (!message || message.status === "done" || message.status === "error") return;
+    if (!message || message.status === "denied") return;
+    if (message.status === "done" || message.status === "error") return;
     message.status = status;
     message.settledAt = this.now();
+  }
+
+  /**
+   * A transport failure is a network condition, not a business outcome: fall
+   * back to queued so the message is retried (the receiver's envelope dedup
+   * keeps the resend from re-executing the agent).
+   */
+  markRetryable(messageId: string): void {
+    const message = this.messages.get(messageId);
+    if (!message || message.status !== "delivered") return;
+    message.status = "queued";
+    message.deliveredAt = undefined;
   }
 
   /** Get unacknowledged messages for a Hub in FIFO order. */

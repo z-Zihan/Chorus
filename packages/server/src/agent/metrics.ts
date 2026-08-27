@@ -1,9 +1,6 @@
-export interface AgentMetrics {
-  totalCalls: number;
-  successRate: number;
-  avgLatencyMs: number;
-  lastCallAt: number | null;
-}
+import type { AgentMetrics } from "@chorus/shared";
+
+export type { AgentMetrics };
 
 interface MetricsState {
   totalCalls: number;

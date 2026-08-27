@@ -78,6 +78,28 @@ describe("AgentRuntime A2A permissions", () => {
     await expect(resultPromise).resolves.toContain("已分析任务");
   });
 
+  it("blocks mention forwarding in deny mode (the default mention path honors a2aPolicy)", async () => {
+    runtime.setA2APermission(conversationId, "deny");
+    const callee = registry.getAdapter("callee");
+    if (!callee) throw new Error("Missing test adapter");
+    let calleeInput = "";
+    vi.spyOn(callee, "handleMessage").mockImplementation(async function* (message) {
+      calleeInput = message;
+      yield { type: "text", content: "你好，我是 Callee。" };
+      yield { type: "done", content: "" };
+    });
+
+    await runtime.handleUserMessage(conversationId, "给 Callee 发一条消息，你好吗", [], "caller");
+
+    expect(calleeInput).toBe("");
+    // Only the user message and the caller's own reply — no forwarded hop.
+    const messages = repository.listAllMessages(conversationId);
+    expect(messages.filter((message) => message.toType === "agent")).toHaveLength(1);
+    expect(
+      messages.some((message) => message.fromType === "agent" && message.toType === "agent"),
+    ).toBe(false);
+  });
+
   it("routes an agent output mention as a visible message in the same conversation", async () => {
     const caller = registry.getAdapter("caller");
     const callee = registry.getAdapter("callee");

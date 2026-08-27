@@ -15,15 +15,9 @@ const PAIRING_TTL_MS = 10 * 60 * 1000;
 const PAIRING_CLOCK_SKEW_MS = 60 * 1000;
 const PROTOCOL_VERSION = 1;
 
-type PairingRole = "initiator" | "responder";
-export type PairingStatus =
-  | "waiting_peer"
-  | "verifying"
-  | "awaiting_approval"
-  | "trusted"
-  | "cancelled"
-  | "expired"
-  | "failed";
+import type { PairingRole, PairingSessionView, PairingStatus } from "@chorus/shared";
+
+export type { PairingStatus, PairingSessionView };
 type WireKind = "response" | "confirm" | "approve" | "cancel";
 
 interface PairingInvitation {
@@ -63,19 +57,6 @@ interface PairingSession extends PairingInvitation {
   localApproved: boolean;
   peerApproved: boolean;
   remoteUser?: PairingUserCard;
-  error?: string;
-}
-
-export interface PairingSessionView {
-  sessionId: string;
-  role: PairingRole;
-  remoteHubId: string;
-  status: PairingStatus;
-  sas?: string;
-  expiresAt: number;
-  localApproved: boolean;
-  peerApproved: boolean;
-  remoteUserName?: string;
   error?: string;
 }
 

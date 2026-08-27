@@ -39,6 +39,11 @@ export function useAgentSettings(agentId: string | null) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!agentId) return;
+    // Read through getState so the reset depends only on which agent is
+    // selected: subscribing to the agent object itself made every
+    // agent_status event (online→busy during streaming) wipe unsaved edits.
+    const agent = useAgentStore.getState().agents.find((item) => item.id === agentId);
     if (!agent) return;
     const systemPrompt = configText(agent, "systemPrompt");
     setFields({
@@ -51,7 +56,7 @@ export function useAgentSettings(agentId: string | null) {
     });
     setInitialSystemPrompt(systemPrompt);
     setError(null);
-  }, [agent]);
+  }, [agentId]);
 
   const setField = useCallback(
     <K extends keyof AgentSettingsFields>(field: K, value: AgentSettingsFields[K]) => {

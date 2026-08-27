@@ -15,8 +15,15 @@ export interface DirectoryAudience {
 
 const PRIVATE_AUDIENCE: DirectoryAudience = { trusted: false, sharedRoom: false };
 
+const DIRECTORY_VERSION_SETTING_KEY = "hub.directoryVersion";
+
 export class DirectoryService {
-  private directoryVersion = 0;
+  /**
+   * Persisted so a restart cannot rewind version numbers below what peers have
+   * already cached (isNewer is strictly greater — a rewound version would make
+   * peers ignore our updates and revocations forever).
+   */
+  private directoryVersion: number;
   private readonly remoteDirectories = new Map<string, DirectoryManifest>();
 
   constructor(
@@ -24,7 +31,13 @@ export class DirectoryService {
     private readonly registry: AgentRegistry,
     private readonly localHubId = "",
     private readonly trustStore = new TrustStore(),
-  ) {}
+  ) {
+    const saved = Number.parseInt(
+      String(repository.getSetting?.(DIRECTORY_VERSION_SETTING_KEY) ?? ""),
+      10,
+    );
+    this.directoryVersion = Number.isSafeInteger(saved) && saved > 0 ? saved : 0;
+  }
 
   /** Build an unsigned directory manifest containing only agents visible to the audience. */
   buildLocalDirectory(audience: DirectoryAudience = PRIVATE_AUDIENCE): DirectoryManifest | null {
@@ -46,9 +59,13 @@ export class DirectoryService {
         visibility,
       }));
 
+    // Persist the bumped version so a restart resumes above what peers cached.
+    this.directoryVersion += 1;
+    this.repository.setSetting?.(DIRECTORY_VERSION_SETTING_KEY, String(this.directoryVersion));
+
     const manifest: Omit<DirectoryManifest, "signature"> = {
       schemaVersion: 1,
-      directoryVersion: ++this.directoryVersion,
+      directoryVersion: this.directoryVersion,
       issuedAt,
       expiresAt: issuedAt + DIRECTORY_TTL_MS,
       user: {

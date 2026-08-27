@@ -1,17 +1,18 @@
 import type { FastifyInstance } from "fastify";
+import { LOG_LEVELS, LOG_SOURCES } from "@chorus/shared";
 import { z } from "zod";
 import { getServerLogs, ingestLogEntries } from "../utils/logger.js";
 
 const logQuerySchema = z.object({
-  level: z.enum(["trace", "debug", "info", "warn", "error", "fatal"]).optional(),
-  source: z.enum(["frontend", "backend", "relay", "desktop"]).optional(),
+  level: z.enum(LOG_LEVELS).optional(),
+  source: z.enum(LOG_SOURCES).optional(),
   limit: z.coerce.number().int().min(1).max(2_000).default(500),
 });
 
 const clientLogSchema = z.object({
   id: z.string().max(100).optional(),
   timestamp: z.number().int().nonnegative(),
-  level: z.enum(["trace", "debug", "info", "warn", "error", "fatal"]),
+  level: z.enum(LOG_LEVELS),
   message: z.string().max(20_000),
   data: z.unknown().optional(),
 });

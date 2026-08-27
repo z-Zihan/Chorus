@@ -81,6 +81,11 @@ export const clientTokens = sqliteTable("client_tokens", {
   revoked: integer("revoked", { mode: "boolean" }).notNull().default(false),
 });
 
+export const processedEnvelopes = sqliteTable("processed_envelopes", {
+  id: text("id").primaryKey(),
+  processedAt: integer("processed_at").notNull(),
+});
+
 export const conversations = sqliteTable("conversations", {
   id: text("id").primaryKey(),
   title: text("title"),

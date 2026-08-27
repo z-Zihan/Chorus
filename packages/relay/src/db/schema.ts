@@ -23,6 +23,8 @@ export const rooms = sqliteTable("rooms", {
   name: text("name").notNull(),
   createdBy: text("created_by").notNull(),
   createdAt: integer("created_at").notNull(),
+  revision: integer("revision").notNull().default(1),
+  keyEpoch: integer("key_epoch").notNull().default(1),
 });
 
 export const roomMembers = sqliteTable(

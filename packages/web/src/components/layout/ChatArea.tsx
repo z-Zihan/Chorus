@@ -31,6 +31,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { api, type A2AMode } from "@/services/api";
+import type { Agent } from "@chorus/shared";
 import { logger } from "@/utils/logger";
 import { GroupMemberList } from "@/components/chat/GroupMemberList";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -53,6 +54,7 @@ export function ChatArea() {
   const pendingConfirmation = useChatStore((s) => s.a2aConfirmations[0]);
   const dismissA2AConfirmation = useChatStore((s) => s.dismissA2AConfirmation);
   const syncConversation = useChatStore((s) => s.syncConversation);
+  const typingAgents = useChatStore((s) => s.typingAgents);
   const openSidebar = useUIStore((s) => s.openSidebar);
   const hubConnectionState = useHubStore((s) => s.hubConnectionState);
   const [confirmationSubmitting, setConfirmationSubmitting] = useState(false);
@@ -100,74 +102,38 @@ export function ChatArea() {
   const confirmationTo =
     agents.find((agent) => agent.id === pendingConfirmation?.to)?.name ?? pendingConfirmation?.to;
 
-  const [a2aMode, setA2aMode] = useState<A2AMode | null>(null);
-  const [isA2AModeLoading, setIsA2AModeLoading] = useState(false);
+  // Single source of truth: Conversation.a2aMode in the chat store. A separate
+  // per-view fetch used to go stale against edits made in the other view.
+  const a2aMode: A2AMode | null =
+    currentConv?.type === "group" ? (currentConv.a2aMode ?? null) : null;
   const [a2aModeError, setA2AModeError] = useState(false);
+  const fetchConversations = useChatStore((s) => s.fetchConversations);
   const [isAddAgentOpen, setIsAddAgentOpen] = useState(false);
   const [pendingAddAgentId, setPendingAddAgentId] = useState<string | null>(null);
   const [addAgentError, setAddAgentError] = useState<string | null>(null);
-  const currentConversationIdForMode = currentConv?.id;
-  const currentConversationTypeForMode = currentConv?.type;
-
-  useEffect(() => {
-    let active = true;
-    if (!currentConversationIdForMode || currentConversationTypeForMode !== "group") {
-      setA2aMode(null);
-      setA2AModeError(false);
-      return () => {
-        active = false;
-      };
-    }
-    setIsA2AModeLoading(true);
-    setA2AModeError(false);
-    void api
-      .getA2AMode(currentConversationIdForMode, true)
-      .then((result) => {
-        if (active) setA2aMode(result.mode);
-      })
-      .catch((error: unknown) => {
-        logger.error("Failed to load A2A mode", error);
-        if (active) {
-          setA2aMode(null);
-          setA2AModeError(true);
-        }
-      })
-      .finally(() => {
-        if (active) setIsA2AModeLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [currentConversationIdForMode, currentConversationTypeForMode]);
 
   const retryA2AMode = async () => {
-    if (!currentConversationIdForMode || currentConversationTypeForMode !== "group") return;
-    setIsA2AModeLoading(true);
     setA2AModeError(false);
     try {
-      setA2aMode((await api.getA2AMode(currentConversationIdForMode, true)).mode);
+      await fetchConversations();
     } catch (error) {
-      logger.error("Failed to load A2A mode", error);
-      setA2aMode(null);
+      logger.error("Failed to reload conversations for A2A mode", error);
       setA2AModeError(true);
-    } finally {
-      setIsA2AModeLoading(false);
     }
   };
 
   const handleA2AModeChange = async (mode: A2AMode) => {
-    if (!a2aMode || isA2AModeLoading) return;
+    if (!a2aMode || !currentConv) return;
     const previousMode = a2aMode;
-    setA2aMode(mode);
+    // Optimistic store update keeps ChatArea and PrivacySettings consistent.
+    syncConversation({ ...currentConv, a2aMode: mode });
     setA2AModeError(false);
-    if (currentConv) {
-      try {
-        await api.setA2AMode(currentConv.id, mode, true);
-      } catch (error) {
-        setA2aMode(previousMode);
-        setA2AModeError(true);
-        logger.error("Failed to set A2A mode", error);
-      }
+    try {
+      await api.setA2AMode(currentConv.id, mode, true);
+    } catch (error) {
+      syncConversation({ ...currentConv, a2aMode: previousMode });
+      setA2AModeError(true);
+      logger.error("Failed to set A2A mode", error);
     }
   };
 
@@ -383,7 +349,7 @@ export function ChatArea() {
                   return (
                     <DropdownMenuItem
                       key={value}
-                      disabled={!a2aMode || isA2AModeLoading}
+                      disabled={!a2aMode}
                       onSelect={() => void handleA2AModeChange(value)}
                       className={`group/a2a relative items-start gap-3 px-2.5 py-2 ${selected ? "bg-[var(--accent-subtle)]" : ""}`}
                     >
@@ -468,6 +434,8 @@ export function ChatArea() {
       </div>
 
       {/* Input */}
+      <TypingIndicator typingMap={typingAgents} agents={agents} />
+
       <InputBar />
 
       <Dialog
@@ -513,6 +481,48 @@ export function ChatArea() {
           </div>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+/**
+ * Live peer-input indicator fed by the server's `typing` events. Entries expire
+ * client-side: a crashed peer would never send isTyping=false, so the timestamp
+ * heartbeat in chatStore + this sweep keeps stale indicators from lingering.
+ */
+const TYPING_EXPIRE_MS = 6_000;
+
+function TypingIndicator({
+  typingMap,
+  agents,
+}: {
+  typingMap: Record<string, number>;
+  agents: Agent[];
+}) {
+  const { t } = useTranslation("chat");
+  // Expire client-side: a crashed peer never sends isTyping=false. The interval
+  // ticks into state so the expiry re-evaluates without impure render calls.
+  const [now, setNow] = useState(() => Date.now());
+  const typingCount = Object.keys(typingMap).length;
+  useEffect(() => {
+    if (typingCount === 0) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, [typingCount]);
+  const active = Object.keys(typingMap).filter(
+    (agentId) => now - (typingMap[agentId] ?? 0) < TYPING_EXPIRE_MS,
+  );
+  if (active.length === 0) return null;
+  const names = active.map(
+    (agentId) => agents.find((agent) => agent.id === agentId)?.name ?? agentId,
+  );
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="px-4 pb-1 text-xs text-[var(--text-secondary)] sm:px-6"
+    >
+      {t("typingIndicator", { names: names.join(", ") })}
     </div>
   );
 }

@@ -78,6 +78,16 @@ export function createDatabase(dbPath: string) {
     sqlite.exec("ALTER TABLE hubs ADD COLUMN auth_version INTEGER NOT NULL DEFAULT 1");
   }
 
+  // Persisted per-room CAS counters: in-memory state used to reset to {1,1} on
+  // restart, breaking monotonicity against clients that kept higher revisions.
+  const roomColumns = sqlite.prepare("PRAGMA table_info(rooms)").all() as Array<{ name: string }>;
+  if (!roomColumns.some(({ name }) => name === "revision")) {
+    sqlite.exec("ALTER TABLE rooms ADD COLUMN revision INTEGER NOT NULL DEFAULT 1");
+  }
+  if (!roomColumns.some(({ name }) => name === "key_epoch")) {
+    sqlite.exec("ALTER TABLE rooms ADD COLUMN key_epoch INTEGER NOT NULL DEFAULT 1");
+  }
+
   const db = drizzle(sqlite, { schema });
   return { sqlite, db };
 }

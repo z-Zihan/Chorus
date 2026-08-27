@@ -46,8 +46,19 @@ export function requiredApiScope(method: string, pathname: string): string | nul
   if (pathname.startsWith("/api/hub") || pathname.startsWith("/api/trust")) {
     return read ? "hub:read" : "hub:write";
   }
-  if (pathname.startsWith("/api/search") || pathname.startsWith("/api/export")) {
+  // Message search returns full conversation content — same resource scope as
+  // export, not the generic api:read fallback. (The old "/api/search" prefix
+  // never matched the real route "/api/messages/search".)
+  if (pathname.startsWith("/api/messages/search") || pathname.startsWith("/api/export")) {
     return "conversations:read";
+  }
+  // Credential and bulk-cleanup endpoints mutate agent/conversation data and
+  // must not fall through to the generic api:read/api:write catch-all.
+  if (pathname.startsWith("/api/credentials")) {
+    return read ? "agents:read" : "agents:write";
+  }
+  if (pathname.startsWith("/api/cleanup")) {
+    return read ? "conversations:read" : "conversations:write";
   }
   if (pathname.startsWith("/api/tokens")) return "tokens:manage";
   return read ? "api:read" : "api:write";

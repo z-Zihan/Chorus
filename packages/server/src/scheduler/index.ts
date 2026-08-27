@@ -4,22 +4,14 @@ import type { AgentRuntime } from "../agent/runtime.js";
 import type { Repository } from "../db/repository.js";
 import { logger } from "../utils/logger.js";
 
-export interface ScheduledAgentTask {
-  id: string;
-  agentId: string;
-  conversationId: string;
-  cronExpression: string;
-  prompt: string;
-  enabled: boolean;
-  createdAt: number;
-  lastRunAt?: number | null;
-  lastResult?: string | null;
-  nextRunAt?: number | null;
-}
+import type { ScheduledAgentTask } from "@chorus/shared";
+
+export type { ScheduledAgentTask };
 
 export class Scheduler {
   private readonly tasks = new Map<string, ScheduledAgentTask>();
   private readonly jobs = new Map<string, CronTask>();
+  private readonly runningTasks = new Set<string>();
 
   constructor(
     private readonly repository: Repository,
@@ -60,6 +52,27 @@ export class Scheduler {
     return this.repository.deleteScheduledTask(taskId);
   }
 
+  /**
+   * Unregister every in-memory job for a conversation whose DB rows were just
+   * removed (conversation / agent deletion) — otherwise the cron keeps firing
+   * for a deleted target until the process restarts.
+   */
+  cancelByConversation(conversationId: string): void {
+    for (const task of this.tasks.values()) {
+      if (task.conversationId !== conversationId) continue;
+      this.stop(task.id);
+      this.tasks.delete(task.id);
+    }
+  }
+
+  cancelByAgent(agentId: string): void {
+    for (const task of this.tasks.values()) {
+      if (task.agentId !== agentId) continue;
+      this.stop(task.id);
+      this.tasks.delete(task.id);
+    }
+  }
+
   list(): ScheduledAgentTask[] {
     return [...this.tasks.values()].sort((left, right) => left.createdAt - right.createdAt);
   }
@@ -86,6 +99,16 @@ export class Scheduler {
   private start(task: ScheduledAgentTask): void {
     this.stop(task.id);
     const job = cron.schedule(task.cronExpression, () => {
+      // LLM calls routinely outlast short cron intervals; a still-running task
+      // skips the tick instead of stacking concurrent executions of one prompt.
+      if (this.runningTasks.has(task.id)) {
+        logger.warn(
+          { taskId: task.id, agentId: task.agentId },
+          "Scheduled task skipped: still running",
+        );
+        return;
+      }
+      this.runningTasks.add(task.id);
       void this.runtime
         .handleUserMessage(task.conversationId, task.prompt, [], task.agentId)
         .then(() => {
@@ -97,6 +120,9 @@ export class Scheduler {
             "Scheduled task failed",
           );
           this.markRun(task.id, { lastResult: "error" });
+        })
+        .finally(() => {
+          this.runningTasks.delete(task.id);
         });
     });
     this.jobs.set(task.id, job);

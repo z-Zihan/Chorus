@@ -16,12 +16,8 @@ import { PasswordInput } from "@/components/common/PasswordInput";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/cn";
-import {
-  useCatalogStore,
-  type CatalogEntry,
-  type InstallMethod,
-  type InstallRecipe,
-} from "@/store/catalogStore";
+import type { InstallMethod, InstallRecipe } from "@chorus/shared";
+import { useCatalogStore, type CatalogEntry } from "@/store/catalogStore";
 
 type Filter = "all" | "cli" | "api" | "installed";
 

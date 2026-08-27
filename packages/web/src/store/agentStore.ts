@@ -8,11 +8,6 @@ export type { Agent, AgentStatus } from "@chorus/shared";
 
 export type AgentHealthState = "healthy" | "checking" | "unhealthy";
 
-export interface AgentGroup {
-  user: { id: string; name: string; kind: "local" | "remote" };
-  agents: Agent[];
-}
-
 export interface AgentHealthStatus {
   status: AgentHealthState;
   lastCheck: number | null;
@@ -41,7 +36,6 @@ interface AgentState {
   selectAgent: (agentId: string) => void;
   clearSelectedAgent: () => void;
   filterByAgent: (agentId: string | null) => void;
-  fetchGroupedAgents: () => Promise<AgentGroup[]>;
 }
 
 export const useAgentStore = create<AgentState>((set, get) => ({
@@ -130,25 +124,37 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   },
 
   updateAgentStatus: (agentId, status, error) =>
-    set((state) => ({
-      agents: state.agents.map((a) => {
-        if (a.id !== agentId) return a;
-        return { ...a, status, error };
-      }),
-      statusByAgentId: { ...state.statusByAgentId, [agentId]: { status, error } },
-    })),
+    set((state) => {
+      // Keep the previous references when nothing changed: agent_status events
+      // fire per stream chunk, and fresh array/object references retrigger every
+      // effect/selector subscribed to `agents` (request storms, form resets).
+      const current = state.agents.find((agent) => agent.id === agentId);
+      if (!current || (current.status === status && current.error === error)) return state;
+      return {
+        agents: state.agents.map((agent) =>
+          agent.id === agentId ? { ...agent, status, error } : agent,
+        ),
+        statusByAgentId: { ...state.statusByAgentId, [agentId]: { status, error } },
+      };
+    }),
 
   updateAgentStatuses: (statuses) =>
     set((state) => {
+      let changed = false;
       const statusByAgentId = { ...state.statusByAgentId };
       for (const { agentId, status, error } of statuses) {
+        const existing = statusByAgentId[agentId];
+        if (existing && existing.status === status && existing.error === error) continue;
         statusByAgentId[agentId] = { status, error };
+        changed = true;
       }
+      if (!changed) return state;
       return {
         statusByAgentId,
         agents: state.agents.map((agent) => {
           const next = statusByAgentId[agent.id];
-          return next ? { ...agent, ...next } : agent;
+          if (!next || (agent.status === next.status && agent.error === next.error)) return agent;
+          return { ...agent, ...next };
         }),
       };
     }),
@@ -182,19 +188,4 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       conversationAgentFilter: agentId,
       selectedAgentId: agentId ?? state.selectedAgentId,
     })),
-
-  fetchGroupedAgents: async () => {
-    const users = await api.getUsersWithAgents();
-    const groups: AgentGroup[] = users
-      .map((user) => ({
-        user: { id: user.id, name: user.name, kind: user.kind },
-        agents: user.agents ?? [],
-      }))
-      .sort((a, b) => {
-        if (a.user.kind === "local" && b.user.kind !== "local") return -1;
-        if (a.user.kind !== "local" && b.user.kind === "local") return 1;
-        return a.user.name.localeCompare(b.user.name);
-      });
-    return groups;
-  },
 }));

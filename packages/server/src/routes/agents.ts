@@ -2,6 +2,7 @@ import type { AgentConfig } from "@chorus/shared";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { AgentRegistry } from "../agent/registry.js";
+import type { Scheduler } from "../scheduler/index.js";
 import { setCredential } from "../credential-store.js";
 import type { Repository } from "../db/repository.js";
 import { logger } from "../utils/logger.js";
@@ -66,6 +67,7 @@ export function registerAgentRoutes(
   app: FastifyInstance,
   registry: AgentRegistry,
   repository: Repository,
+  scheduler?: Scheduler,
 ): void {
   app.get("/api/agents", async (request, reply) => {
     const parsed = agentQuerySchema.safeParse(request.query);
@@ -189,7 +191,9 @@ export function registerAgentRoutes(
   app.delete<{ Params: { id: string } }>("/api/agents/:id", async (req, reply) => {
     if (!registry.get(req.params.id, true))
       return reply.code(404).send({ error: "Agent not found" });
-    return { ok: await registry.unregisterAndDelete(req.params.id) };
+    const deleted = await registry.unregisterAndDelete(req.params.id);
+    if (deleted) scheduler?.cancelByAgent(req.params.id);
+    return { ok: deleted };
   });
 
   app.get("/api/credentials", async () => registry.getCredentialStatus());

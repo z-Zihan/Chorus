@@ -5,35 +5,19 @@ import { chmod, unlink, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { tmpdir } from "node:os";
 import { EventEmitter } from "node:events";
-import type { PersistedAgentConfig } from "@chorus/shared";
+import type {
+  InstallationStage,
+  InstallationStatus,
+  InstallOptions,
+  PersistedAgentConfig,
+} from "@chorus/shared";
 import type { AgentRegistry } from "../agent/registry.js";
 import type { CliDetector } from "../cli-detector/index.js";
 import type { CatalogService } from "./index.js";
 import type { CatalogEntry, InstallRecipe } from "./schema.js";
 import { setCredential } from "../credential-store.js";
 
-export type InstallationStage =
-  "checking" | "downloading" | "installing" | "verifying" | "done" | "error";
-
-export interface InstallOptions {
-  recipeMethod?: InstallRecipe["method"];
-  apiKey?: string;
-  config?: Record<string, unknown>;
-  acceptPermissions?: boolean;
-}
-
-export interface InstallationStatus {
-  id: string;
-  entryId: string;
-  stage: InstallationStage;
-  progress: number;
-  command?: string;
-  agentId?: string;
-  error?: string;
-  cancelled?: boolean;
-  startedAt: number;
-  updatedAt: number;
-}
+export type { InstallationStage, InstallationStatus, InstallOptions };
 
 interface RunningInstallation {
   status: InstallationStatus;

@@ -33,9 +33,14 @@ export class RoomManager {
       name,
       createdBy: createdByHubId,
       createdAt: Date.now(),
+      revision: 1,
+      keyEpoch: 1,
     };
     this.database.sqlite.transaction(() => {
-      this.database.db.insert(rooms).values(room).run();
+      this.database.db
+        .insert(rooms)
+        .values({ ...room, revision: 1, keyEpoch: 1 })
+        .run();
       this.database.db
         .insert(roomMembers)
         .values({

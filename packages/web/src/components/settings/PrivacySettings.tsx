@@ -42,20 +42,19 @@ export function PrivacySettings() {
   const groupConversations = useChatStore((state) => state.groupConversations);
   const conversationsError = useChatStore((state) => state.conversationsError);
   const fetchConversations = useChatStore((state) => state.fetchConversations);
+  const syncConversation = useChatStore((state) => state.syncConversation);
   const addToast = useUIStore((state) => state.addToast);
   const conversations = useMemo(
     () => [...dmConversations, ...groupConversations],
     [dmConversations, groupConversations],
   );
   const [trustList, setTrustList] = useState<TrustedHub[]>([]);
-  const [a2aModes, setA2aModes] = useState<Record<string, A2AMode>>({});
   const [maxRounds, setMaxRounds] = useState<number | null>(null);
   const [maxRoundsDraft, setMaxRoundsDraft] = useState("12");
   const [callTimeoutMinutes, setCallTimeoutMinutes] = useState<number | null>(null);
   const [callTimeoutDraft, setCallTimeoutDraft] = useState("5");
   const [isLoading, setIsLoading] = useState(true);
   const [trustLoadFailed, setTrustLoadFailed] = useState(false);
-  const [modesLoadFailed, setModesLoadFailed] = useState(false);
   const [roundsLoadFailed, setRoundsLoadFailed] = useState(false);
   const [isRoundsSaving, setIsRoundsSaving] = useState(false);
   const [roundsError, setRoundsError] = useState<string | null>(null);
@@ -68,13 +67,13 @@ export function PrivacySettings() {
   const loadPrivacySettings = useCallback(async () => {
     setIsLoading(true);
     setTrustLoadFailed(false);
-    setModesLoadFailed(false);
     setRoundsLoadFailed(false);
-    const modeConversations = conversations.slice(0, 20);
-    const [trustResult, roundsResult, ...modeResults] = await Promise.allSettled([
+    // A2A modes derive from the conversation list itself (Conversation.a2aMode)
+    // — the per-conversation fetches duplicated server state in a local map that
+    // went stale against edits made in the chat view.
+    const [trustResult, roundsResult] = await Promise.allSettled([
       api.getTrustList(true),
       api.getA2ACollaborationSettings(true),
-      ...modeConversations.map((conversation) => api.getA2AMode(conversation.id, true)),
     ]);
 
     if (trustResult.status === "fulfilled") {
@@ -97,32 +96,24 @@ export function PrivacySettings() {
       setRoundsLoadFailed(true);
     }
 
-    const loadedModes: Record<string, A2AMode> = {};
-    let anyModeFailed = false;
-    modeConversations.forEach((conversation, index) => {
-      const result = modeResults[index];
-      if (result?.status === "fulfilled") loadedModes[conversation.id] = result.value.mode;
-      else anyModeFailed = true;
-    });
-    setA2aModes((current) => ({ ...current, ...loadedModes }));
-    setModesLoadFailed(anyModeFailed);
     setIsLoading(false);
-  }, [conversations]);
+  }, []);
 
   useEffect(() => {
     void loadPrivacySettings();
   }, [loadPrivacySettings]);
 
   const handleA2AModeChange = async (conversationId: string, mode: A2AMode) => {
-    const previousMode = a2aModes[conversationId];
-    if (!previousMode) return;
+    const conversation = conversations.find((item) => item.id === conversationId);
+    const previousMode = conversation?.a2aMode;
+    if (!conversation || !previousMode) return;
     setPendingConversationId(conversationId);
-    setA2aModes((current) => ({ ...current, [conversationId]: mode }));
+    syncConversation({ ...conversation, a2aMode: mode });
     try {
       await api.setA2AMode(conversationId, mode, true);
     } catch (error) {
       logger.error("Failed to set A2A mode", error);
-      setA2aModes((current) => ({ ...current, [conversationId]: previousMode }));
+      syncConversation({ ...conversation, a2aMode: previousMode });
       addToast(t("settings:a2aModeUpdateFailed"), "error");
     } finally {
       setPendingConversationId(null);
@@ -196,13 +187,7 @@ export function PrivacySettings() {
 
   const localAgents = agents.filter((agent) => agent.ownerType !== "remote");
 
-  if (
-    isLoading &&
-    trustList.length === 0 &&
-    Object.keys(a2aModes).length === 0 &&
-    maxRounds === null &&
-    callTimeoutMinutes === null
-  ) {
+  if (isLoading && trustList.length === 0 && maxRounds === null && callTimeoutMinutes === null) {
     return (
       <div role="status" className="flex items-center gap-2 p-4 text-sm text-[var(--text-muted)]">
         <LoaderCircle aria-hidden="true" className="h-4 w-4 animate-spin" />
@@ -387,37 +372,12 @@ export function PrivacySettings() {
             </Button>
           </div>
         )}
-        {modesLoadFailed && (
-          <div
-            role="alert"
-            className="mb-3 rounded-lg border border-[var(--status-error)]/30 bg-[var(--status-error)]/5 p-3"
-          >
-            <div className="flex items-start gap-2">
-              <AlertCircle
-                aria-hidden="true"
-                className="mt-0.5 h-4 w-4 shrink-0 text-[var(--status-error)]"
-              />
-              <p className="text-xs leading-5 text-[var(--text-secondary)]">
-                {t("settings:a2aModesLoadFailed")}
-              </p>
-            </div>
-            <Button
-              variant="secondary"
-              size="sm"
-              className="mt-2 min-h-11 sm:min-h-8"
-              onClick={() => void loadPrivacySettings()}
-            >
-              <RefreshCw aria-hidden="true" className="h-3.5 w-3.5" />
-              {t("common:buttons.retry")}
-            </Button>
-          </div>
-        )}
         <div className="space-y-1">
           {!conversationsError && conversations.length === 0 && (
             <p className="text-xs text-[var(--text-muted)]">{t("settings:noConversations")}</p>
           )}
           {conversations.slice(0, 10).map((conversation) => {
-            const mode = a2aModes[conversation.id];
+            const mode = conversation.a2aMode ?? "mention";
             const isPending = pendingConversationId === conversation.id;
             return (
               <div

@@ -11,6 +11,7 @@ import type { RelayClient } from "../hub/relay-client.js";
 
 const HUB_CONFIG_SETTING_KEY = "hub.config";
 const P2P_DISMISSED_SETTING_KEY = "hub.p2p.dismissed";
+const P2P_APPROVED_SETTING_KEY = "hub.p2p.approved";
 
 interface RoutableP2PListener extends P2PListener {
   listeningPort?: number;
@@ -36,7 +37,9 @@ export function registerHubRoutes(app: FastifyInstance, dependencies: HubRouteDe
   const dismissedHubIds = new Set(
     parseStringArray(repository.getSetting(P2P_DISMISSED_SETTING_KEY)),
   );
-  const approvedHubIds = new Set<string>();
+  // Approved devices persist so a restart does not force re-approval of every
+  // previously trusted P2P peer (dismissals were already persisted).
+  const approvedHubIds = new Set(parseStringArray(repository.getSetting(P2P_APPROVED_SETTING_KEY)));
   const discoveredPeers = new Map<string, P2PDiscoveredHub>();
   const listener = (connectionManager as unknown as { p2pListener: RoutableP2PListener })
     .p2pListener;
@@ -147,6 +150,7 @@ export function registerHubRoutes(app: FastifyInstance, dependencies: HubRouteDe
     setPeerPublicKey(hubId, hub.publicKey);
     try {
       await connectToHub(hub);
+      repository.setSetting(P2P_APPROVED_SETTING_KEY, JSON.stringify([...approvedHubIds]));
       return { ok: true };
     } catch (error) {
       approvedHubIds.delete(hubId);
@@ -165,6 +169,7 @@ export function registerHubRoutes(app: FastifyInstance, dependencies: HubRouteDe
     approvedHubIds.delete(hubId);
     dismissedHubIds.add(hubId);
     repository.setSetting(P2P_DISMISSED_SETTING_KEY, JSON.stringify([...dismissedHubIds]));
+    repository.setSetting(P2P_APPROVED_SETTING_KEY, JSON.stringify([...approvedHubIds]));
     return { ok: true };
   });
 
@@ -203,6 +208,11 @@ export function registerHubRoutes(app: FastifyInstance, dependencies: HubRouteDe
       createdByHubId: identity.hubId,
       adminHubIds: [identity.hubId],
     });
+    // Join immediately (same as invitation acceptance): the room:members reply
+    // populates the local member cache that inbound authorization checks use.
+    // Without it the creator cannot authorize peer traffic until the next relay
+    // reconnect.
+    relayClient.joinRoom(room.id);
     return reply.code(201).send({ roomId: room.id, name: room.name });
   });
 
@@ -268,11 +278,51 @@ export function registerHubRoutes(app: FastifyInstance, dependencies: HubRouteDe
       roomState.keyEpoch,
       userKey.privateKey,
     );
+    // Coordinate the membership change through the relay's authoritative CAS
+    // counter (CROSS_DEVICE_DESIGN room-state CAS). When the relay is reachable,
+    // a losing proposal must resync instead of blindly overwriting local state —
+    // that is what prevents split-brain when two Hubs mutate one Room.
+    const casState = repository.getRoomState(conversation.id);
+    if (relayClient.state === "connected" && casState) {
+      const result = await relayClient.roomCas(
+        conversation.relayRoomId,
+        { revision: casState.revision, keyEpoch: casState.keyEpoch },
+        { revision: casState.revision + 1, keyEpoch: casState.keyEpoch },
+      );
+      if (!result.accepted) {
+        void relayClient.joinRoom(conversation.relayRoomId);
+        return reply.code(409).send({
+          error: "ROOM_STATE_CONFLICT",
+          revision: result.revision,
+          keyEpoch: result.keyEpoch,
+        });
+      }
+      repository.setRoomCounters(conversation.relayRoomId, {
+        revision: result.revision,
+        keyEpoch: result.keyEpoch,
+      });
+    }
     const updated = repository.addAgentToConversation(conversation.id, [agentId], {
       [agentId]: JSON.stringify(ownerProof),
     });
-    if (!updated) return reply.code(404).send({ error: "Room or Agent not found" });
-    repository.incrementRoomRevision(conversation.relayRoomId);
+    if (!updated) {
+      // Roll the authoritative counters back so a local failure does not leave
+      // the room claiming a revision whose change never happened.
+      if (relayClient.state === "connected" && casState) {
+        await relayClient
+          .roomCas(
+            conversation.relayRoomId,
+            { revision: casState.revision + 1, keyEpoch: casState.keyEpoch },
+            { revision: casState.revision + 2, keyEpoch: casState.keyEpoch },
+          )
+          .catch(() => undefined);
+        repository.setRoomCounters(conversation.relayRoomId, {
+          revision: casState.revision + 2,
+          keyEpoch: casState.keyEpoch,
+        });
+      }
+      return reply.code(404).send({ error: "Room or Agent not found" });
+    }
     return { ok: true, agentId, ownerProof };
   });
 
@@ -306,12 +356,36 @@ export function registerHubRoutes(app: FastifyInstance, dependencies: HubRouteDe
         return reply.code(403).send({ error: "ROOM_ADMIN_REQUIRED" });
       }
 
-      const updated = repository.removeAgentFromConversation(
+      // Same CAS coordination as adds; removals additionally rotate the key
+      // epoch so OwnerProofs minted for the old epoch cannot be replayed.
+      const casState = repository.getRoomState(conversation.id);
+      if (relayClient.state === "connected" && casState) {
+        const result = await relayClient.roomCas(
+          conversation.relayRoomId,
+          { revision: casState.revision, keyEpoch: casState.keyEpoch },
+          { revision: casState.revision + 1, keyEpoch: casState.keyEpoch + 1 },
+        );
+        if (!result.accepted) {
+          void relayClient.joinRoom(conversation.relayRoomId);
+          return reply.code(409).send({
+            error: "ROOM_STATE_CONFLICT",
+            revision: result.revision,
+            keyEpoch: result.keyEpoch,
+          });
+        }
+        repository.setRoomCounters(conversation.relayRoomId, {
+          revision: result.revision,
+          keyEpoch: result.keyEpoch,
+        });
+      } else {
+        repository.incrementRoomRevision(conversation.relayRoomId);
+        repository.incrementRoomKeyEpoch(conversation.relayRoomId);
+      }
+      const removed = repository.removeAgentFromConversation(
         conversation.id,
         request.params.agentId,
       );
-      if (!updated) return reply.code(404).send({ error: "Room not found" });
-      repository.incrementRoomRevision(conversation.relayRoomId);
+      if (!removed) return reply.code(404).send({ error: "Room not found" });
       return { ok: true };
     },
   );

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { ClientEvent, Message, ServerEvent } from "@chorus/shared";
+import { HEARTBEAT_INTERVAL_MS, PONG_TIMEOUT_MS } from "@chorus/shared";
 import { useChatStore } from "@/store/chatStore";
 import { useAgentStore } from "@/store/agentStore";
 import { getWsUrl } from "@/services/env";
@@ -8,8 +9,7 @@ import { logger } from "@/utils/logger";
 
 const RECONNECT_BASE = 1000;
 const RECONNECT_MAX = 30000;
-const HEARTBEAT_MS = 30000;
-const PONG_TIMEOUT_MS = 10000;
+const HEARTBEAT_MS = HEARTBEAT_INTERVAL_MS;
 const ACTIVITY_REFRESH_MS = 2000;
 
 export function useWebSocket(enabled = true) {
@@ -33,6 +33,7 @@ export function useWebSocket(enabled = true) {
   const setWebSocketSend = useChatStore((s) => s.setWebSocketSend);
   const currentConversationId = useChatStore((s) => s.currentConversationId);
   const updateAgentStatus = useAgentStore((s) => s.updateAgentStatus);
+  const markTyping = useChatStore((s) => s.markTyping);
   const updateAgentStatuses = useAgentStore((s) => s.updateAgentStatuses);
 
   useEffect(() => {
@@ -243,6 +244,17 @@ export function useWebSocket(enabled = true) {
           logger.error("Server error", { message: event.message });
           if (event.messageId) setMessageStatus(event.messageId, "error");
           break;
+
+        case "typing":
+          markTyping(event.agentId, event.isTyping);
+          break;
+
+        default: {
+          // Exhaustiveness guard: a new ServerEvent variant must be handled
+          // (or explicitly ignored above), never silently dropped.
+          const unhandled: never = event;
+          logger.error("Unhandled server event", { type: (unhandled as ServerEvent).type });
+        }
       }
     };
 
@@ -327,6 +339,7 @@ export function useWebSocket(enabled = true) {
     currentConversationId,
     updateAgentStatus,
     updateAgentStatuses,
+    markTyping,
     enabled,
   ]);
 }

@@ -40,6 +40,7 @@ export function createDatabase(dbPath: string) {
   ensureAgentVisibilityColumn(sqlite);
   ensureTrustedHubsTable(sqlite);
   ensureClientTokensTable(sqlite);
+  ensureProcessedEnvelopesTable(sqlite);
   ensureScheduledTaskRunColumns(sqlite);
   initializeMessageSearch(sqlite);
   return { sqlite, db };
@@ -117,6 +118,13 @@ export function ensureClientTokensTable(sqlite: Database.Database): void {
     created_at INTEGER NOT NULL,
     last_used_at INTEGER,
     revoked INTEGER NOT NULL DEFAULT 0
+  )`);
+}
+
+export function ensureProcessedEnvelopesTable(sqlite: Database.Database): void {
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS processed_envelopes (
+    id TEXT PRIMARY KEY,
+    processed_at INTEGER NOT NULL
   )`);
 }
 

@@ -1,7 +1,6 @@
 {
   "messageInputLabel": "消息",
   "inputPlaceholderShort": "输入消息…",
-  "chooseConversation": "选择一个会话开始对话",
   "workspaceReadyTitle": "在一处继续所有对话",
   "workspaceReadyDescription": "发起单独对话、让多个 Agent 加入群聊，或从侧栏继续最近的会话。",
   "configureAgent": "配置 Agent",
@@ -11,7 +10,6 @@
     "label": "选择 Agent",
     "all": "全部",
     "allAgents": "全部 Agents",
-    "broadcastWarning": "将发送给所有在线 Agent",
     "search": "搜索 Agents…",
     "noAgents": "暂无在线 Agent",
     "selectAgents": "选择 Agents",
@@ -39,6 +37,7 @@
     "title": "消息状态",
     "description": "本地发送、Relay 传输与目标设备执行分别呈现，传输成功不等于 Agent 已完成。"
   },
+  "typingIndicator": "{{names}} 正在输入…",
   "a2aChain": "A2A 调用链",
   "a2aRunning": "运行中",
   "a2aCompleted": "已完成",
@@ -62,8 +61,6 @@
       "error": "执行失败"
     }
   },
-  "a2aForwardedMessage": "转发了消息",
-  "unknownAgent": "未知 Agent",
   "a2aMode": {
     "title": "Agent 协作模式",
     "description": "决定本会话中的 Agent 之间如何配合",
@@ -131,6 +128,5 @@
   "removeMemberTitle": "移除此 Agent？",
   "removeMemberMessage": "{{name}} 将不再参与此会话的新消息；已有消息会保留。",
   "removingMember": "移除中…",
-  "relayDisconnected": "Relay 已断开，正在重连...",
-  "relayError": "Relay 连接错误"
+  "relayDisconnected": "Relay 已断开，正在重连..."
 }

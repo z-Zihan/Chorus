@@ -91,6 +91,16 @@ export class AgentRegistry {
         }
       }
     });
+    relayClient?.onRoomEvent?.((roomId, event, eventHubId) => {
+      // Peer join/leave changes the member set; apply the delta directly so
+      // isHubInRoom (inbound authorization) never runs on stale data. The full
+      // list still comes from our own join replies — re-joining here would
+      // echo-broadcast between members into an infinite refresh loop.
+      const members = this.roomHubMembers.get(roomId);
+      if (!members) return;
+      if (event === "join") members.add(eventHubId);
+      else if (event === "leave") members.delete(eventHubId);
+    });
   }
 
   getHubPublicKey(hubId: string): string | undefined {

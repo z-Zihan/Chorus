@@ -1,7 +1,8 @@
 export const LOG_LEVELS = ["trace", "debug", "info", "warn", "error", "fatal"] as const;
+export const LOG_SOURCES = ["frontend", "backend", "relay", "desktop"] as const;
 
 export type LogLevel = (typeof LOG_LEVELS)[number];
-export type LogSource = "frontend" | "backend" | "relay" | "desktop";
+export type LogSource = (typeof LOG_SOURCES)[number];
 
 export interface LogEntry {
   id?: string;

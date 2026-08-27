@@ -1,5 +1,5 @@
-import { A2AThread } from "@/components/message/A2AThread";
 import { MessageBubble } from "@/components/message/MessageBubble";
+import { TaskTrackingCard } from "@/components/message/TaskTrackingCard";
 import type { A2AThreadState, Message } from "@/store/chatStore";
 import { useTranslation } from "react-i18next";
 
@@ -65,7 +65,7 @@ export function MessageStatusFixture() {
           <MessageBubble message={messages[0]} />
           <MessageBubble message={messages[1]} />
           <MessageBubble message={messages[2]} agentName="Local Agent" />
-          <A2AThread messages={[]} thread={thread} />
+          <TaskTrackingCard thread={thread} />
         </div>
       </section>
     </main>

@@ -67,11 +67,11 @@ export function registerRoutes(
     );
     reply.code(statusCode).send({ error: message });
   });
-  registerAgentRoutes(app, registry, repository);
+  registerAgentRoutes(app, registry, repository, scheduler);
   registerStandardRoutes(app, registry);
   registerMetricsRoutes(app, registry, runtime);
-  registerConversationRoutes(app, repository, registry, runtime, events);
-  registerCleanupRoutes(app, repository);
+  registerConversationRoutes(app, repository, registry, runtime, events, scheduler);
+  registerCleanupRoutes(app, repository, scheduler);
   registerExportRoutes(app, repository);
   registerSearchRoutes(app, repository.context, repository);
   registerDetectionRoutes(app, detector, registry);
@@ -80,6 +80,6 @@ export function registerRoutes(
   registerCatalogRoutes(app, catalog, installer);
   if (loader) registerPluginRoutes(app, loader);
   if (hub) registerHubRoutes(app, hub);
-  if (trustStore) registerTrustRoutes(app, trustStore, pairingService);
+  if (trustStore) registerTrustRoutes(app, trustStore, pairingService, hub?.relayClient);
   if (tokenStore) registerTokenRoutes(app, tokenStore, auth);
 }

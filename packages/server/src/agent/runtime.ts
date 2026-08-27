@@ -7,6 +7,14 @@ import type {
   StreamChunk,
 } from "@chorus/shared";
 import { parseMentions, truncateHistory } from "@chorus/shared";
+import {
+  DEFAULT_A2A_CALL_TIMEOUT_MINUTES,
+  DEFAULT_A2A_MAX_ROUNDS,
+  MAX_A2A_CALL_TIMEOUT_MINUTES,
+  MAX_A2A_MAX_ROUNDS,
+  MIN_A2A_CALL_TIMEOUT_MINUTES,
+  MIN_A2A_MAX_ROUNDS,
+} from "@chorus/shared";
 import type { Repository } from "../db/repository";
 import type { EventHub } from "../ws/events";
 import { messageFromError } from "./adapter";
@@ -19,12 +27,14 @@ import type { HubMessageRouter } from "../hub/message-router";
 import type { RelayClient } from "../hub/relay-client";
 import { buildAgentHandoff } from "./handoff";
 
-export const DEFAULT_A2A_MAX_ROUNDS = 12;
-export const MIN_A2A_MAX_ROUNDS = 1;
-export const MAX_A2A_MAX_ROUNDS = 50;
-export const DEFAULT_A2A_CALL_TIMEOUT_MINUTES = 5;
-export const MIN_A2A_CALL_TIMEOUT_MINUTES = 1;
-export const MAX_A2A_CALL_TIMEOUT_MINUTES = 30;
+export {
+  DEFAULT_A2A_MAX_ROUNDS,
+  MIN_A2A_MAX_ROUNDS,
+  MAX_A2A_MAX_ROUNDS,
+  DEFAULT_A2A_CALL_TIMEOUT_MINUTES,
+  MIN_A2A_CALL_TIMEOUT_MINUTES,
+  MAX_A2A_CALL_TIMEOUT_MINUTES,
+};
 export const DEFAULT_A2A_TASK_TIMEOUT_MS = 20 * 60_000;
 const A2A_MAX_ROUNDS_SETTING = "a2a.maxRounds";
 const A2A_CALL_TIMEOUT_MINUTES_SETTING = "a2a.callTimeoutMinutes";
@@ -46,6 +56,8 @@ interface CollaborationRun {
 
 export class AgentRuntime {
   private readonly controllers = new Map<string, AbortController>();
+  /** Inbound remote A2A calls by their original payload messageId (a2a_cancel targets). */
+  private readonly remoteA2ACalls = new Map<string, AbortController>();
   private readonly a2aResults = new Map<string, string>();
   private readonly pendingA2AConfirmations = new Map<
     string,
@@ -167,12 +179,35 @@ export class AgentRuntime {
     toAgentId: string,
     message: string,
     context: Parameters<A2ABus["call"]>[3],
+    callId?: string,
   ): Promise<string> {
     let output = "";
-    for await (const chunk of this.a2aBus.call(fromAgentId, toAgentId, message, context)) {
-      if (["text", "task_step", "error"].includes(chunk.type)) output += chunk.content;
+    // Track the inbound call so an a2a_cancel from the initiator can abort a
+    // still-running local execution instead of letting it run to completion.
+    const controller = new AbortController();
+    if (callId) this.remoteA2ACalls.set(callId, controller);
+    const signal = context.signal
+      ? AbortSignal.any([context.signal, controller.signal])
+      : controller.signal;
+    try {
+      for await (const chunk of this.a2aBus.call(fromAgentId, toAgentId, message, {
+        ...context,
+        signal,
+      })) {
+        if (["text", "task_step", "error"].includes(chunk.type)) output += chunk.content;
+      }
+      return output;
+    } finally {
+      if (callId) this.remoteA2ACalls.delete(callId);
     }
-    return output;
+  }
+
+  /** Abort an inbound remote A2A call identified by its original payload messageId. */
+  cancelRemoteA2ACall(callId: string): boolean {
+    const controller = this.remoteA2ACalls.get(callId);
+    if (!controller) return false;
+    controller.abort(new DOMException("Remote A2A call cancelled by peer", "AbortError"));
+    return true;
   }
 
   async handleHubMessage(
@@ -274,7 +309,15 @@ export class AgentRuntime {
       },
       clientMessageId,
     );
-    this.repository.saveMessage(userMessage);
+    // Idempotent retry: the same clientMessageId was already stored and routed —
+    // re-running would execute the agent a second time.
+    if (!this.repository.saveMessage(userMessage)) {
+      logger.info(
+        { conversationId, messageId: userMessage.id },
+        "Duplicate client message ignored",
+      );
+      return;
+    }
     this.events.publish(conversationId, { type: "message", message: userMessage });
 
     const a2aMode = conversation.a2aMode ?? "mention";
@@ -385,12 +428,20 @@ export class AgentRuntime {
     });
     const startedAt = Date.now();
     let output = "";
+    // Register a controller so runtime.cancel(messageId) actually aborts this
+    // remote call (the previous unregistered signal could never be aborted),
+    // and forward the user's configured call timeout — without it this path
+    // always fell back to the 5-minute default.
+    const controller = new AbortController();
+    this.controllers.set(reply.id, controller);
+    const { callTimeoutMinutes } = this.getA2ACollaborationSettings();
     try {
       const history = this.repository.listMessages(conversationId);
       for await (const chunk of this.a2aBus.call("user", agentId, content, {
         conversationId,
         history,
-        signal: new AbortController().signal,
+        signal: controller.signal,
+        a2aCallTimeoutMs: callTimeoutMinutes * 60_000,
       })) {
         if (chunk.type === "text" || chunk.type === "task_step") {
           output += chunk.content;
@@ -409,6 +460,7 @@ export class AgentRuntime {
       logger.error({ err: error, conversationId, agentId }, "Remote agent call failed");
       this.finish(reply, output || detail, output ? "partial" : "error", [], startedAt, agentId);
     } finally {
+      this.controllers.delete(reply.id);
       this.events.publish(conversationId, {
         type: "typing",
         agentId,
@@ -440,8 +492,29 @@ export class AgentRuntime {
       return;
     }
 
+    if (collaborationRun && collaborationRun.controller.signal.aborted) return;
+
+    // The conversation's A2A permission gate applies to mention forwarding too:
+    // previously only A2A_CALL (via the bus) checked it, so `deny`/`confirm`
+    // were silently ignored on the default mention path. Checked before the
+    // round accounting so a denied hop does not consume collaboration budget.
+    const authorization = await this.authorizeA2A({
+      conversationId,
+      threadId: randomUUID(),
+      fromAgentId,
+      toAgentId,
+      message: content,
+      signal: collaborationRun?.controller.signal,
+    });
+    if (!authorization.approved) {
+      logger.info(
+        { conversationId, fromAgentId, toAgentId, reason: authorization.error },
+        "Blocked agent mention forwarding by A2A permission",
+      );
+      return;
+    }
+
     if (collaborationRun) {
-      if (collaborationRun.controller.signal.aborted) return;
       if (collaborationRun.roundsUsed >= collaborationRun.maxRounds) {
         this.publishCollaborationLimit(collaborationRun);
         return;

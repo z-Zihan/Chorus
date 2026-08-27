@@ -4,6 +4,7 @@ import type {
   RelayServerMessage,
   TransportStatusUpdate,
 } from "@chorus/shared";
+import { HEARTBEAT_INTERVAL_MS } from "@chorus/shared";
 import type { FastifyInstance } from "fastify";
 import { verifyHubToken, verifyTransportReceipt } from "../auth.js";
 import type { HubRegistry } from "../hub-registry.js";
@@ -26,6 +27,11 @@ interface WebSocketDependencies {
 
 const DEFAULT_MAX_MESSAGES_PER_MINUTE = 60;
 const RATE_LIMIT_WINDOW_MS = 60_000;
+// Control frames (receipts/room ops) legitimately burst during offline catch-up
+// (one transport_receipt per stored envelope), so they get a wider window than
+// envelopes while still capping signature-verification CPU per hub.
+const CONTROL_FRAME_LIMIT_MULTIPLIER = 20;
+const OFFLINE_ENVELOPES_PER_FRAME = 50;
 
 interface RateWindow {
   startedAt: number;
@@ -130,16 +136,21 @@ export function registerWebSocket(app: FastifyInstance, dependencies: WebSocketD
     dependencies;
   const maxMessagesPerMinute = dependencies.maxMessagesPerMinute ?? DEFAULT_MAX_MESSAGES_PER_MINUTE;
   const rateWindows = new Map<string, RateWindow>();
+  const controlRateWindows = new Map<string, RateWindow>();
 
-  const exceedsRateLimit = (hubId: string): boolean => {
+  const exceedsRateLimit = (
+    windows: Map<string, RateWindow>,
+    hubId: string,
+    max: number,
+  ): boolean => {
     const now = Date.now();
-    const current = rateWindows.get(hubId);
+    const current = windows.get(hubId);
     if (!current || now - current.startedAt >= RATE_LIMIT_WINDOW_MS) {
-      rateWindows.set(hubId, { startedAt: now, count: 1 });
+      windows.set(hubId, { startedAt: now, count: 1 });
       return false;
     }
     current.count += 1;
-    return current.count > maxMessagesPerMinute;
+    return current.count > max;
   };
 
   app.get("/ws", { websocket: true }, (rawSocket) => {
@@ -158,7 +169,7 @@ export function registerWebSocket(app: FastifyInstance, dependencies: WebSocketD
       }
       alive = false;
       socket.ping();
-    }, 30_000);
+    }, HEARTBEAT_INTERVAL_MS);
 
     socket.on("pong", () => {
       alive = true;
@@ -172,49 +183,78 @@ export function registerWebSocket(app: FastifyInstance, dependencies: WebSocketD
       }
 
       if (!hubId) {
-        if (
-          message.type !== "register" ||
-          !registry.get(message.hubId) ||
-          !verifyHubToken(
-            message.token,
-            message.hubId,
-            jwtSecret,
-            undefined,
-            registry.get(message.hubId)?.authVersion,
-          )
-        ) {
+        // Guard types before touching the registry or auth: an unauthenticated
+        // frame must never throw inside this listener (it would crash the process).
+        if (message.type !== "register") {
           socket.close(1008, "Invalid registration");
           return;
         }
-        const previous = registry.getSocket(message.hubId);
-        if (previous && previous !== socket) previous.close(1000, "Connection replaced");
-        hubId = message.hubId;
-        const registeredHubId = hubId;
-        clearTimeout(registrationTimeout);
-        registry.setOnline(registeredHubId, socket);
-        sendJson(socket, {
-          type: "registered",
-          relayHubId: registeredHubId,
-        } satisfies RelayServerMessage);
-        sendPresenceSnapshot(registry, socket, registeredHubId);
-        const envelopes = offlineStore
-          .getForHub(registeredHubId)
-          .filter((envelope) => !registry.isBlocked(envelope.from, registeredHubId));
-        sendJson(socket, {
-          type: "offline_messages",
-          envelopes,
-        } satisfies RelayServerMessage);
-        broadcastPresence(registry, registeredHubId, "online");
+        try {
+          if (typeof message.hubId !== "string" || typeof message.token !== "string") {
+            socket.close(1008, "Invalid registration");
+            return;
+          }
+          const registered = registry.get(message.hubId);
+          if (
+            !registered ||
+            !verifyHubToken(
+              message.token,
+              message.hubId,
+              jwtSecret,
+              undefined,
+              registered.authVersion,
+            )
+          ) {
+            socket.close(1008, "Invalid registration");
+            return;
+          }
+          const previous = registry.getSocket(message.hubId);
+          if (previous && previous !== socket) previous.close(1000, "Connection replaced");
+          hubId = message.hubId;
+          const registeredHubId = hubId;
+          clearTimeout(registrationTimeout);
+          registry.setOnline(registeredHubId, socket);
+          sendJson(socket, {
+            type: "registered",
+            relayHubId: registeredHubId,
+          } satisfies RelayServerMessage);
+          sendPresenceSnapshot(registry, socket, registeredHubId);
+          const envelopes = offlineStore
+            .getForHub(registeredHubId)
+            .filter((envelope) => !registry.isBlocked(envelope.from, registeredHubId));
+          for (let index = 0; index < envelopes.length; index += OFFLINE_ENVELOPES_PER_FRAME) {
+            sendJson(socket, {
+              type: "offline_messages",
+              envelopes: envelopes.slice(index, index + OFFLINE_ENVELOPES_PER_FRAME),
+            } satisfies RelayServerMessage);
+          }
+          broadcastPresence(registry, registeredHubId, "online");
+        } catch (error) {
+          app.log.warn({ err: error }, "Relay registration failed unexpectedly");
+          socket.close(1011, "Registration error");
+        }
         return;
       }
 
       try {
+        if (message.type !== "message" && message.type !== "ping") {
+          if (
+            exceedsRateLimit(
+              controlRateWindows,
+              hubId,
+              maxMessagesPerMinute * CONTROL_FRAME_LIMIT_MULTIPLIER,
+            )
+          ) {
+            socket.close(1008, "Relay message rate limit exceeded");
+            return;
+          }
+        }
         if (message.type === "message") {
           if (!validEnvelope(message.envelope) || message.envelope.from !== hubId) {
             socket.close(1008, "Envelope sender does not match registered hub");
             return;
           }
-          const messageSize = JSON.stringify(message.envelope).length;
+          const messageSize = Buffer.byteLength(JSON.stringify(message.envelope), "utf8");
           if (messageSize > offlineStore.maxMessageSize) {
             app.log.warn(
               { hubId, messageSize, maxMessageSize: offlineStore.maxMessageSize },
@@ -223,7 +263,7 @@ export function registerWebSocket(app: FastifyInstance, dependencies: WebSocketD
             socket.close(1009, "Message too large");
             return;
           }
-          if (exceedsRateLimit(hubId)) {
+          if (exceedsRateLimit(rateWindows, hubId, maxMessagesPerMinute)) {
             app.log.warn({ hubId, maxMessagesPerMinute }, "Relay message rate limit exceeded");
             socket.close(1008, "Message rate limit exceeded");
             return;
@@ -275,8 +315,11 @@ export function registerWebSocket(app: FastifyInstance, dependencies: WebSocketD
           const wasAlreadyMember = roomManager.isMember(message.roomId, hubId);
           if (!wasAlreadyMember) {
             roomManager.respondToInvitation(message.roomId, hubId, "accepted");
-            broadcastRoomEvent(registry, roomManager, message.roomId, "join", hubId);
           }
+          // Always broadcast the join event: membership may have been established
+          // through the REST invitation flow (skipping the branch above), and the
+          // other members rely on this signal to refresh stale member caches.
+          broadcastRoomEvent(registry, roomManager, message.roomId, "join", hubId);
           sendJson(socket, {
             type: "room:members",
             roomId: message.roomId,
@@ -332,6 +375,7 @@ export function registerWebSocket(app: FastifyInstance, dependencies: WebSocketD
 
 function validRoomCasMessage(message: Extract<RelayClientMessage, { type: "room_cas" }>): boolean {
   return (
+    typeof message.roomId === "string" &&
     message.roomId.length > 0 &&
     Number.isSafeInteger(message.expectedRevision) &&
     message.expectedRevision >= 0 &&

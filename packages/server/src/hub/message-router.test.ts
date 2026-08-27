@@ -106,8 +106,11 @@ describe("HubMessageRouter transport state", () => {
     expect(store.get(envelope.id)?.status).toBe("queued");
     onTransportStatus?.({ messageId: envelope.id, status: "delivered", timestamp: 1_200 });
     expect(store.get(envelope.id)?.status).toBe("delivered");
+    // A transport failure is a network condition, not a business outcome: the
+    // message falls back to queued and is retried (receiver dedup prevents
+    // re-execution) instead of being terminally marked as an execution error.
     onTransportStatus?.({ messageId: envelope.id, status: "failed", timestamp: 1_300 });
-    expect(store.get(envelope.id)?.status).toBe("error");
+    expect(store.get(envelope.id)?.status).toBe("queued");
     router.destroy();
   });
 });

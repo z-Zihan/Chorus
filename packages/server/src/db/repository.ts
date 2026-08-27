@@ -29,6 +29,7 @@ import {
   conversations,
   clientTokens,
   messages,
+  processedEnvelopes,
   roomStateEvents,
   scheduledTasks,
   trustedHubs,
@@ -760,6 +761,27 @@ export class Repository {
     return this.removeAgentsFromConversation(conversationId, [agentId]);
   }
 
+  /** Write authoritative revision/keyEpoch counters (post-relay-CAS commit). */
+  setRoomCounters(
+    roomId: string,
+    counters: { revision: number; keyEpoch: number },
+  ): PersistedRoomState | undefined {
+    if (
+      !Number.isSafeInteger(counters.revision) ||
+      counters.revision < 0 ||
+      !Number.isSafeInteger(counters.keyEpoch) ||
+      counters.keyEpoch < 1
+    ) {
+      throw new Error("Invalid Room counters");
+    }
+    const result = this.context.db
+      .update(conversations)
+      .set({ revision: counters.revision, keyEpoch: counters.keyEpoch })
+      .where(or(eq(conversations.id, roomId), eq(conversations.relayRoomId, roomId)))
+      .run();
+    return result.changes > 0 ? this.getRoomState(roomId) : undefined;
+  }
+
   incrementRoomRevision(roomId: string): PersistedRoomState | undefined {
     const result = this.context.db
       .update(conversations)
@@ -1054,6 +1076,9 @@ export class Repository {
 
   deleteConversation(id: string): boolean {
     const transaction = this.context.sqlite.transaction(() => {
+      // scheduled_tasks.conversation_id has a foreign key; without this the
+      // conversations delete below fails with FOREIGN KEY constraint failed.
+      this.context.db.delete(scheduledTasks).where(eq(scheduledTasks.conversationId, id)).run();
       this.context.db.delete(messages).where(eq(messages.conversationId, id)).run();
       this.context.db
         .delete(conversationAgents)
@@ -1076,6 +1101,31 @@ export class Repository {
       return deleted;
     });
     return transaction();
+  }
+
+  /** Ids of already-processed inbound Hub envelopes (survives restarts). */
+  listProcessedEnvelopeIds(): string[] {
+    return this.context.db
+      .select({ id: processedEnvelopes.id })
+      .from(processedEnvelopes)
+      .all()
+      .flatMap(({ id }) => [id]);
+  }
+
+  rememberProcessedEnvelopeId(id: string): void {
+    this.context.db
+      .insert(processedEnvelopes)
+      .values({ id, processedAt: Date.now() })
+      .onConflictDoNothing()
+      .run();
+  }
+
+  /** Drop processed-envelope dedup rows older than the offline retention window. */
+  pruneProcessedEnvelopes(olderThanMs: number): number {
+    return this.context.db
+      .delete(processedEnvelopes)
+      .where(lt(processedEnvelopes.processedAt, Date.now() - olderThanMs))
+      .run().changes;
   }
 
   listMessages(conversationId: string, limit = 200, before?: number): Message[] {
@@ -1101,8 +1151,9 @@ export class Repository {
       .map(toMessage);
   }
 
-  saveMessage(message: Message): void {
-    this.context.db
+  /** Returns false when a message with this id already exists (idempotent retry). */
+  saveMessage(message: Message): boolean {
+    const result = this.context.db
       .insert(messages)
       .values({
         id: message.id,
@@ -1118,8 +1169,11 @@ export class Repository {
         metadata: message.metadata ? JSON.stringify(message.metadata) : null,
         createdAt: message.timestamp,
       })
+      .onConflictDoNothing()
       .run();
+    if (result.changes === 0) return false;
     this.touchConversation(message.conversationId);
+    return true;
   }
 
   updateMessage(

@@ -49,7 +49,6 @@
       "relay": "中继",
       "none": "离线"
     },
-    "createCrossHubGroup": "创建跨 Hub 群聊",
     "crossHub": "跨 Hub",
     "remote": "远程",
     "inviteHub": "邀请 Hub",
@@ -68,7 +67,6 @@
     "memberCount": "{{count}} 位成员",
     "addMembers": "添加成员",
     "removeMember": "移除 {{name}}",
-    "leaveGroup": "退出群聊",
     "createGroupTitle": "创建群聊",
     "selectAgents": "请选择至少两个在线 Agent"
   },

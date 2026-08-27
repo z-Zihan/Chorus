@@ -1,60 +1,14 @@
 import { create } from "zustand";
+import type { CatalogEntryWithStatus, InstallationStatus, InstallOptions } from "@chorus/shared";
 import { api } from "@/services/api";
 import { useAgentStore } from "@/store/agentStore";
 import { useUIStore } from "@/store/uiStore";
 import i18n from "@/i18n";
 import { logger } from "@/utils/logger";
 
-export type CatalogKind = "detected-cli" | "managed-cli" | "api-connector";
-export type InstallMethod = "brew" | "npm" | "winget" | "download" | "pip";
-
-export interface InstallRecipe {
-  method: InstallMethod;
-  executable: string;
-  args: string[];
-  requiresElevation: boolean;
-}
-
-export interface CatalogEntry {
-  id: string;
-  name: string;
-  summary: string;
-  publisher: { name: string; url: string; verified: boolean };
-  kind: CatalogKind;
-  platforms: string[];
-  capabilities: string[];
-  permissions: string[];
-  homepage: string;
-  license: string;
-  descriptorId?: string;
-  installRecipes: InstallRecipe[];
-  uninstallRecipes: InstallRecipe[];
-  adapterTemplate: { type: "cli" | "openai"; config: Record<string, unknown> };
-  installed: boolean;
-  detected?: boolean;
-  agentId?: string;
-  disabled?: boolean;
-}
-
-export interface InstallOptions {
-  recipeMethod?: InstallMethod;
-  apiKey?: string;
-  config?: Record<string, unknown>;
-  acceptPermissions?: boolean;
-}
-
-export interface InstallationStatus {
-  id: string;
-  entryId: string;
-  stage: "checking" | "downloading" | "installing" | "verifying" | "done" | "error";
-  progress: number;
-  command?: string;
-  agentId?: string;
-  error?: string;
-  cancelled?: boolean;
-  startedAt: number;
-  updatedAt: number;
-}
+/** The catalog listing is always served with install/detect status attached. */
+export type CatalogEntry = CatalogEntryWithStatus;
+export type { InstallationStatus, InstallOptions };
 
 interface CatalogState {
   entries: CatalogEntry[];

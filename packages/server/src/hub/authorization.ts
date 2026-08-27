@@ -26,6 +26,25 @@ export class AuthorizationService {
       return { allowed: false, reason: "Sender User identity does not match the trusted Hub" };
     }
 
+    if (payload.messageType === "resync_request" || payload.messageType === "resync_response") {
+      // Resync exposes (and can rewrite) Room state, so it needs the same Room
+      // membership gate as a2a_call/chat — trust alone must not be enough.
+      const resyncRoomId = payload.resyncRequest?.roomId ?? payload.resyncResponse?.roomId;
+      if (typeof resyncRoomId !== "string" || resyncRoomId.length === 0) {
+        return { allowed: false, reason: "Resync message has no Room id" };
+      }
+      const room = this.repository
+        .listConversations({ type: "cross_hub" })
+        .find(
+          (conversation) =>
+            conversation.id === resyncRoomId || conversation.relayRoomId === resyncRoomId,
+        );
+      if (!room?.relayRoomId || !this.registry?.isHubInRoom(room.relayRoomId, fromHubId)) {
+        return { allowed: false, reason: "Sender Hub is not a member of the resync Room" };
+      }
+      return { allowed: true };
+    }
+
     if (payload.messageType === "a2a_call" || payload.messageType === "chat") {
       const room = this.repository
         .listConversations({ type: "cross_hub" })

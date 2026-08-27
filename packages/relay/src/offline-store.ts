@@ -1,10 +1,11 @@
 import type { HubEnvelope } from "@chorus/shared";
-import { and, asc, eq, lte, sql } from "drizzle-orm";
+import { DEFAULT_OFFLINE_RETENTION_MS } from "@chorus/shared";
+import { and, asc, eq, gt, lte, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import type { DatabaseContext } from "./db/index.js";
 import { offlineMessages } from "./db/schema.js";
 
-export const DEFAULT_RETENTION_MS = 7 * 24 * 60 * 60 * 1_000;
+export const DEFAULT_RETENTION_MS = DEFAULT_OFFLINE_RETENTION_MS;
 export const DEFAULT_MAX_MESSAGE_SIZE = 256 * 1_024;
 export const DEFAULT_MAX_MESSAGES_PER_HUB = 1_000;
 
@@ -18,7 +19,7 @@ export class OfflineStore {
 
   store(envelope: HubEnvelope, toHubId: string): void {
     const serializedEnvelope = JSON.stringify(envelope);
-    if (serializedEnvelope.length > this.maxMessageSize) {
+    if (Buffer.byteLength(serializedEnvelope, "utf8") > this.maxMessageSize) {
       throw new Error(`Message exceeds maximum size of ${this.maxMessageSize} bytes`);
     }
     const now = Date.now();
@@ -52,7 +53,7 @@ export class OfflineStore {
     const rows = this.database.db
       .select()
       .from(offlineMessages)
-      .where(eq(offlineMessages.toHubId, hubId))
+      .where(and(eq(offlineMessages.toHubId, hubId), gt(offlineMessages.expiresAt, Date.now())))
       .orderBy(asc(offlineMessages.createdAt))
       .all();
     return rows.flatMap((row) => {

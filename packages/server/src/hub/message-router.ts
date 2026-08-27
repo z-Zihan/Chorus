@@ -5,6 +5,13 @@ import type {
   HubPayload,
   TransportReceipt,
 } from "@chorus/shared";
+import {
+  DEFAULT_A2A_CALL_TIMEOUT_MINUTES,
+  MAX_A2A_CALL_TIMEOUT_MS,
+  MAX_A2A_MAX_ROUNDS,
+  MIN_A2A_CALL_TIMEOUT_MS,
+  MIN_A2A_MAX_ROUNDS,
+} from "@chorus/shared";
 import type { AgentRegistry } from "../agent/registry.js";
 import type { AgentRuntime } from "../agent/runtime.js";
 import type { Repository } from "../db/repository.js";
@@ -18,13 +25,13 @@ import { normalizeHubPayload, rejectIncompatibleVersion } from "./payload-compat
 import type { RelayClient } from "./relay-client.js";
 import type { DirectoryService } from "./directory.js";
 import type { TrustStore } from "./trust-store.js";
-import { OfflineStore } from "./offline-store.js";
+import { DEFAULT_OFFLINE_TTL_MS, OfflineStore } from "./offline-store.js";
 import { ResyncService } from "./resync.js";
 import type { PairingService } from "./pairing-service.js";
 
-const DEFAULT_REMOTE_CALL_TIMEOUT_MS = 5 * 60_000;
-const MIN_REMOTE_CALL_TIMEOUT_MS = 60_000;
-const MAX_REMOTE_CALL_TIMEOUT_MS = 30 * 60_000;
+const DEFAULT_REMOTE_CALL_TIMEOUT_MS = DEFAULT_A2A_CALL_TIMEOUT_MINUTES * 60_000;
+const MIN_REMOTE_CALL_TIMEOUT_MS = MIN_A2A_CALL_TIMEOUT_MS;
+const MAX_REMOTE_CALL_TIMEOUT_MS = MAX_A2A_CALL_TIMEOUT_MS;
 const MAX_SEEN_MESSAGES = 1_000;
 const OFFLINE_PURGE_INTERVAL_MS = 60 * 60 * 1000;
 
@@ -98,9 +105,14 @@ export class HubMessageRouter {
         trustStore.listTrusted().find((hub) => hub.userId === ownerId)?.userPublicKey,
     );
     this.offlineStore.purgeExpired();
+    // Reload the processed-envelope dedup set so a restart cannot turn the
+    // relay's offline resend (at-least-once) into a second agent execution.
+    for (const id of repository.listProcessedEnvelopeIds?.() ?? []) this.seenMessageIds.add(id);
     this.offlinePurgeTimer = setInterval(() => {
       const purged = this.offlineStore.purgeExpired();
       if (purged > 0) logger.info({ purged }, "Purged expired offline Hub messages");
+      const prunedDedup = repository.pruneProcessedEnvelopes?.(DEFAULT_OFFLINE_TTL_MS) ?? 0;
+      if (prunedDedup > 0) logger.info({ prunedDedup }, "Pruned processed envelope dedup rows");
     }, OFFLINE_PURGE_INTERVAL_MS);
     this.offlinePurgeTimer.unref();
     relayClient.onMessage((envelope) => {
@@ -135,8 +147,9 @@ export class HubMessageRouter {
     });
     this.removeTransportStatusListener = relayClient.onTransportStatus?.((update) => {
       if (update.status === "delivered") this.offlineStore.markDelivered(update.messageId);
-      else if (update.status === "failed")
-        this.offlineStore.markComplete(update.messageId, "error");
+      // A transport failure is a network condition, not a business outcome:
+      // fall back to queued for a retry instead of writing a terminal error.
+      else if (update.status === "failed") this.offlineStore.markRetryable(update.messageId);
       const payloadMessageId = this.outboundPayloadByEnvelope.get(update.messageId);
       if (payloadMessageId) {
         this.emitDeliveryStatus(payloadMessageId, { transport: update.status });
@@ -254,8 +267,6 @@ export class HubMessageRouter {
       await this.pairingService.onEnvelope(envelope);
       return;
     }
-    if (this.seenMessageIds.has(envelope.id)) return;
-    this.rememberMessage(envelope.id);
 
     const trustedHub = this.trustStore.get(envelope.from);
     if (!trustedHub || trustedHub.trustLevel === "blocked") {
@@ -274,6 +285,12 @@ export class HubMessageRouter {
       senderPublicKey,
     );
     if (!validSignature) throw new Error(`Invalid Hub envelope signature from ${envelope.from}`);
+    // Dedup only after trust and signature checks so an untrusted sender cannot
+    // flood the LRU and evict ids of genuinely recent messages. Persisted so a
+    // restart + relay offline resend cannot re-execute an already-run call.
+    if (this.seenMessageIds.has(envelope.id)) return;
+    this.rememberMessage(envelope.id);
+    this.repository.rememberProcessedEnvelopeId?.(envelope.id);
 
     const rawPayload = await decryptPayload<Record<string, unknown>>(
       envelope.ciphertext,
@@ -337,6 +354,11 @@ export class HubMessageRouter {
     } else if (payload.messageType === "resync_response") {
       if (!payload.resyncResponse) throw new Error("Inbound resync response has no payload");
       this.resyncService.handleResyncResponse(payload.resyncResponse);
+    } else if (payload.messageType === "a2a_cancel") {
+      const callId = stringMetadata(payload.metadata, "correlationId") ?? payload.content;
+      if (!callId || !this.runtime.cancelRemoteA2ACall(callId)) {
+        logger.info({ fromHubId: envelope.from }, "Ignored a2a_cancel for an unknown call");
+      }
     }
   }
 
@@ -386,14 +408,20 @@ export class HubMessageRouter {
       this.outboundPayloadByEnvelope.set(envelope.id, payload.messageId);
     }
     const activePath = this.connectionManager.getActivePath(toHubId);
-    const hasP2PConnection = activePath === "p2p";
-    if (activePath !== "p2p") {
+    // Only agent-traffic payloads enter the resend queue. Control messages
+    // (delivery_ack / resync_* / directory_*) never receive a business ack, so
+    // queueing them made every presence flip re-send the whole backlog — a
+    // reconnect storm that trips the relay rate limit — while each control flow
+    // already re-initiates itself on reconnect (joinRoom/resync/directory).
+    const queueEligible = payload.messageType === "a2a_call" || payload.messageType === "chat";
+    if (queueEligible && activePath !== "p2p") {
       this.offlineStore.queue(envelope, this.identity.hubId, toHubId);
     }
-    if (
-      (this.offlineHubIds.has(toHubId) && !hasP2PConnection) ||
-      !(await this.connectionManager.sendEnvelope(toHubId, envelope))
-    ) {
+    // Always attempt delivery — the relay stores messages for offline peers, so
+    // short-circuiting on presence used to bypass the relay's offline store
+    // exactly when it was needed (and made restart lose the queued copy).
+    const delivered = await this.connectionManager.sendEnvelope(toHubId, envelope);
+    if (queueEligible && !delivered) {
       this.offlineStore.queue(envelope, this.identity.hubId, toHubId);
       logger.info({ toHubId, envelopeId: envelope.id }, "Queued message for offline Hub");
     }
@@ -420,6 +448,27 @@ export class HubMessageRouter {
       messageId,
       context.signal,
       normalizeRemoteCallTimeout(context.a2aCallTimeoutMs),
+    );
+    // When the initiator aborts (user cancel / upstream timeout), tell the
+    // remote Hub to stop executing too — otherwise its agent runs to natural
+    // completion for nothing. Best-effort: an old peer ignores the frame.
+    context.signal?.addEventListener(
+      "abort",
+      () => {
+        void this.handleOutbound(
+          toHubId,
+          {
+            messageType: "a2a_cancel",
+            messageId: randomUUID(),
+            content: messageId,
+            metadata: { correlationId: messageId },
+          },
+          context.conversationId,
+        ).catch((error: unknown) => {
+          logger.warn({ err: error, toHubId }, "Unable to send a2a_cancel");
+        });
+      },
+      { once: true },
     );
     const payload: OutboundPayload = {
       messageType: "a2a_call",
@@ -459,14 +508,20 @@ export class HubMessageRouter {
       ? payload.metadata.callStack.filter((value): value is string => typeof value === "string")
       : [fromAgentId];
     try {
-      const content = await this.runtime.handleRemoteA2ACall(fromAgentId, targetAgentId, message, {
-        conversationId,
-        history: [],
-        callStack,
-        a2aThreadId: stringMetadata(payload.metadata, "a2aThreadId"),
-        maxA2ARounds: numberMetadata(payload.metadata, "maxA2ARounds"),
-        a2aCallTimeoutMs: timeoutMetadata(payload.metadata, "a2aCallTimeoutMs"),
-      });
+      const content = await this.runtime.handleRemoteA2ACall(
+        fromAgentId,
+        targetAgentId,
+        message,
+        {
+          conversationId,
+          history: [],
+          callStack,
+          a2aThreadId: stringMetadata(payload.metadata, "a2aThreadId"),
+          maxA2ARounds: numberMetadata(payload.metadata, "maxA2ARounds"),
+          a2aCallTimeoutMs: timeoutMetadata(payload.metadata, "a2aCallTimeoutMs"),
+        },
+        payload.messageId,
+      );
       await this.sendDeliveryAck(fromHubId, payload, envelopeId, "done");
       await this.sendResponse(fromHubId, payload, content, false, relayClient);
     } catch (error) {
@@ -688,6 +743,9 @@ export class HubMessageRouter {
     this.pendingOutbound.delete(messageId);
     clearTimeout(pending.timer);
     if (pending.signal && pending.abort) pending.signal.removeEventListener("abort", pending.abort);
+    // Terminal settle (timeout/abort) means no further delivery updates can be
+    // acted on; drop the listener so offline/late acks cannot leak the entry.
+    this.deliveryListeners.delete(messageId);
     if (error) pending.reject(error);
     else pending.resolve(content);
   }
@@ -783,7 +841,10 @@ function numberMetadata(
   key: string,
 ): number | undefined {
   const value = metadata?.[key];
-  return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 50
+  return typeof value === "number" &&
+    Number.isInteger(value) &&
+    value >= MIN_A2A_MAX_ROUNDS &&
+    value <= MAX_A2A_MAX_ROUNDS
     ? value
     : undefined;
 }

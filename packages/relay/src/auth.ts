@@ -12,7 +12,7 @@ const TOKEN_HEADER = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).t
   "base64url",
 );
 const REGISTRATION_PURPOSE = "chorus-relay-registration-v1";
-const DEFAULT_TOKEN_TTL_SECONDS = 24 * 60 * 60;
+export const DEFAULT_TOKEN_TTL_SECONDS = 24 * 60 * 60;
 const DEFAULT_CHALLENGE_TTL_MS = 2 * 60 * 1_000;
 const DEFAULT_MAX_PENDING_CHALLENGES = 10_000;
 

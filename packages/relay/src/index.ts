@@ -1,3 +1,4 @@
+import { DEFAULT_OFFLINE_RETENTION_MS, MS_PER_DAY } from "@chorus/shared";
 import { resolve } from "node:path";
 import cors from "@fastify/cors";
 import websocket from "@fastify/websocket";
@@ -10,10 +11,13 @@ import { MessageRouter } from "./message-router.js";
 import { OfflineStore } from "./offline-store.js";
 import { registerRoutes } from "./routes/index.js";
 import { RoomManager } from "./room-manager.js";
+import { DEFAULT_MAX_MEMBERS_PER_ROOM, DEFAULT_MAX_ROOMS_PER_HUB } from "./room-manager.js";
 import { RoomCasStore } from "./room-cas.js";
 import { logger } from "./utils/logger.js";
 import { registerWebSocket } from "./ws/handler.js";
 import { resolveRelaySecurityConfig } from "./config.js";
+import { DEFAULT_MAX_MESSAGE_SIZE, DEFAULT_MAX_MESSAGES_PER_HUB } from "./offline-store.js";
+import { DEFAULT_TOKEN_TTL_SECONDS } from "./auth.js";
 
 function positiveInteger(value: string | undefined, fallback: number): number {
   const parsed = Number.parseInt(value ?? "", 10);
@@ -23,18 +27,33 @@ function positiveInteger(value: string | undefined, fallback: number): number {
 async function main(): Promise<void> {
   const port = positiveInteger(process.env.RELAY_PORT, 3211);
   const { host, jwtSecret } = resolveRelaySecurityConfig();
-  const ttlDays = positiveInteger(process.env.RELAY_OFFLINE_TTL_DAYS, 7);
-  const retentionMs = positiveInteger(
-    process.env.RELAY_OFFLINE_RETENTION_MS,
-    ttlDays * 24 * 60 * 60 * 1_000,
+  const ttlDays = positiveInteger(
+    process.env.RELAY_OFFLINE_TTL_DAYS,
+    DEFAULT_OFFLINE_RETENTION_MS / MS_PER_DAY,
   );
-  const maxMessageSize = positiveInteger(process.env.RELAY_MAX_MESSAGE_SIZE, 256 * 1_024);
-  const maxMessagesPerHub = positiveInteger(process.env.RELAY_MAX_MESSAGES_PER_HUB, 1_000);
+  const retentionMs = positiveInteger(process.env.RELAY_OFFLINE_RETENTION_MS, ttlDays * MS_PER_DAY);
+  const maxMessageSize = positiveInteger(
+    process.env.RELAY_MAX_MESSAGE_SIZE,
+    DEFAULT_MAX_MESSAGE_SIZE,
+  );
+  const maxMessagesPerHub = positiveInteger(
+    process.env.RELAY_MAX_MESSAGES_PER_HUB,
+    DEFAULT_MAX_MESSAGES_PER_HUB,
+  );
   const maxMessagesPerMinute = positiveInteger(process.env.RELAY_MAX_MESSAGES_PER_MINUTE, 60);
-  const maxRoomsPerHub = positiveInteger(process.env.RELAY_MAX_ROOMS_PER_HUB, 50);
-  const maxMembersPerRoom = positiveInteger(process.env.RELAY_MAX_MEMBERS_PER_ROOM, 100);
+  const maxRoomsPerHub = positiveInteger(
+    process.env.RELAY_MAX_ROOMS_PER_HUB,
+    DEFAULT_MAX_ROOMS_PER_HUB,
+  );
+  const maxMembersPerRoom = positiveInteger(
+    process.env.RELAY_MAX_MEMBERS_PER_ROOM,
+    DEFAULT_MAX_MEMBERS_PER_ROOM,
+  );
   const maxHubs = positiveInteger(process.env.RELAY_MAX_HUBS, 1_000);
-  const tokenTtlSeconds = positiveInteger(process.env.RELAY_TOKEN_TTL_SECONDS, 24 * 60 * 60);
+  const tokenTtlSeconds = positiveInteger(
+    process.env.RELAY_TOKEN_TTL_SECONDS,
+    DEFAULT_TOKEN_TTL_SECONDS,
+  );
   const maxChallengesPerMinute = positiveInteger(process.env.RELAY_MAX_CHALLENGES_PER_MINUTE, 10);
   const maxRegistrationsPerMinute = positiveInteger(
     process.env.RELAY_MAX_REGISTRATIONS_PER_MINUTE,
@@ -54,13 +73,15 @@ async function main(): Promise<void> {
   const registry = new HubRegistry(database);
   const offlineStore = new OfflineStore(database, retentionMs, maxMessageSize, maxMessagesPerHub);
   const roomManager = new RoomManager(database, maxRoomsPerHub, maxMembersPerRoom);
-  const roomCasStore = new RoomCasStore();
+  const roomCasStore = new RoomCasStore(database);
   const messageRouter = new MessageRouter(roomManager);
   const registrationChallenges = new RegistrationChallengeStore();
   const app = Fastify({ loggerInstance: logger as FastifyBaseLogger });
 
   await app.register(cors, { origin: corsOrigins.length > 0 ? corsOrigins : false });
-  await app.register(websocket);
+  // Cap WS frames well above the largest legal frame (batched offline messages)
+  // so unauthenticated connections cannot buffer ~100MB payloads pre-auth.
+  await app.register(websocket, { options: { maxPayload: 32 * 1_024 * 1_024 } });
   registerRoutes(app, {
     registry,
     roomManager,

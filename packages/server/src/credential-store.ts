@@ -12,13 +12,17 @@ const execFileAsync = promisify(execFile);
 const SERVICE_NAME = "Chorus";
 const USER_KEY_IDENTIFIER = "chorus:user-key";
 const HUB_KEY_IDENTIFIER = "chorus:hub-key";
-const FILE_VERSION = 1;
+const FILE_VERSION = 2;
 const FALLBACK_FILE = resolve(
   process.env.CHORUS_CREDENTIAL_FILE?.trim() || resolve(homedir(), ".chorus", "credentials.enc"),
 );
+/** Per-install random salt: the legacy key was derivable from public info alone. */
+const SALT_FILE = `${FALLBACK_FILE}.salt`;
 
 type NativeBackend = "macos-keychain" | "windows-credential-manager" | "linux-libsecret";
-export type CredentialStorageBackend = "system-keychain" | "file";
+import type { CredentialStorageBackend } from "@chorus/shared";
+
+export type { CredentialStorageBackend };
 
 interface EncryptedCredentialFile {
   version: number;
@@ -182,11 +186,10 @@ async function setNativeCredential(
   apiKey: string,
 ): Promise<void> {
   if (backend === "macos-keychain") {
-    await execFileAsync(
-      "security",
-      ["add-generic-password", "-U", "-s", SERVICE_NAME, "-a", agentId, "-w", apiKey],
-      { windowsHide: true },
-    );
+    // Feed the secret via stdin (interactive mode) so it never appears in the
+    // process argv where any local process could read it via ps.
+    const command = `add-generic-password -U -s ${SERVICE_NAME} -a ${agentId} -w ${JSON.stringify(apiKey)}\n`;
+    await execFileWithInput("security", ["-i"], command);
     return;
   }
   if (backend === "linux-libsecret") {
@@ -390,27 +393,40 @@ ${operationCode}
 async function readFileCredentials(): Promise<Record<string, string>> {
   try {
     const payload = JSON.parse(await readFile(FALLBACK_FILE, "utf8")) as EncryptedCredentialFile;
-    if (payload.version !== FILE_VERSION) throw new Error("Unsupported credential file version");
-    const decipher = createDecipheriv(
-      "aes-256-gcm",
-      machineKey(),
-      Buffer.from(payload.iv, "base64"),
-    );
+    if (payload.version !== 1 && payload.version !== FILE_VERSION) {
+      throw new Error("Unsupported credential file version");
+    }
+    const key = payload.version === 1 ? legacyMachineKey() : await saltedMachineKey();
+    const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(payload.iv, "base64"));
     decipher.setAuthTag(Buffer.from(payload.tag, "base64"));
     const plaintext = Buffer.concat([
       decipher.update(Buffer.from(payload.ciphertext, "base64")),
       decipher.final(),
     ]).toString("utf8");
-    return JSON.parse(plaintext) as Record<string, string>;
+    const credentials = JSON.parse(plaintext) as Record<string, string>;
+    if (payload.version === 1) {
+      // Transparently re-encrypt legacy files with the salted key.
+      void migrateFileCredentials(credentials);
+    }
+    return credentials;
   } catch (error) {
     if (isNodeError(error) && error.code === "ENOENT") return {};
     throw error;
+  }
+
+  async function migrateFileCredentials(credentials: Record<string, string>): Promise<void> {
+    try {
+      await writeFileCredentials(credentials);
+      logger.info("Migrated credential file to salted key (v2)");
+    } catch (error) {
+      logger.warn({ err: error }, "Unable to migrate credential file to salted key");
+    }
   }
 }
 
 async function writeFileCredentials(credentials: Record<string, string>): Promise<void> {
   const iv = randomBytes(12);
-  const cipher = createCipheriv("aes-256-gcm", machineKey(), iv);
+  const cipher = createCipheriv("aes-256-gcm", await saltedMachineKey(), iv);
   const ciphertext = Buffer.concat([
     cipher.update(JSON.stringify(credentials), "utf8"),
     cipher.final(),
@@ -440,7 +456,36 @@ function mutateFileCredentials(
   return operation;
 }
 
-function machineKey(): Buffer {
+let cachedSalt: Buffer | undefined;
+
+/**
+ * Random per-install salt (0600, created atomically next to the credential
+ * file). Without it the AES key was sha256(hostname:username) — derivable
+ * from public information, i.e. obfuscation rather than encryption.
+ */
+async function machineSalt(): Promise<Buffer> {
+  if (cachedSalt) return cachedSalt;
+  try {
+    cachedSalt = Buffer.from((await readFile(SALT_FILE, "utf8")).trim(), "hex");
+    if (cachedSalt.length >= 16) return cachedSalt;
+  } catch (error) {
+    if (!isNodeError(error) || error.code !== "ENOENT") throw error;
+  }
+  const salt = randomBytes(32);
+  await mkdir(dirname(SALT_FILE), { recursive: true, mode: 0o700 });
+  await writeFile(SALT_FILE, salt.toString("hex"), { encoding: "utf8", mode: 0o600 });
+  cachedSalt = salt;
+  return salt;
+}
+
+async function saltedMachineKey(): Promise<Buffer> {
+  const salt = await machineSalt();
+  return createHash("sha256")
+    .update(`${hostname()}:${userInfo().username}:${salt.toString("hex")}`, "utf8")
+    .digest();
+}
+
+function legacyMachineKey(): Buffer {
   return createHash("sha256").update(`${hostname()}:${userInfo().username}`, "utf8").digest();
 }
 

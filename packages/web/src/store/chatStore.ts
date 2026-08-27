@@ -46,6 +46,8 @@ interface ChatState {
   conversationsError: string | null;
   currentConversationId: string | null;
   targetMessageId: string | null;
+  /** agentId → timestamp of the most recent typing event (peer input indicator). */
+  typingAgents: Record<string, number>;
   messages: Message[];
   isLoadingMessages: boolean;
   messagesError: string | null;
@@ -87,12 +89,12 @@ interface ChatState {
   ) => Promise<Conversation | null>;
   createGroupConversation: (title: string, agentIds: string[]) => Promise<Conversation | null>;
   createRoom: (name: string) => Promise<boolean>;
+  markTyping: (agentId: string, isTyping: boolean) => void;
   syncConversation: (conversation: Conversation) => void;
   renameConversation: (id: string, title: string) => Promise<boolean>;
   togglePin: (id: string) => Promise<boolean>;
   toggleArchive: (id: string) => Promise<boolean>;
   deleteConversation: (id: string) => Promise<boolean>;
-  deleteConversations: (ids: string[]) => Promise<number | null>;
   /** Drop a conversation deleted outside this client, navigating away if open. */
   purgeConversation: (id: string) => void;
   /** Sync sidebar meta for a message that arrived over WebSocket. */
@@ -124,9 +126,60 @@ export const useChatStore = create<ChatState>((set, get) => {
       ),
     }));
   };
+  /**
+   * Shared removal path for delete/purge: drop the conversation from every
+   * list, and when the currently open conversation is the one removed, reset
+   * stream/navigate state and return its replacement (null if none). The
+   * caller owns fetching the replacement's messages.
+   */
+  const dropConversation = (id: string): Conversation | null => {
+    const state = get();
+    const deletedIndex = [
+      ...state.conversations,
+      ...state.groupConversations,
+      ...state.archivedConversations,
+    ].findIndex((conversation) => conversation.id === id);
+    const conversations = state.conversations.filter((conversation) => conversation.id !== id);
+    const groupConversations = state.groupConversations.filter(
+      (conversation) => conversation.id !== id,
+    );
+    const archivedConversations = state.archivedConversations.filter(
+      (conversation) => conversation.id !== id,
+    );
+
+    if (state.currentConversationId !== id) {
+      set({ conversations, groupConversations, archivedConversations });
+      return null;
+    }
+
+    streamManager.clearStreamTimer();
+    streamManager.abortFallback();
+    messagesRequestId += 1;
+    const activeConversations = [...conversations, ...groupConversations];
+    const nextConversation =
+      activeConversations[deletedIndex] ??
+      activeConversations[deletedIndex - 1] ??
+      activeConversations[0] ??
+      null;
+
+    set({
+      conversations,
+      groupConversations,
+      archivedConversations,
+      currentConversationId: nextConversation?.id ?? null,
+      messages: [],
+      a2aThreads: {},
+      isLoadingMessages: Boolean(nextConversation),
+      isStreaming: false,
+      streamingMessageId: null,
+      targetMessageId: null,
+    });
+    return nextConversation;
+  };
 
   return {
     conversations: [],
+    typingAgents: {},
     groupConversations: [],
     archivedConversations: [],
     hasLoadedConversations: false,
@@ -210,6 +263,21 @@ export const useChatStore = create<ChatState>((set, get) => {
 
     clearTargetMessage: () => set({ targetMessageId: null }),
 
+    markTyping: (agentId, isTyping) =>
+      set((state) => {
+        const current = state.typingAgents[agentId];
+        if (isTyping) {
+          // Heartbeat-style refresh keeps the indicator alive during long streams.
+          return { typingAgents: { ...state.typingAgents, [agentId]: Date.now() } };
+        }
+        if (current === undefined) return {};
+        const next: Record<string, number> = {};
+        for (const [id, timestamp] of Object.entries(state.typingAgents)) {
+          if (id !== agentId) next[id] = timestamp;
+        }
+        return { typingAgents: next };
+      }),
+
     fetchMessages: async (conversationId) => {
       const requestId = ++messagesRequestId;
       if (get().currentConversationId === conversationId) {
@@ -218,7 +286,25 @@ export const useChatStore = create<ChatState>((set, get) => {
       try {
         const data = await api.getMessages(conversationId, true);
         if (requestId === messagesRequestId && get().currentConversationId === conversationId) {
-          set({ messages: data, a2aThreads: {}, messagesError: null });
+          set((state) => {
+            // The server list is authoritative for persisted messages, but a
+            // REST fallback fetch mid-stream must not wipe optimistic sends or
+            // in-flight streams the server has not stored yet.
+            const serverIds = new Set(data.map((message) => message.id));
+            const transient = state.messages.filter(
+              (message) =>
+                !serverIds.has(message.id) &&
+                ["sending", "streaming", "thinking"].includes(message.status),
+            );
+            const hasRunningThread = Object.values(state.a2aThreads).some(
+              (thread) => thread.status === "running",
+            );
+            return {
+              messages: [...data, ...transient].sort((a, b) => a.timestamp - b.timestamp),
+              a2aThreads: hasRunningThread ? state.a2aThreads : {},
+              messagesError: null,
+            };
+          });
         }
       } catch (e) {
         logger.error("Failed to fetch messages", e);
@@ -343,17 +429,23 @@ export const useChatStore = create<ChatState>((set, get) => {
     cancelStream: () => streamManager.cancelStream(),
 
     startA2AThread: (thread) =>
-      set((state) => ({
-        a2aThreads: {
-          ...state.a2aThreads,
-          [thread.threadId]: {
-            ...thread,
-            result: "",
-            status: "running",
-            startedAt: Date.now(),
+      set((state) => {
+        // A replayed tool_call_start (e.g. after reconnect replay) must not
+        // resurrect a thread that already completed or failed.
+        const existing = state.a2aThreads[thread.threadId];
+        if (existing && existing.status !== "running") return {};
+        return {
+          a2aThreads: {
+            ...state.a2aThreads,
+            [thread.threadId]: {
+              ...thread,
+              result: existing?.result ?? "",
+              status: "running",
+              startedAt: existing?.startedAt ?? Date.now(),
+            },
           },
-        },
-      })),
+        };
+      }),
 
     completeA2AThread: (threadId, result) =>
       set((state) => {
@@ -623,47 +715,7 @@ export const useChatStore = create<ChatState>((set, get) => {
       if (!beginConversationAction(id, "delete")) return false;
       try {
         await api.deleteConversation(id, true);
-        const state = get();
-        const allConversations = [
-          ...state.conversations,
-          ...state.groupConversations,
-          ...state.archivedConversations,
-        ];
-        const deletedIndex = allConversations.findIndex((conversation) => conversation.id === id);
-        const conversations = state.conversations.filter((conversation) => conversation.id !== id);
-        const groupConversations = state.groupConversations.filter(
-          (conversation) => conversation.id !== id,
-        );
-        const archivedConversations = state.archivedConversations.filter(
-          (conversation) => conversation.id !== id,
-        );
-
-        if (state.currentConversationId !== id) {
-          set({ conversations, groupConversations, archivedConversations });
-          return true;
-        }
-
-        streamManager.clearStreamTimer();
-        streamManager.abortFallback();
-        messagesRequestId += 1;
-        const activeConversations = [...conversations, ...groupConversations];
-        const nextConversation =
-          activeConversations[deletedIndex] ??
-          activeConversations[deletedIndex - 1] ??
-          activeConversations[0] ??
-          null;
-
-        set({
-          conversations,
-          groupConversations,
-          archivedConversations,
-          currentConversationId: nextConversation?.id ?? null,
-          messages: [],
-          a2aThreads: {},
-          isLoadingMessages: Boolean(nextConversation),
-          isStreaming: false,
-          streamingMessageId: null,
-        });
+        const nextConversation = dropConversation(id);
         if (nextConversation) {
           await get().fetchMessages(nextConversation.id);
         }
@@ -690,45 +742,7 @@ export const useChatStore = create<ChatState>((set, get) => {
       ].some((conversation) => conversation.id === id);
       if (!known) return;
 
-      const deletedIndex = [
-        ...state.conversations,
-        ...state.groupConversations,
-        ...state.archivedConversations,
-      ].findIndex((conversation) => conversation.id === id);
-      const conversations = state.conversations.filter((conversation) => conversation.id !== id);
-      const groupConversations = state.groupConversations.filter(
-        (conversation) => conversation.id !== id,
-      );
-      const archivedConversations = state.archivedConversations.filter(
-        (conversation) => conversation.id !== id,
-      );
-
-      if (state.currentConversationId !== id) {
-        set({ conversations, groupConversations, archivedConversations });
-        return;
-      }
-
-      streamManager.clearStreamTimer();
-      streamManager.abortFallback();
-      messagesRequestId += 1;
-      const activeConversations = [...conversations, ...groupConversations];
-      const nextConversation =
-        activeConversations[deletedIndex] ??
-        activeConversations[deletedIndex - 1] ??
-        activeConversations[0] ??
-        null;
-
-      set({
-        conversations,
-        groupConversations,
-        archivedConversations,
-        currentConversationId: nextConversation?.id ?? null,
-        messages: [],
-        a2aThreads: {},
-        isLoadingMessages: Boolean(nextConversation),
-        isStreaming: false,
-        streamingMessageId: null,
-      });
+      const nextConversation = dropConversation(id);
       if (nextConversation) {
         void get().fetchMessages(nextConversation.id);
       }
@@ -763,50 +777,6 @@ export const useChatStore = create<ChatState>((set, get) => {
         groupConversations: refresh(state.groupConversations),
         archivedConversations: refresh(state.archivedConversations),
       });
-    },
-
-    deleteConversations: async (ids) => {
-      if (ids.length === 0) return 0;
-      try {
-        const { count } = await api.deleteConversations(ids, true);
-        const deletedIds = new Set(ids);
-        const state = get();
-        const conversations = state.conversations.filter((item) => !deletedIds.has(item.id));
-        const groupConversations = state.groupConversations.filter(
-          (item) => !deletedIds.has(item.id),
-        );
-        const archivedConversations = state.archivedConversations.filter(
-          (item) => !deletedIds.has(item.id),
-        );
-        const currentWasDeleted = state.currentConversationId
-          ? deletedIds.has(state.currentConversationId)
-          : false;
-        if (!currentWasDeleted) {
-          set({ conversations, groupConversations, archivedConversations });
-          return count;
-        }
-        streamManager.clearStreamTimer();
-        streamManager.abortFallback();
-        messagesRequestId += 1;
-        const nextConversation = conversations[0] ?? groupConversations[0] ?? null;
-        set({
-          conversations,
-          groupConversations,
-          archivedConversations,
-          currentConversationId: nextConversation?.id ?? null,
-          messages: [],
-          a2aThreads: {},
-          isLoadingMessages: Boolean(nextConversation),
-          isStreaming: false,
-          streamingMessageId: null,
-          targetMessageId: null,
-        });
-        if (nextConversation) await get().fetchMessages(nextConversation.id);
-        return count;
-      } catch (error) {
-        logger.error("Failed to delete conversations", error);
-        return null;
-      }
     },
   };
 });

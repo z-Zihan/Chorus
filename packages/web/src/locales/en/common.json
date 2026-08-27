@@ -50,7 +50,6 @@
       "relay": "Relay",
       "none": "Offline"
     },
-    "createCrossHubGroup": "Create cross-Hub group",
     "crossHub": "Cross Hub",
     "remote": "Remote",
     "inviteHub": "Invite Hub",
@@ -69,7 +68,6 @@
     "memberCount": "{{count}} members",
     "addMembers": "Add members",
     "removeMember": "Remove {{name}}",
-    "leaveGroup": "Leave group",
     "createGroupTitle": "Create group chat",
     "selectAgents": "Select at least two online agents"
   },

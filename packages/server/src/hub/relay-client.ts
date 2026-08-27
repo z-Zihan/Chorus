@@ -11,6 +11,10 @@ import type {
   TransportReceipt,
   TransportStatusUpdate,
 } from "@chorus/shared";
+import {
+  HEARTBEAT_INTERVAL_MS as SHARED_HEARTBEAT_INTERVAL_MS,
+  PONG_TIMEOUT_MS as SHARED_PONG_TIMEOUT_MS,
+} from "@chorus/shared";
 import WebSocket, { type RawData } from "ws";
 import { logger } from "../utils/logger.js";
 
@@ -32,8 +36,8 @@ type RoomEventListener = (
 type RoomMembersListener = (roomId: string, members: RoomMember[]) => void;
 type TransportStatusListener = (update: TransportStatusUpdate) => void;
 
-const HEARTBEAT_INTERVAL_MS = 30_000;
-const PONG_TIMEOUT_MS = 10_000;
+const HEARTBEAT_INTERVAL_MS = SHARED_HEARTBEAT_INTERVAL_MS;
+const PONG_TIMEOUT_MS = SHARED_PONG_TIMEOUT_MS;
 const MAX_RECONNECT_DELAY_MS = 30_000;
 const ROOM_CAS_TIMEOUT_MS = 10_000;
 
@@ -108,6 +112,11 @@ export class RelayClient {
 
   leaveRoom(roomId: string): void {
     this.send({ type: "room:leave", roomId });
+  }
+
+  /** Tell the relay to drop a Hub's stored offline traffic for us (best-effort). */
+  sendContactBlock(blockedHubId: string): void {
+    this.send({ type: "contact_block", blockedHubId });
   }
 
   roomCas(roomId: string, expected: RoomCasState, next: RoomCasState): Promise<RoomCasResult> {

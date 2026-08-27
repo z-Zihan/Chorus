@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { A2ABusLike, ConversationContext, StreamChunk } from "@chorus/shared";
+import { MAX_A2A_CALL_TIMEOUT_MS, MIN_A2A_CALL_TIMEOUT_MS } from "@chorus/shared";
 import type { AgentRegistry } from "./registry";
 import { logger } from "../utils/logger";
 import type { HubMessageRouter } from "../hub/message-router";
@@ -11,9 +12,6 @@ export interface A2ABusOptions {
   callTimeoutMs: number;
   maxConcurrency: number;
 }
-
-const MIN_CALL_TIMEOUT_MS = 60_000;
-const MAX_CALL_TIMEOUT_MS = 30 * 60_000;
 
 export interface A2AAuthorizationRequest {
   conversationId: string;
@@ -237,8 +235,11 @@ export class A2ABus implements A2ABusLike {
       else this.callsByStack.set(nextStackKey, calls);
       if (parentThreadId) this.activeCalls.get(parentThreadId)?.children.delete(threadId);
       this.activeCalls.delete(threadId);
-      if (active === 0) this.concurrency.delete(toAgentId);
-      else this.concurrency.set(toAgentId, active);
+      // Decrement instead of restoring the entry snapshot: concurrent callers each
+      // restoring their own captured value can drop or inflate the counter.
+      const remaining = (this.concurrency.get(toAgentId) ?? 1) - 1;
+      if (remaining <= 0) this.concurrency.delete(toAgentId);
+      else this.concurrency.set(toAgentId, remaining);
     }
   }
 
@@ -255,8 +256,8 @@ function validCallTimeout(value: number | undefined): value is number {
   return (
     typeof value === "number" &&
     Number.isInteger(value) &&
-    value >= MIN_CALL_TIMEOUT_MS &&
-    value <= MAX_CALL_TIMEOUT_MS
+    value >= MIN_A2A_CALL_TIMEOUT_MS &&
+    value <= MAX_A2A_CALL_TIMEOUT_MS
   );
 }
 

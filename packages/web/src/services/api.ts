@@ -1,17 +1,21 @@
 import type {
   A2ACollaborationSettings,
+  A2AMode,
   Agent,
   AgentConfig,
+  AgentMetrics,
   CliDetection,
   Conversation,
   ConversationType,
   CreateConversationInput,
-  HubConnectionState,
+  CredentialStatus,
+  HubPeerStatus,
+  HubRoom,
+  HubStatusResponse,
   Message,
   OnboardingStatus,
+  PairingSessionView,
   RoomInvitation,
-  RoomMember,
-  UserWithAgents,
   LogEntry,
 } from "@chorus/shared";
 import { useUIStore } from "@/store/uiStore";
@@ -38,59 +42,8 @@ export interface MessageSearchResult {
 
 export type ServerLogEntry = LogEntry;
 
-export type A2AMode = "mention" | "call" | "off";
-
-export interface CredentialStatus {
-  backend: "system-keychain" | "file";
-  agents: Array<{ id: string; name: string }>;
-}
-
-export interface HubPeerStatus {
-  hubId: string;
-  displayName: string;
-  path: "p2p" | "relay" | "none";
-  latency: number | null;
-}
-
-export interface HubStatusResponse {
-  relayState: HubConnectionState;
-  peers: HubPeerStatus[];
-}
-
-export interface PairingSession {
-  sessionId: string;
-  role: "initiator" | "responder";
-  remoteHubId: string;
-  status:
-    | "waiting_peer"
-    | "verifying"
-    | "awaiting_approval"
-    | "trusted"
-    | "cancelled"
-    | "expired"
-    | "failed";
-  sas?: string;
-  expiresAt: number;
-  localApproved: boolean;
-  peerApproved: boolean;
-  remoteUserName?: string;
-  error?: string;
-}
-
-export interface AgentMetrics {
-  totalCalls: number;
-  successRate: number;
-  avgLatencyMs: number;
-  lastCallAt: number | null;
-}
-
-export interface HubRoom extends Conversation {
-  roomId: string;
-  members: RoomMember[];
-  agents: Agent[];
-  revision?: number;
-  keyEpoch?: number;
-}
+export type { A2AMode, CredentialStatus, HubPeerStatus };
+export type PairingSession = PairingSessionView;
 
 // ===== API =====
 
@@ -170,8 +123,6 @@ async function requestBlob(path: string, silent = false): Promise<Blob> {
 }
 
 export const api = {
-  // Health
-  health: () => request<{ ok: boolean }>("/health"),
   createWebSocketTicket: () =>
     request<{ token: string; id: string; expiresInMs: number }>("/tokens/ticket", {
       method: "POST",
@@ -184,7 +135,6 @@ export const api = {
   getAgents: (includeDisabled = false, silent = false) =>
     request<Agent[]>(`/agents${includeDisabled ? "?includeDisabled=true" : ""}`, undefined, silent),
   getAgent: (id: string, silent = false) => request<Agent>(`/agents/${id}`, undefined, silent),
-  getUsersWithAgents: () => request<UserWithAgents[]>("/users?includeAgents=true"),
   getAgentMetrics: (id: string) => request<AgentMetrics>(`/agents/${id}/metrics`, undefined, true),
   createAgent: (data: AgentConfig) =>
     request<Agent>("/agents", {
@@ -219,7 +169,6 @@ export const api = {
 
   // Catalog
   getCatalog: (silent = false) => request<CatalogEntry[]>("/catalog", undefined, silent),
-  getCatalogEntry: (id: string) => request<CatalogEntry>(`/catalog/${id}`),
   installCatalogEntry: (id: string, options: InstallOptions) =>
     request<InstallationStatus>(`/catalog/${id}/install`, {
       method: "POST",
@@ -376,12 +325,6 @@ export const api = {
       { method: "DELETE" },
       silent,
     ),
-  addAgentToConversation: (conversationId: string, agentId: string) =>
-    request<Conversation>(`/conversations/${conversationId}/agents/${agentId}`, { method: "POST" }),
-  removeAgentFromConversation: (conversationId: string, agentId: string) =>
-    request<Conversation>(`/conversations/${conversationId}/agents/${agentId}`, {
-      method: "DELETE",
-    }),
   deleteConversation: (id: string, silent = false) =>
     request<{ ok: boolean }>(`/conversations/${id}`, { method: "DELETE" }, silent),
   updateConversation: (
@@ -403,15 +346,6 @@ export const api = {
       {
         method: "POST",
         body: JSON.stringify({ threadId, approved }),
-      },
-      silent,
-    ),
-  deleteConversations: (ids: string[], silent = false) =>
-    request<{ count: number }>(
-      "/conversations/batch",
-      {
-        method: "DELETE",
-        body: JSON.stringify({ ids }),
       },
       silent,
     ),
@@ -470,7 +404,6 @@ export const api = {
 
   // CLI Detections
   getCliDetections: () => request<CliDetection[]>("/cli/detections"),
-  scanCliDetections: () => request<CliDetection[]>("/cli/detections/scan", { method: "POST" }),
   adoptDetection: (id: string) => request<Agent>(`/cli/detections/${id}/adopt`, { method: "POST" }),
 
   // Hub config
@@ -535,8 +468,6 @@ export const api = {
       }>;
       discovered: Array<{ hubId: string; displayName: string }>;
     }>("/hub/p2p/status"),
-  getP2PDiscovered: () =>
-    request<Array<{ hubId: string; displayName: string }>>("/hub/p2p/discovered"),
   connectP2PDevice: (hubId: string) =>
     request<{ ok: boolean }>("/hub/p2p/connect", {
       method: "POST",

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { ConversationContext, StreamChunk } from "@chorus/shared";
+import { DEFAULT_A2A_MAX_ROUNDS } from "@chorus/shared";
 import { BaseAdapter, messageFromError } from "../adapter";
 import { buildOpenAIA2APrompt } from "../chorus-skill";
 import { resolveA2ATarget } from "./a2a-target";
@@ -56,7 +57,7 @@ const CALL_AGENT_TOOL = {
   },
 } as const;
 
-const DEFAULT_MAX_A2A_HANDOFFS = 12;
+const DEFAULT_MAX_A2A_HANDOFFS = DEFAULT_A2A_MAX_ROUNDS;
 
 export class OpenAIAdapter extends BaseAdapter {
   readonly id: string;

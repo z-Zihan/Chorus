@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { MAX_MESSAGE_CONTENT_LENGTH } from "@chorus/shared";
 import {
   MAX_A2A_CALL_TIMEOUT_MINUTES,
   MAX_A2A_MAX_ROUNDS,
@@ -8,6 +9,7 @@ import {
   type AgentRuntime,
 } from "../agent/runtime.js";
 import type { AgentRegistry } from "../agent/registry.js";
+import type { Scheduler } from "../scheduler/index.js";
 import type { Repository } from "../db/repository.js";
 import type { EventHub } from "../ws/events.js";
 
@@ -26,7 +28,7 @@ const createConversationSchema = z.object({
   relayRoomId: z.string().trim().min(1).optional(),
 });
 const messageSchema = z.object({
-  content: z.string().trim().min(1).max(32_000),
+  content: z.string().trim().min(1).max(MAX_MESSAGE_CONTENT_LENGTH),
   agentId: z.string().trim().min(1).optional(),
   mentionedAgents: z.array(z.string().min(1)).max(20).optional(),
 });
@@ -79,6 +81,7 @@ export function registerConversationRoutes(
   registry: AgentRegistry,
   runtime: AgentRuntime,
   events?: EventHub,
+  scheduler?: Scheduler,
 ): void {
   app.get("/api/a2a/settings", async () => runtime.getA2ACollaborationSettings());
 
@@ -267,6 +270,7 @@ export function registerConversationRoutes(
 
   app.delete<{ Params: { id: string } }>("/api/conversations/:id", async (req, reply) => {
     const deleted = repository.deleteConversation(req.params.id);
+    if (deleted) scheduler?.cancelByConversation(req.params.id);
     reply.code(deleted ? 200 : 404);
     return { ok: deleted };
   });

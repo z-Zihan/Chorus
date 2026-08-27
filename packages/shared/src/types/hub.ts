@@ -78,7 +78,9 @@ export interface HubPayload {
     | "directory_revoke"
     | "delivery_ack"
     | "resync_request"
-    | "resync_response";
+    | "resync_response"
+    /** Best-effort notification that an in-flight a2a_call was cancelled by its initiator. */
+    | "a2a_cancel";
   /** 会话 ID */
   conversationId?: string;
   /** 消息 ID */

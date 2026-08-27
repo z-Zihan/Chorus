@@ -5,8 +5,8 @@
  * within the Chorus multi-agent workspace.
  *
  * Used by:
- * - CliAdapter.buildA2ASystemPrompt() — injected as prefix
  * - OpenAIAdapter — injected into system prompt when tools are available
+ *   (CliAdapter currently builds its own shorter prompt; see adapters/cli.ts)
  */
 
 export const CHORUS_SKILL = `# Chorus 平台指南
@@ -42,8 +42,8 @@ export const CHORUS_SKILL = `# Chorus 平台指南
 ### 调用规则
 
 1. 调用前先确认目标 Agent 在可用列表中
-2. 每次最多调用 3 个不同 Agent（防止无限循环）
-3. 调用链最大深度 5 层（A→B→C→D→E→F 会被拒绝）
+2. 循环调用会被拒绝（A→B→A），调用链最大深度 5 层（A→B→C→D→E→F 会被拒绝）
+3. 会话有总轮次预算（maxRounds，默认 12），超限后系统停止转发
 4. 单次调用默认超时 5 分钟（用户可配置 1–30 分钟），整条自动协作任务默认最多 20 分钟且不会短于单次调用配置
 5. 收到其他 Agent 的回复后，综合回复用户，不要只转发
 6. 每次调用必须说明原始目标、已经完成的工作、已知证据、仍缺少什么，以及期望对方交付什么
@@ -116,12 +116,15 @@ Agent A（如 Codex）应该：
  * Build the A2A system prompt for CLI adapters.
  * Includes the Chorus skill + available agent list.
  */
-export function buildA2ASystemPrompt(callableAgentIds: string[]): string {
+export function buildA2ASystemPrompt(
+  callableAgentIds: string[],
+  agentNames?: Record<string, string>,
+): string {
   return `${CHORUS_SKILL}
 
 ## 当前可用的 Agent
 
-${callableAgentIds.map((id) => `- ${id}`).join("\n")}
+${callableAgentIds.map((id) => `- ${agentNames?.[id] ? `${id} (${agentNames[id]})` : id}`).join("\n")}
 
 你可以通过 [A2A_CALL: agent_id: message] 格式调用上述 Agent。
 也可以在回复中用 agent 名称引用，如 "让 Claude Code 来 review"。

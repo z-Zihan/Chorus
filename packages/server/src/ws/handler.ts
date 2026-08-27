@@ -1,4 +1,5 @@
 import type { AppConfig, ClientEvent } from "@chorus/shared";
+import { HEARTBEAT_INTERVAL_MS, MAX_MESSAGE_CONTENT_LENGTH } from "@chorus/shared";
 import type { FastifyInstance } from "fastify";
 import type WebSocket from "ws";
 import { z } from "zod";
@@ -13,7 +14,7 @@ const eventSchema = z.discriminatedUnion("type", [
     type: z.literal("message"),
     conversationId: z.string().min(1),
     clientMessageId: z.string().min(1).max(128).optional(),
-    content: z.string().min(1).max(32_000),
+    content: z.string().min(1).max(MAX_MESSAGE_CONTENT_LENGTH),
     agentId: z.string().min(1).optional(),
     mentionedAgents: z.array(z.string()).optional(),
   }),
@@ -59,7 +60,7 @@ export function registerWebSocket(
 
     const heartbeatInterval = setInterval(() => {
       if (ws.readyState === ws.OPEN) ws.ping();
-    }, 30_000);
+    }, HEARTBEAT_INTERVAL_MS);
     ws.on("pong", () => {
       // Heartbeat received; the connection is alive.
     });

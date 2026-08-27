@@ -53,7 +53,7 @@ describe("Relay transport receipt protocol", () => {
       registry,
       offlineStore,
       roomManager,
-      roomCasStore: new RoomCasStore(),
+      roomCasStore: new RoomCasStore(database),
       messageRouter: new MessageRouter(roomManager),
       jwtSecret: JWT_SECRET,
     });
@@ -115,6 +115,22 @@ describe("Relay transport receipt protocol", () => {
       (message) => message.type === "transport_status" && message.status === "delivered",
     );
     expect(offlineStore.getForHub(recipient.hubId)).toEqual([]);
+  });
+
+  it("rejects malformed registration frames without crashing the relay", async () => {
+    const hub = createIdentity();
+    registry.register(hub.hubId, hub.hubId, "Hub");
+    const address = app.server.address();
+    if (!address || typeof address === "string") throw new Error("Missing Relay test address");
+    const socket = new WebSocket(`ws://127.0.0.1:${address.port}/ws`);
+    sockets.push(socket);
+    await new Promise<void>((resolve) => socket.once("open", () => resolve()));
+    // Valid hubId but token omitted: must be rejected, never throw past the listener.
+    socket.send(JSON.stringify({ type: "register", hubId: hub.hubId }));
+    await new Promise<void>((resolve) => socket.once("close", () => resolve()));
+    // The relay process survives and still serves a well-formed registration.
+    const recovered = await connect(hub.hubId);
+    expect(recovered.socket.readyState).toBe(WebSocket.OPEN);
   });
 
   async function connect(hubId: string): Promise<{
