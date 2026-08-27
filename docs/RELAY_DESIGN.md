@@ -1,6 +1,7 @@
 # Chorus 跨用户通信架构设计
 
 > 最后更新：2026-08-04
+> 实现备注（2026-08-27）：`room_cas` 的原子 `(revision, keyEpoch)` 计数器已实现并持久化；权威契约以 `docs/CROSS_DEVICE_DESIGN.md` 实现状态表为准。本文件其余部分为历史设计背景。
 
 > 实现状态：`packages/relay` 已包含 Relay Server、Hub 注册、WebSocket 路由、离线消息、Room 与持久化 block；`packages/server` 已实现 Hub Client/P2P/E2E、配对、Room 映射、owner/visibility 校验和签名目录。规范流程是“Contact → Room → owner-authorized Agent”；真实双设备与安装包验收仍是发布门禁。
 >

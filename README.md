@@ -46,7 +46,7 @@ AI CLI 越来越强，但它们彼此隔离——切换工具靠开终端，协�
 这是 Chorus 的核心方向。三种 A2A 模式可切换：`@mention` 异步转发（Agent 回复中 @了其他 Agent → 自动转发）、`A2A_CALL` 同步调用（调用方拿到返回值继续推理）、`off` 关闭。也可以创建群聊，多个 Agent 在同一会话中协作。
 
 **第三层：跨设备、跨人的 Agent 协作（进程级已实现，物理设备待验收）**
-你的 Agent 不仅能和本机其他 Agent 协作，还能和**同事电脑上的 Agent** 直接通信。通过自托管 Relay 服务器中转，端到端加密，数据不经第三方。
+你的 Agent 不仅能和本机其他 Agent 协作，还能和**同事电脑上的 Agent** 直接通信。通过自托管 Relay 服务器中转，端到端加密，数据不经第三方。房间成员的并发变更由 Relay 权威计数器协调，离线消息在对方上线后可靠补投。
 
 **管理 CLI 只是手段，让 Agent 之间能交流、能协作、能跨设备跨人协作，才是 Chorus 要做的事。**
 
@@ -82,6 +82,7 @@ Chorus 坚持 local-first：聊天记录默认保存在本机，CLI 在本机运
 - 🌐 **跨设备协作**：自托管 Relay + 局域网 P2P 直连 + 端到端加密 + 群组密钥管理。P2P 模式无需 Relay，同局域网自动发现（需用户确认连接）。
 - 📡 **P2P 直连**：mDNS 局域网设备发现，Ed25519 握手认证，消息签名验证，自动重连。
 - 📡 **签名目录发现**：Agent 默认 `private`；所有者仅向已配对联系人发布 `public` Agent，或向共同 Room 发布 `room/public` Agent，目录支持签名、版本、TTL 与撤销。
+- 🔀 **Room 并发协调**：成员变更经 Relay 权威 CAS 计数器仲裁（持久化、冲突自动重同步），避免多设备同时改群产生的覆盖丢失；成员移除即轮换授权纪元，旧授权立即失效。
 - 📮 **离线消息**：queued → delivered → accepted/denied → done/error 状态机，TTL 7 天，幂等投递。
 - 🔌 **标准协议适配**：Agent 能力映射到 Google A2A Agent Card、MCP Tool、ACP Service。
 - 🛠️ **外部 Agent 接入**：通过 `GET /api/skill` 发现 Chorus，REST API 完整接入，Scoped Client Token 认证。
@@ -89,7 +90,21 @@ Chorus 坚持 local-first：聊天记录默认保存在本机，CLI 在本机运
 
 ## 产品预览
 
-<!-- Screenshots and product preview will be added here. -->
+一个入口管理所有 Agent，像即时通讯一样与它们对话：
+
+![Chorus 桌面总览](assets/readme/chorus-desktop-overview.png)
+
+Agent 之间真的在协作——群聊里 Claude Code 把子任务转发给 code-reviewer 与 security-checker，并汇总结论：
+
+![Agent 间 A2A 协作](assets/readme/chorus-a2a-collaboration.png)
+
+内置 Agent 目录：自动发现本机已安装的 CLI，或接入 OpenAI-compatible API：
+
+![Agent 目录](assets/readme/chorus-agent-management.png)
+
+定时任务：用 cron 让 Agent 周期性执行工作：
+
+![定时任务](assets/readme/chorus-scheduled-tasks.png)
 
 ## 快速开始
 

@@ -1,5 +1,7 @@
 # Chorus 自动化质量整改报告
 
+> 历史快照（Historical）：本报告记录其撰写时点（见文内日期）的验证证据，不代表当前版本事实。当前质量基线以 DEV_PLAN.md 与 docs/reviews 之外的三份审计产物（CODE_QUALITY_* / REGRESSION_TEST_REPORT / DOCUMENTATION_AUDIT_REPORT）为准。
+
 > 执行日期：2026-08-12
 >
 > 代码基线：`main` / `eeb7555597f872d15a9e49297f8f77039a65d753`

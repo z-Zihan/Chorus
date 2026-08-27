@@ -1,10 +1,10 @@
 # Chorus 开发计划 / Development Plan
 
-> 最后更新：2026-08-12
+> 最后更新：2026-08-27
 > 规范来源：`docs/CROSS_DEVICE_DESIGN.md`
 > 当前发布门禁与证据以 `design/development-plan.md` 为准；本文件下半部“项目暂停总结”保留为 2026-08-05 历史快照，不代表当前发布完成度。
 
-当前仓库质量基线：Shared 9 + Relay 18 + Server 144 = 171 项单元/集成测试，另有 18 项 Playwright Web E2E；format、lint、typecheck、build 与 Cargo test/check 通过。完整运行证据见 `docs/reviews/automated-quality-report.md`。
+当前仓库质量基线：Shared 15 + Relay 24 + Server 180 = 219 项单元/集成测试，另有 19 项 Playwright Web E2E；format、lint、typecheck、build 与 Cargo test/check 通过。完整运行证据见仓库根目录 REGRESSION_TEST_REPORT.md 与 CODE_QUALITY_AUDIT.md（2026-08-27 全项目审计）。
 
 ## 状态说明
 
@@ -21,7 +21,7 @@
 
 | ID | 任务 | 状态 |
 |---|---|---|
-| XDEV-01~12 | Relay TransportReceipt、Room CAS、JCS、Hub key、Room revision/Resync 等 | ⏳ Relay receipt 已有真实 WS 证据；P2P/物理设备矩阵未关闭 |
+| XDEV-01~12 | Relay TransportReceipt、Room CAS、JCS、Hub key、Room revision/Resync 等 | 🔶 进程级完成：TransportReceipt/JCS/持久化 Room CAS（server 增删成员经 relay 协调，冲突 409+resync）/revision/Resync 房间授权均落地并有双实例证据；完整 rekey 群组密钥与物理设备矩阵未关闭 |
 
 ### 产品流程（确定性流程已实现，真实设备与故障矩阵未完成）
 

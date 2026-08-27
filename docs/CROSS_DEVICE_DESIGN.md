@@ -1,7 +1,22 @@
 # Chorus 跨设备通信设计 / Cross-Device Communication Design
 
-> 最后更新 / Last updated: 2026-08-04  
+> 最后更新 / Last updated: 2026-08-27  
 > 状态 / Status: **规范性设计（后续跨设备通信实现的唯一参考）/ Normative design and the single source of truth for future cross-device communication work**
+
+### 0. 实现状态 / Implementation Status（2026-08-27）
+
+| 能力 | 状态 | 说明 |
+|---|---|---|
+| JCS 签名序列化、Ed25519 身份、pairwise `crypto_box` E2EE | Available | 全链路唯一加密通道 |
+| 配对 / Trust / block 即时拒收 | Process-level verified（本机双实例） | 物理双设备待验收 |
+| Relay TransportReceipt / 离线库 / 房间邀请 | Process-level verified | |
+| Room membership + OwnerProof + resync 授权（含房间成员校验） | Process-level verified | |
+| **Room 状态 CAS**（§"Room 状态 CAS"、`room_cas` 契约） | **Process-level implemented（2026-08-27）** | Relay 权威计数器持久化于 rooms 表；agent 加入/移除路径经 CAS 协调，冲突返回 409 并重同步。与规范的偏差：成员变更当前允许 `keyEpoch` 持平或 +1——完整 rekey（新群组密钥分发）尚未实现，见下行。 |
+| Room key AES-GCM epoch 方案 / rekey 事件 / keyCommitment / nonce 计数器（§4.2 规范 v1） | Planned | 最小闭环已存在：移除 Room agent 时递增 keyEpoch 使旧 OwnerProof 失效；GroupKeyManager 分发/轮换待独立实现窗口 |
+| 发送方三次重试阈值 / 管理员重试 / 持久化 attempt | 未实现（维持 §原文标注） | |
+| P2P-04 会话层加密（ECDH 会话密钥） | Planned（DEV_PLAN P2P-04） | 业务 payload 已经由 pairwise crypto_box 提供 E2EE，该项为传输层增强 |
+
+本章其余内容保持规范性设计表述；实现与规范有差异之处以上表为准。
 
 本文整合并取代 `RELAY_DESIGN.md`、`PRD.md`、`GUIDE.md` 与 `DEV_PLAN.md` 中分散的跨设备通信规则。上述文件保留为历史背景；若其跨设备内容与本文冲突，以本文为准。协议关键字“必须 / MUST”“不得 / MUST NOT”“应该 / SHOULD”具有规范含义。
 

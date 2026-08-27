@@ -1,5 +1,7 @@
 # Chorus 自主质量整改任务：自动化测试、UI 校验、Bug 修复与文档同步
 
+> 历史快照（Historical）：本报告为其执行时点的整改记录，不构成当前行为规范。
+
 > 参考 Evir 的自动化质量整改方法，但以 Chorus 的 conversation-first、跨设备信任、Room 授权和 Tauri sidecar 架构为准；不得复制 Evir 的 Provider、工作区 Agent 或模式设计。
 
 ## 1. 任务目标

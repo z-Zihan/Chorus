@@ -4,6 +4,16 @@
 >
 > 状态约定：本文同时包含已实现能力、历史草案和未来方案；带“未实现/未来/历史”标记的内容不属于当前 API 或发布承诺，当前行为以源码、迁移和测试为准。
 
+## 实现同步 / Implementation Notes（2026-08-27）
+
+随 2026-08-27 全项目审计落地的关键机制（详情见仓库根目录三份审计产物）：
+
+- **跨 Hub 可靠性**：入站 envelope 以 `processed_envelopes` 表做持久化去重（验签通过后记忆，随离线 TTL 清理）；出站仅 a2a_call/chat 进本地重发队列，控制消息依赖重连重发起；transport failed 回退 queued 重试。
+- **Room 并发协调**：agent 加入/移除经 Relay `room_cas` 权威计数器协调（rooms 表持久化 revision/keyEpoch），冲突 409 并触发 join/resync；移除成员时 keyEpoch 同步轮换使旧 OwnerProof 失效。
+- **A2A 语义**：群聊 @mention 转发同样受会话 a2aPolicy 约束；新增 `a2a_cancel` 最佳努力取消传播；CLI/OpenAI Agent 共用 chorus-skill 提示词。
+- **凭据**：macOS 写钥匙串改 stdin 交互模式；file 回退密钥混入每安装随机盐（credentials.enc v1→v2 自动迁移）。
+- **Web**：会话 A2A mode 以 Conversation.a2aMode 为唯一来源；typing 指示器渲染；事件重放幂等。
+
 ## 1. 系统架构
 
 ```
