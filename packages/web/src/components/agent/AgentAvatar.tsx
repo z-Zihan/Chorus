@@ -1,3 +1,5 @@
+import { voiceChipColor } from "@/lib/agentColor";
+
 interface Props {
   name: string;
   src?: string;
@@ -10,26 +12,6 @@ const SIZE_MAP = {
   md: "h-10 w-10 text-sm",
   lg: "h-12 w-12 text-base",
 };
-
-// Color palette for avatar backgrounds based on name hash
-const COLORS = [
-  "bg-teal-600",
-  "bg-cyan-600",
-  "bg-emerald-600",
-  "bg-amber-600",
-  "bg-rose-600",
-  "bg-violet-600",
-  "bg-sky-600",
-  "bg-lime-600",
-];
-
-function getColor(name: string): string {
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  return COLORS[Math.abs(hash) % COLORS.length];
-}
 
 function getInitials(name: string): string {
   const parts = name.trim().split(/\s+/);
@@ -48,9 +30,8 @@ export function AgentAvatar({ name, src, size = "md" }: Props) {
 
   return (
     <div
-      className={`${sizeClass} ${getColor(
-        name,
-      )} flex flex-shrink-0 items-center justify-center rounded-full font-medium text-white`}
+      className={`${sizeClass} flex flex-shrink-0 items-center justify-center rounded-full font-medium text-white`}
+      style={{ backgroundColor: voiceChipColor(name) }}
     >
       {getInitials(name)}
     </div>

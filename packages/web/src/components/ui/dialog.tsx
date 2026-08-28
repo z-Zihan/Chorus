@@ -34,12 +34,12 @@ export const DialogOverlay = forwardRef<
 DialogOverlay.displayName = "DialogOverlay";
 
 const dialogContentVariants = cva(
-  "fixed z-50 border border-[var(--border-color)] bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-2xl outline-none",
+  "fixed z-50 border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-[var(--shadow-overlay)] outline-none",
   {
     variants: {
       variant: {
         centered:
-          "left-1/2 top-1/2 max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-xl p-5",
+          "left-1/2 top-1/2 max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl p-5",
         drawer:
           "inset-y-0 right-0 flex h-full w-full max-w-md flex-col border-y-0 border-r-0 data-[state=closed]:translate-x-full data-[state=open]:translate-x-0 data-[state=closed]:duration-150 data-[state=open]:duration-200 data-[state=closed]:ease-in data-[state=open]:ease-out",
       },

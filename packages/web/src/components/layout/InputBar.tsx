@@ -175,39 +175,12 @@ export function InputBar() {
   };
 
   return (
-    <div className="border-t border-[var(--border-color)] bg-[var(--bg-surface)] px-4 py-3">
-      <div className="flex items-end gap-3">
-        <div className="relative flex flex-1 items-end rounded-xl border border-[var(--border-color)] bg-[var(--bg-elevated)] px-4 focus-within:border-[var(--focus-ring)] focus-within:ring-2 focus-within:ring-[var(--focus-ring)]/35">
-          {mentionQuery !== null &&
-            currentConversation?.type === "group" &&
-            mentionAgents.length > 0 && (
-              <div
-                role="listbox"
-                className="absolute bottom-full left-0 z-50 mb-2 max-h-48 w-56 overflow-y-auto rounded-lg border border-[var(--border-color)] bg-[var(--bg-surface)] shadow-xl"
-              >
-                {mentionAgents.map((agent, index) => (
-                  <button
-                    key={agent.id}
-                    type="button"
-                    role="option"
-                    aria-selected={index === mentionIndex}
-                    onMouseDown={(e) => {
-                      e.preventDefault();
-                      insertMention(agent.name);
-                    }}
-                    className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--bg-hover)] ${
-                      index === mentionIndex ? "bg-[var(--bg-hover)]" : ""
-                    }`}
-                  >
-                    <AgentAvatar name={agent.name} src={agent.avatar} size="xs" />
-                    <span className="flex-1 truncate">{agent.name}</span>
-                    <span className={`h-2 w-2 rounded-full ${STATUS_COLORS[agent.status]}`} />
-                  </button>
-                ))}
-              </div>
-            )}
+    <div className="shrink-0 border-t border-[var(--border-subtle)] bg-[var(--bg-base)] px-4 pb-3 pt-2.5 sm:px-6">
+      <div className="mx-auto max-w-4xl">
+        <div className="rounded-2xl border border-[var(--border-color)] bg-[var(--bg-surface)] transition focus-within:border-[var(--accent-color)]/60 focus-within:ring-2 focus-within:ring-[var(--accent-subtle)]">
+          {/* Routing meta row — group conversations only */}
           {currentConversation?.type === "group" && (
-            <>
+            <div className="flex items-center gap-1.5 border-b border-[var(--border-subtle)] px-2 py-1.5">
               <AgentSelector
                 agentIds={[
                   ...new Set([
@@ -222,61 +195,93 @@ export function InputBar() {
                 onValueChange={setSelectedAgentIds}
                 disabled={isStreaming || !currentConversationId}
               />
-              <div className="mx-2 h-6 w-px shrink-0 bg-[var(--border-color)]" />
-            </>
+              {(() => {
+                const routedAgent =
+                  selectedAgentIds.length > 0
+                    ? agents.find((a) => a.id === selectedAgentIds[0])
+                    : agents.find(
+                        (a) =>
+                          currentConversation.agentIds.includes(a.id) &&
+                          !a.stale &&
+                          (a.ownerType === "remote" ||
+                            a.status === "online" ||
+                            a.status === "busy"),
+                      );
+                const displayName = routedAgent?.name ?? t("chat:noAgentAvailable");
+                return (
+                  <span className="mono hidden min-w-0 truncate items-center gap-1 pr-1 text-[10px] text-[var(--text-tertiary)] sm:flex">
+                    <span aria-hidden="true" className="text-[var(--accent-color)]">
+                      →
+                    </span>
+                    {displayName}
+                  </span>
+                );
+              })()}
+            </div>
           )}
-          {currentConversation?.type === "group" &&
-            (() => {
-              const routedAgent =
-                selectedAgentIds.length > 0
-                  ? agents.find((a) => a.id === selectedAgentIds[0])
-                  : agents.find(
-                      (a) =>
-                        currentConversation.agentIds.includes(a.id) &&
-                        !a.stale &&
-                        (a.ownerType === "remote" || a.status === "online" || a.status === "busy"),
-                    );
-              const displayName = routedAgent?.name ?? t("chat:noAgentAvailable");
-              return (
-                <span className="hidden shrink-0 items-center gap-1 text-[10px] text-[var(--text-tertiary)] sm:flex">
-                  <span aria-hidden="true">→</span>
-                  {displayName}
-                </span>
-              );
-            })()}
-          <textarea
-            ref={textareaRef}
-            value={input}
-            onChange={handleInput}
-            onKeyDown={handleKeyDown}
-            rows={1}
-            placeholder={t("chat:inputPlaceholderShort")}
-            aria-label={t("chat:messageInputLabel")}
-            className="min-h-11 max-h-40 flex-1 resize-none bg-transparent py-2.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none"
-            disabled={isStreaming}
-          />
+          <div className="relative flex items-end gap-2 px-2 py-1.5">
+            {mentionQuery !== null &&
+              currentConversation?.type === "group" &&
+              mentionAgents.length > 0 && (
+                <div
+                  role="listbox"
+                  className="absolute bottom-full left-0 z-50 mb-2 max-h-48 w-56 overflow-y-auto rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] shadow-[var(--shadow-pop)]"
+                >
+                  {mentionAgents.map((agent, index) => (
+                    <button
+                      key={agent.id}
+                      type="button"
+                      role="option"
+                      aria-selected={index === mentionIndex}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        insertMention(agent.name);
+                      }}
+                      className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--bg-hover)] ${
+                        index === mentionIndex ? "bg-[var(--bg-hover)]" : ""
+                      }`}
+                    >
+                      <AgentAvatar name={agent.name} src={agent.avatar} size="xs" />
+                      <span className="flex-1 truncate">{agent.name}</span>
+                      <span className={`h-2 w-2 rounded-full ${STATUS_COLORS[agent.status]}`} />
+                    </button>
+                  ))}
+                </div>
+              )}
+            <textarea
+              ref={textareaRef}
+              value={input}
+              onChange={handleInput}
+              onKeyDown={handleKeyDown}
+              rows={1}
+              placeholder={t("chat:inputPlaceholderShort")}
+              aria-label={t("chat:messageInputLabel")}
+              className="min-h-11 max-h-40 flex-1 resize-none bg-transparent px-2 py-2.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none"
+              disabled={isStreaming}
+            />
+            {isStreaming ? (
+              <Button
+                variant="danger"
+                onClick={cancelStream}
+                aria-label={t("common:buttons.stop")}
+                className="mb-0.5 h-9 min-w-9 rounded-xl px-2.5"
+              >
+                <Square aria-hidden="true" className="h-4 w-4 fill-current" />
+                <span className="hidden min-[360px]:inline">{t("common:buttons.stop")}</span>
+              </Button>
+            ) : (
+              <Button
+                onClick={handleSend}
+                disabled={!input.trim() || !currentConversationId}
+                aria-label={t("common:buttons.send")}
+                className="mb-0.5 h-9 min-w-9 rounded-xl px-2.5"
+              >
+                <Send aria-hidden="true" className="h-4 w-4" />
+                <span className="hidden min-[360px]:inline">{t("common:buttons.send")}</span>
+              </Button>
+            )}
+          </div>
         </div>
-        {isStreaming ? (
-          <Button
-            variant="danger"
-            onClick={cancelStream}
-            aria-label={t("common:buttons.stop")}
-            className="h-11 min-w-11 rounded-xl px-3 md:h-10"
-          >
-            <Square aria-hidden="true" className="h-4 w-4 fill-current" />
-            <span className="hidden min-[360px]:inline">{t("common:buttons.stop")}</span>
-          </Button>
-        ) : (
-          <Button
-            onClick={handleSend}
-            disabled={!input.trim() || !currentConversationId}
-            aria-label={t("common:buttons.send")}
-            className="h-11 min-w-11 rounded-xl px-3 md:h-10"
-          >
-            <Send aria-hidden="true" className="h-4 w-4" />
-            <span className="hidden min-[360px]:inline">{t("common:buttons.send")}</span>
-          </Button>
-        )}
       </div>
     </div>
   );

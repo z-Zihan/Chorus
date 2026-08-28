@@ -41,6 +41,19 @@ button:not(:disabled),
   color: var(--text-primary);
 }
 
+/* Monospace meta layer — timestamps, counters, labels. Agents are terminal
+   programs, so the metadata voice is the terminal voice. */
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+textarea,
+input {
+  caret-color: var(--accent-color);
+}
+
 :focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
@@ -77,7 +90,7 @@ button:not(:disabled),
   content: "▊";
   animation: blink 1s infinite;
   margin-left: 2px;
-  color: var(--accent-hover);
+  color: var(--accent-warm);
 }
 
 /* Typing dots */

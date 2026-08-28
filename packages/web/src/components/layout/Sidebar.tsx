@@ -415,6 +415,12 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
             : "text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]"
         }`}
       >
+        {currentConversationId === conv.id && !nested && (
+          <span
+            aria-hidden="true"
+            className="absolute left-0 top-1/2 h-4 w-[2px] -translate-y-1/2 rounded-full bg-[var(--accent-color)]"
+          />
+        )}
         <button
           type="button"
           onClick={() => handleSelectConversation(conv.id)}
@@ -458,7 +464,7 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
                   {t("common:status.offline")}
                 </span>
               )}
-              <span className="ml-auto shrink-0 pl-1 text-[11px] leading-4 tabular-nums text-[var(--text-muted)]">
+              <span className="mono ml-auto shrink-0 pl-1 text-[10px] leading-4 text-[var(--text-muted)]">
                 {formatConversationTime(conv.updatedAt)}
               </span>
             </div>
@@ -574,11 +580,11 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
         </button>
       )}
       <aside
-        className={`absolute inset-y-0 left-0 z-30 flex h-full w-80 max-w-[85vw] shrink-0 flex-col border-r border-[var(--border-color)] bg-[var(--bg-surface)] shadow-2xl transition-all duration-300 ease-out md:static md:w-72 md:max-w-none md:translate-x-0 md:shadow-none ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"} ${isSidebarCollapsed ? "md:-ml-72 md:overflow-hidden md:border-r-0 md:opacity-0" : "md:ml-0 md:opacity-100"}`}
+        className={`absolute inset-y-0 left-0 z-30 flex h-full w-80 max-w-[85vw] shrink-0 flex-col border-r border-[var(--border-subtle)] bg-[var(--bg-sidebar)] shadow-2xl transition-all duration-300 ease-out md:static md:w-72 md:max-w-none md:translate-x-0 md:shadow-none ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"} ${isSidebarCollapsed ? "md:-ml-72 md:overflow-hidden md:border-r-0 md:opacity-0" : "md:ml-0 md:opacity-100"}`}
       >
-        <div className="flex h-14 items-center gap-2 border-b border-[var(--border-color)] px-4">
+        <div className="flex h-14 items-center gap-2 border-b border-[var(--border-subtle)] px-4">
           <BrandMark className="h-8 w-8 text-[var(--accent-color)]" />
-          <span className="flex-1 font-semibold text-[var(--text-primary)]">
+          <span className="flex-1 font-semibold tracking-tight text-[var(--text-primary)]">
             {t("common:appName")}
           </span>
           <Button
@@ -613,7 +619,7 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
         </div>
 
         <div className="space-y-2 border-b border-[var(--border-color)] px-3 py-3">
-          <label className="flex min-h-11 items-center gap-2 rounded-lg border border-[var(--border-color)] bg-[var(--bg-base)] px-3 py-2 focus-within:border-[var(--focus-ring)] focus-within:ring-2 focus-within:ring-[var(--focus-ring)]/35">
+          <label className="flex min-h-11 items-center gap-2 rounded-[10px] border border-[var(--border-subtle)] bg-[var(--bg-base)] px-3 py-2 transition focus-within:border-[var(--accent-color)] focus-within:ring-2 focus-within:ring-[var(--accent-subtle)]">
             <Search aria-hidden="true" className="h-4 w-4 shrink-0 text-[var(--text-tertiary)]" />
             <input
               type="search"
@@ -662,11 +668,11 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
             <div className="flex items-center gap-2 px-2 pb-2">
               <h2
                 id="conversation-list-title"
-                className="flex-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--text-tertiary)]"
+                className="mono flex-1 text-[10px] font-medium uppercase tracking-[0.16em] text-[var(--text-tertiary)]"
               >
                 {t("sidebar:conversations")}
               </h2>
-              <span className="text-[11px] tabular-nums text-[var(--text-muted)]">
+              <span className="mono text-[10px] text-[var(--text-muted)]">
                 {visibleConversations.length}
               </span>
             </div>
@@ -876,11 +882,11 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
                   type="button"
                   onClick={() => setIsAgentsOpen((open) => !open)}
                   aria-expanded={isAgentsOpen}
-                  className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-2 text-sm font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] md:min-h-0"
+                  className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-2 text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-secondary)] md:min-h-0"
                 >
                   <Bot aria-hidden="true" className="h-3.5 w-3.5" />
                   <span className="flex-1 text-left">{t("sidebar:agents")}</span>
-                  <span>{agents.length}</span>
+                  <span className="mono text-[10px] text-[var(--text-muted)]">{agents.length}</span>
                   <ChevronDown
                     aria-hidden="true"
                     className={`h-3.5 w-3.5 transition-transform ${isAgentsOpen ? "rotate-180" : ""}`}
@@ -933,11 +939,13 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
                 type="button"
                 onClick={() => setIsArchivedOpen((open) => !open)}
                 aria-expanded={isArchivedOpen}
-                className="flex min-h-11 w-full items-center gap-2 rounded-md px-2 py-2 text-sm font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] md:min-h-0"
+                className="flex min-h-11 w-full items-center gap-2 rounded-md px-2 py-2 text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-secondary)] md:min-h-0"
               >
                 <Archive aria-hidden="true" className="h-3.5 w-3.5" />
                 <span className="flex-1 text-left">{t("sidebar:archived")}</span>
-                <span>{visibleArchivedConversations.length}</span>
+                <span className="mono text-[10px] text-[var(--text-muted)]">
+                  {visibleArchivedConversations.length}
+                </span>
                 <ChevronDown
                   aria-hidden="true"
                   className={`h-3.5 w-3.5 transition-transform ${isArchivedOpen ? "rotate-180" : ""}`}

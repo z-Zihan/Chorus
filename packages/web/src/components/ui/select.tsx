@@ -47,7 +47,7 @@ export const SelectContent = forwardRef<
       ref={ref}
       position={position}
       className={cn(
-        "z-[70] min-w-[8rem] overflow-hidden rounded-lg border border-[var(--border-color)] bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-xl",
+        "z-[70] min-w-[8rem] overflow-hidden rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] text-[var(--text-primary)] shadow-[var(--shadow-pop)]",
         position === "popper" && "w-[var(--radix-select-trigger-width)]",
         className,
       )}

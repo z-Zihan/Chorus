@@ -27,7 +27,7 @@ function MessageSkeletons({ label }: { label: string }) {
             <div className="h-8 w-8 shrink-0 rounded-full bg-[var(--bg-elevated)]" />
           )}
           <div
-            className={`h-16 rounded-2xl bg-[var(--bg-elevated)] ${index === 1 ? "w-2/5" : "w-3/5"}`}
+            className={`h-16 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] ${index === 1 ? "w-2/5" : "w-3/5"}`}
           />
         </div>
       ))}
@@ -244,7 +244,7 @@ export function MessageList() {
         onScroll={handleScroll}
         role="log"
         aria-live="polite"
-        className="h-full overflow-y-auto px-4 py-4 md:px-6"
+        className="h-full overflow-y-auto px-4 py-5 md:px-8"
       >
         <div className="mx-auto flex max-w-4xl flex-col gap-4">
           {messagesError && messages.length > 0 && (
@@ -295,7 +295,7 @@ export function MessageList() {
             </div>
           ) : messages.length === 0 && Object.keys(a2aThreads).length === 0 && !isStreaming ? (
             <div className="flex flex-col items-center justify-center py-24 text-center">
-              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--bg-surface)] text-[var(--accent-hover)] ring-1 ring-[var(--border-color)]">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-tertiary)]">
                 <MessageSquare aria-hidden="true" className="h-7 w-7" />
               </div>
               <p className="mt-4 text-sm font-medium text-[var(--text-primary)]">
@@ -313,9 +313,12 @@ export function MessageList() {
         <button
           type="button"
           onClick={() => scrollToBottom()}
-          className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-full border border-[var(--accent-hover)] bg-[var(--accent-color)] px-4 py-2 text-sm font-medium text-white shadow-xl transition-colors hover:bg-[var(--accent-hover)]"
+          className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-full border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-4 py-2 text-sm font-medium text-[var(--text-primary)] shadow-[var(--shadow-pop)] transition-colors hover:bg-[var(--bg-hover)]"
         >
-          <ChevronDown aria-hidden="true" className="mr-1 inline h-4 w-4" />
+          <ChevronDown
+            aria-hidden="true"
+            className="mr-1 inline h-4 w-4 text-[var(--accent-color)]"
+          />
           {t("newMessages")}
         </button>
       )}

@@ -10,7 +10,6 @@ import {
   FileJson,
   FileText,
   Menu,
-  MessageSquare,
   Network,
   Users,
 } from "lucide-react";
@@ -187,7 +186,7 @@ export function ChatArea() {
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
-      <header className="flex h-14 items-center border-b border-[var(--border-color)] bg-[var(--bg-base)] px-4 md:px-6">
+      <header className="flex h-14 shrink-0 items-center border-b border-[var(--border-subtle)] bg-[var(--bg-base)] px-4 md:px-6">
         <button
           type="button"
           onClick={openSidebar}
@@ -196,16 +195,26 @@ export function ChatArea() {
         >
           <Menu aria-hidden="true" className="h-5 w-5" />
         </button>
-        <div className="flex min-w-0 flex-1 items-center gap-3">
-          <div className="hidden h-8 w-8 items-center justify-center rounded-full bg-[var(--bg-elevated)] text-sm sm:flex">
-            {currentConv?.type === "group" ? (
+        <div className="flex min-w-0 flex-1 items-center gap-2.5">
+          {currentConv?.type === "group" || currentConv?.type === "cross_hub" ? (
+            <div className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-secondary)] sm:flex">
               <Users aria-hidden="true" className="h-4 w-4" />
-            ) : (
-              <MessageSquare aria-hidden="true" className="h-4 w-4" />
-            )}
-          </div>
-          <div className="flex min-w-0 items-center gap-1 sm:block">
-            <h1 className="truncate font-semibold text-[var(--text-primary)]">
+            </div>
+          ) : (
+            currentAgents[0] && (
+              <span
+                className="relative hidden shrink-0 sm:block"
+                title={`${currentAgents[0].name} · ${t(`common:status.${currentAgents[0].status}`)}`}
+              >
+                <AgentAvatar name={currentAgents[0].name} src={currentAgents[0].avatar} size="sm" />
+                <span
+                  className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-[var(--bg-base)] ${STATUS_COLORS[currentAgents[0].status]}`}
+                />
+              </span>
+            )
+          )}
+          <div className="min-w-0">
+            <h1 className="truncate text-[15px] font-semibold leading-5 text-[var(--text-primary)]">
               {currentConv?.title ?? t("chat:defaultConversationTitle")}
             </h1>
             {currentConv && (currentConv.type === "group" || currentConv.type === "cross_hub") ? (
@@ -245,29 +254,10 @@ export function ChatArea() {
                   </DialogContent>
                 </Dialog>
               </>
-            ) : (
-              currentAgents.length > 0 && (
-                <div className="mt-1 flex -space-x-1" aria-label={t("chat:participatingAgents")}>
-                  {currentAgents.map((agent) => (
-                    <span
-                      key={agent.id}
-                      className="relative"
-                      title={`${agent.name} · ${t(`common:status.${agent.status}`)}`}
-                    >
-                      <span className="block rounded-full ring-2 ring-[var(--bg-base)]">
-                        <AgentAvatar name={agent.name} src={agent.avatar} size="xs" />
-                      </span>
-                      <span
-                        className={`absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-[var(--bg-base)] ${STATUS_COLORS[agent.status]}`}
-                      />
-                    </span>
-                  ))}
-                </div>
-              )
-            )}
+            ) : null}
           </div>
         </div>
-        <div className="ml-auto flex items-center gap-1 md:gap-1.5">
+        <div className="ml-auto flex items-center gap-0.5 md:gap-1">
           <ConnectionStatus />
 
           {currentConv && (currentConv.type === "group" || currentConv.type === "cross_hub") && (
@@ -277,7 +267,7 @@ export function ChatArea() {
               onClick={() => setIsAddAgentOpen(true)}
               aria-label={t("sidebar:addMyAgent")}
               title={t("sidebar:addMyAgent")}
-              className="hidden h-11 w-11 md:inline-flex md:h-8 md:w-8"
+              className="hidden h-11 w-11 text-[var(--text-secondary)] md:inline-flex md:h-8 md:w-8"
             >
               <Bot aria-hidden="true" className="h-4 w-4" />
             </Button>
@@ -395,7 +385,7 @@ export function ChatArea() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-11 min-w-11 px-0 md:h-8 md:px-3"
+                  className="h-11 min-w-11 px-0 text-[var(--text-secondary)] md:h-8 md:px-3"
                   aria-label={t("common:export.title")}
                 >
                   <Download aria-hidden="true" className="h-4 w-4" />
@@ -520,8 +510,9 @@ function TypingIndicator({
     <div
       role="status"
       aria-live="polite"
-      className="px-4 pb-1 text-xs text-[var(--text-secondary)] sm:px-6"
+      className="flex items-center gap-2 px-4 pb-1 text-xs text-[var(--text-secondary)] sm:px-6"
     >
+      <span className="typing-dot h-1.5 w-1.5 rounded-full bg-[var(--accent-warm)]" />
       {t("typingIndicator", { names: names.join(", ") })}
     </div>
   );
