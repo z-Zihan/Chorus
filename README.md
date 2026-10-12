@@ -14,7 +14,9 @@
 
 **本地优先 · 多 Agent 协作 · 跨设备通信 · 自托管 Relay**
 
-[产品介绍](#产品介绍) · [核心功能](#核心功能) · [快速开始](#快速开始) · [工作原理](#工作原理) · [使用指南](docs/GUIDE.md) · [开发文档](docs/DEVELOPMENT.md)
+![Local-first](https://img.shields.io/badge/local--first-no%20cloud%20required-2ea44f?style=flat-square) ![multi-agent](https://img.shields.io/badge/multi--agent-A2A-8b5cf6?style=flat-square) ![CLIs](https://img.shields.io/badge/AI%20CLIs-14%20auto--detected-7c3aed?style=flat-square) ![Relay](https://img.shields.io/badge/relay-self--hosted%20%C2%B7%20E2EE-0ea5e9?style=flat-square) ![Tauri 2](https://img.shields.io/badge/Tauri-2-24C8DB?style=flat-square&logo=tauri&logoColor=white) ![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)
+
+[产品介绍](#产品介绍) · [核心功能](#核心功能) · [快速开始](#快速开始) · [工作原理](#工作原理) · [FAQ](#faq) · [使用指南](docs/GUIDE.md) · [开发文档](docs/DEVELOPMENT.md)
 
 </div>
 
@@ -283,3 +285,7 @@ Chorus 启动后暴露 `GET /api/skill` 端点，返回完整的 Platform Skill 
 ### Chorus 支持哪些标准协议？
 
 Agent 能力可映射到 Google A2A Agent Card（`/.well-known/agent-card.json`，仅发布 `public` Agent）、MCP Tool 列表（`/api/mcp/tools`）、ACP 服务列表（`/api/acp/services`）。
+
+## 反馈与贡献
+
+欢迎通过 [Issue](https://github.com/z-Zihan/Chorus/issues) 反馈问题、交流想法；开发者请先阅读[开发文档](docs/DEVELOPMENT.md)。如果 Chorus 对你有帮助，欢迎点一个 ⭐ Star 支持项目继续演进。
