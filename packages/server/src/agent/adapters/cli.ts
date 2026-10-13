@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { constants } from "node:fs";
 import { access } from "node:fs/promises";
@@ -466,6 +466,14 @@ ${message}`;
       env: cfg.env ? { ...process.env, ...cfg.env } : process.env,
       stdio: ["pipe", "pipe", "pipe"],
       shell: process.platform === "win32",
+      // unix: run the CLI as the leader of its own process group so terminate()
+      // can signal the whole tree (git/node grandchildren) via a negative pid
+      // instead of orphaning them. We keep the stdio pipes and never unref the
+      // child, so the normal wait/stream/close path is unchanged — detached only
+      // affects which process group receives a termination signal. On Windows a
+      // shell is already used and taskkill /T walks the tree, so detached (which
+      // Node ignores there anyway without a new console) is unnecessary.
+      detached: process.platform !== "win32",
     });
     this.children.add(child);
     child.once("close", () => this.children.delete(child));
@@ -665,6 +673,61 @@ function buildA2AFollowUpPrompt(
 
 function terminate(child: ChildProcess): void {
   if (child.exitCode !== null || child.signalCode !== null) return;
+  const pid = child.pid;
+
+  // No pid yet (spawn failed before assignment) — best-effort direct kill.
+  if (pid === undefined) {
+    killDirect(child);
+    return;
+  }
+
+  if (process.platform === "win32") {
+    // Windows has no POSIX process groups to signal. taskkill /T /F terminates
+    // the whole tree (the CLI plus any git/node grandchildren); a bare
+    // child.kill() would orphan them. Failures are ignored — by the time we
+    // escalate the process may already be gone, and there is nothing to retry.
+    execFile("taskkill", ["/PID", String(pid), "/T", "/F"], () => {});
+    return;
+  }
+
+  // Every other platform Node runs on is POSIX: the CLI was spawned detached as
+  // its own group leader, so signal the whole group. killGroup itself falls
+  // back to a direct child kill if the group signal is rejected (e.g. the child
+  // never became a leader), so no separate "exotic platform" branch is needed.
+  killGroup(pid, child);
+}
+
+/**
+ * unix process-group kill. The CLI is spawned detached, so its pid doubles as
+ * the process-group id; a negative pid signals every process in the group,
+ * reaching git/node grandchildren a bare child.kill() would strand. SIGTERM
+ * first for a graceful exit, then SIGKILL after a grace window.
+ */
+function killGroup(pid: number, child: ChildProcess): void {
+  try {
+    process.kill(-pid, "SIGTERM");
+  } catch {
+    // Group already gone, or the child never became a group leader (not
+    // detached). Fall back to the direct child so it is never left running.
+    killDirect(child);
+    return;
+  }
+  setTimeout(() => {
+    // Escalate unconditionally — do NOT short-circuit on the leader having
+    // exited. A grandchild (git/node) may ignore SIGTERM and outlive the CLI
+    // leader, so child.exitCode/signalCode flipping tells us nothing about the
+    // rest of the group. Re-signal the whole group and let the catch swallow
+    // ESRCH when it is genuinely already gone.
+    try {
+      process.kill(-pid, "SIGKILL");
+    } catch {
+      // Group already fully reaped between the SIGTERM and this escalation.
+    }
+  }, 3000).unref();
+}
+
+/** Single-process SIGTERM→SIGKILL fallback (no group semantics available). */
+function killDirect(child: ChildProcess): void {
   child.kill("SIGTERM");
   setTimeout(() => {
     if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");

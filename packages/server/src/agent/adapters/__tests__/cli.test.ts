@@ -230,4 +230,149 @@ describe("CliAdapter", () => {
     ).rejects.toThrow("maximum of 1 A2A handoffs");
     expect(call).toHaveBeenCalledOnce();
   });
+
+  // Grandchildren (git/node the CLI itself spawns) must be reaped on
+  // terminate, not orphaned. Unix-only: Windows uses taskkill /T, which cannot
+  // be exercised here. Processes self-exit after 30s as a leak backstop.
+  it("kills the whole process tree when the request is aborted (unix)", async () => {
+    if (process.platform === "win32") return;
+
+    const adapter = new CliAdapter("tree", "Tree");
+    await adapter.init({
+      command: process.execPath,
+      args: [
+        "-e",
+        [
+          "const cp=require('node:child_process');",
+          // Grandchild inherits the detached group of its parent CLI.
+          "const gc=cp.spawn(process.execPath,['-e','setTimeout(()=>process.exit(0),30000)'],{stdio:'ignore'});",
+          "process.stdout.write('GCPID:'+gc.pid+'\\n');",
+          // Keep the parent alive so the adapter is still streaming on abort.
+          "setTimeout(()=>process.exit(0),30000);",
+        ].join(""),
+      ],
+      input: "argument",
+      output: "plain",
+    });
+
+    const controller = new AbortController();
+    const alive = (pid: number): boolean => {
+      try {
+        process.kill(pid, 0);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
+    let grandchildPid: number | undefined;
+    try {
+      const stream = adapter.handleMessage("go", context({ signal: controller.signal }));
+      for await (const chunk of stream) {
+        const match = /GCPID:(\d+)/u.exec(chunk.content);
+        if (match) {
+          grandchildPid = Number(match[1]);
+          controller.abort();
+          break;
+        }
+      }
+
+      expect(grandchildPid).toBeDefined();
+      const deadline = Date.now() + 5000;
+      while (alive(grandchildPid as number) && Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      expect(alive(grandchildPid as number)).toBe(false);
+    } finally {
+      adapter.destroy();
+      if (grandchildPid !== undefined && alive(grandchildPid)) {
+        try {
+          process.kill(grandchildPid, "SIGKILL");
+        } catch {
+          /* already gone */
+        }
+      }
+    }
+  });
+
+  // A grandchild that ignores SIGTERM and outlives the CLI leader must still be
+  // reaped: the SIGKILL escalation re-signals the whole group unconditionally,
+  // so it cannot short-circuit on the (already-exited) leader. Unix-only.
+  // The grandchild emits READY only after its SIGTERM-ignoring handler is
+  // installed, and the leader gates GCPID on that — otherwise the group SIGTERM
+  // could race ahead of the handler and reap it, hiding the escalation path.
+  // Deadline covers the 3s SIGKILL grace window plus margin; processes self-exit
+  // after 30s as a leak backstop.
+  it("kills a SIGTERM-ignoring grandchild after the leader exits (unix)", async () => {
+    if (process.platform === "win32") return;
+
+    const adapter = new CliAdapter("tree", "Tree");
+    await adapter.init({
+      command: process.execPath,
+      args: [
+        "-e",
+        [
+          "const cp=require('node:child_process');",
+          // Grandchild inherits the detached group but ignores SIGTERM, so only
+          // the group SIGKILL escalation can reap it. It signals READY once the
+          // handler is live.
+          "const gc=cp.spawn(process.execPath,['-e',\"process.on('SIGTERM',()=>{});process.stdout.write('READY');setTimeout(()=>process.exit(0),30000)\"],{stdio:['ignore','pipe','ignore']});",
+          // Only report the pid after the grandchild confirms its handler, so
+          // the test's abort cannot outrun the SIGTERM-ignore registration.
+          "gc.stdout.on('data',d=>{if(String(d).includes('READY'))process.stdout.write('GCPID:'+gc.pid+'\\n');});",
+          // Leader keeps default SIGTERM handling, so it exits on the group
+          // SIGTERM — well before the SIGKILL escalation fires.
+          "setTimeout(()=>process.exit(0),30000);",
+        ].join(""),
+      ],
+      input: "argument",
+      output: "plain",
+    });
+
+    const controller = new AbortController();
+    const alive = (pid: number): boolean => {
+      try {
+        process.kill(pid, 0);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
+    let grandchildPid: number | undefined;
+    try {
+      const stream = adapter.handleMessage("go", context({ signal: controller.signal }));
+      for await (const chunk of stream) {
+        const match = /GCPID:(\d+)/u.exec(chunk.content);
+        if (match) {
+          grandchildPid = Number(match[1]);
+          controller.abort();
+          break;
+        }
+      }
+
+      expect(grandchildPid).toBeDefined();
+      // SIGTERM is ignored, so ~1s after abort the grandchild must still be
+      // alive — if it were already gone the test would be passing via the
+      // SIGTERM path and never exercising the SIGKILL escalation.
+      await new Promise((r) => setTimeout(r, 1000));
+      expect(alive(grandchildPid as number)).toBe(true);
+      // 3s SIGKILL grace + 5s margin: the SIGTERM-ignoring grandchild should be
+      // gone once the escalation lands.
+      const deadline = Date.now() + 10000;
+      while (alive(grandchildPid as number) && Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      expect(alive(grandchildPid as number)).toBe(false);
+    } finally {
+      adapter.destroy();
+      if (grandchildPid !== undefined && alive(grandchildPid)) {
+        try {
+          process.kill(grandchildPid, "SIGKILL");
+        } catch {
+          /* already gone */
+        }
+      }
+    }
+  }, 30000);
 });
