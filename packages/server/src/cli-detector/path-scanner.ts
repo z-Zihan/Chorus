@@ -8,6 +8,10 @@ import { CLI_DESCRIPTORS, type CliDescriptor } from "./descriptors.js";
 import { appendLimited, normalizeForComparison, throwIfAborted } from "./utils.js";
 
 const LOGIN_SHELL_TIMEOUT_MS = 2_000;
+// Grace window between SIGTERM and SIGKILL, mirroring probe.ts and the CLI
+// adapter: a login shell that traps SIGTERM must still be forced to exit so it
+// is never orphaned once we stop waiting for its PATH output.
+const LOGIN_SHELL_KILL_ESCALATION_MS = 3_000;
 
 export interface ExecutableCandidate {
   descriptor: CliDescriptor;
@@ -108,10 +112,24 @@ export async function readLoginShellPath(signal?: AbortSignal): Promise<string |
   return new Promise<string | undefined>((resolve) => {
     let output: Buffer<ArrayBufferLike> = Buffer.alloc(0);
     let settled = false;
+    let killTimer: ReturnType<typeof setTimeout> | undefined;
     const child = spawn(shell, ["-l", "-c", "printf '%s' \"$PATH\""], {
       shell: false,
       stdio: ["ignore", "pipe", "ignore"],
     });
+    // SIGTERM then SIGKILL after a grace window so a shell that catches SIGTERM
+    // cannot outlive the scan. finish() resolves the promise immediately on
+    // timeout/abort, so the escalation timer deliberately outlives finish and is
+    // cleared only when the child actually exits (its "close" listener). The
+    // timer is unref'd so it can never hold the process open.
+    const escalateKill = () => {
+      child.kill("SIGTERM");
+      killTimer = setTimeout(() => {
+        child.kill("SIGKILL");
+      }, LOGIN_SHELL_KILL_ESCALATION_MS);
+      killTimer.unref();
+      child.once("close", () => clearTimeout(killTimer));
+    };
     const finish = () => {
       if (settled) return;
       settled = true;
@@ -120,11 +138,11 @@ export async function readLoginShellPath(signal?: AbortSignal): Promise<string |
       resolve(output.toString("utf8").trim() || undefined);
     };
     const abortHandler = () => {
-      child.kill();
+      escalateKill();
       finish();
     };
     const timer = setTimeout(() => {
-      child.kill();
+      escalateKill();
       finish();
     }, LOGIN_SHELL_TIMEOUT_MS);
     signal?.addEventListener("abort", abortHandler, { once: true });

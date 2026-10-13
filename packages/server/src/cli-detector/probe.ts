@@ -19,6 +19,11 @@ export interface ProbeResult {
   errorCode?: string;
 }
 
+// Grace window between SIGTERM and SIGKILL, mirroring the CLI adapter's
+// terminate ladder (packages/server/src/agent/adapters/cli.ts): a probe that
+// traps or ignores SIGTERM would otherwise outlive us as an orphaned process.
+const KILL_ESCALATION_MS = 3_000;
+
 export async function probeExecutable(
   executablePath: string,
   descriptor: CliDescriptor,
@@ -31,6 +36,7 @@ export async function probeExecutable(
     let timedOut = false;
     let settled = false;
     let spawnErrorCode: string | undefined;
+    let killTimer: ReturnType<typeof setTimeout> | undefined;
 
     const child = spawn(executablePath, descriptor.versionProbe.args, {
       shell: false,
@@ -38,10 +44,25 @@ export async function probeExecutable(
       windowsHide: true,
     });
 
+    // SIGTERM first for a graceful exit, then SIGKILL after a grace window so a
+    // CLI that catches/ignores SIGTERM cannot linger. shell:false single-process
+    // probes have no child tree, so a direct SIGKILL suffices (no taskkill /T).
+    const escalateKill = () => {
+      child.kill("SIGTERM");
+      killTimer = setTimeout(() => {
+        child.kill("SIGKILL");
+      }, KILL_ESCALATION_MS);
+      // Never let the pending SIGKILL keep the process alive, and drop it as soon
+      // as the child exits on its own so no stray timer survives the probe.
+      killTimer.unref();
+      child.once("close", () => clearTimeout(killTimer));
+    };
+
     const finish = (exitCode: number | null) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      clearTimeout(killTimer);
       signal?.removeEventListener("abort", abortHandler);
       resolve({
         exitCode,
@@ -53,7 +74,10 @@ export async function probeExecutable(
     };
 
     const abortHandler = () => {
-      child.kill();
+      // An aborted probe must not strand a process either: escalate to SIGKILL
+      // exactly as the timeout path does. The escalation timer is cleared by the
+      // child's own "close" listener registered in escalateKill().
+      escalateKill();
       if (settled) return;
       settled = true;
       clearTimeout(timer);
@@ -62,7 +86,7 @@ export async function probeExecutable(
 
     const timer = setTimeout(() => {
       timedOut = true;
-      child.kill();
+      escalateKill();
     }, descriptor.versionProbe.timeoutMs);
 
     signal?.addEventListener("abort", abortHandler, { once: true });
