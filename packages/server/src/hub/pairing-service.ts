@@ -13,6 +13,8 @@ import type { TrustStore } from "./trust-store.js";
 
 const PAIRING_TTL_MS = 10 * 60 * 1000;
 const PAIRING_CLOCK_SKEW_MS = 60 * 1000;
+// Sessions stay visible for 24h past expiry so recently finished pairings remain in the UI, then are prunable.
+const PAIRING_RETENTION_MS = 24 * 60 * 60 * 1000;
 const PROTOCOL_VERSION = 1;
 
 import type { PairingRole, PairingSessionView, PairingStatus } from "@chorus/shared";
@@ -86,6 +88,7 @@ export class PairingService {
   ) {}
 
   createInvitation(targetHubId: string): { pairingPackage: string; session: PairingSessionView } {
+    this.pruneSessions();
     const target = requireHubId(targetHubId);
     if (target === this.identity.hubId) throw new Error("Cannot pair a Hub with itself");
     if (!/^[0-9a-f]{64}$/iu.test(target))
@@ -107,6 +110,7 @@ export class PairingService {
   }
 
   async acceptInvitation(pairingPackage: string): Promise<PairingSessionView> {
+    this.pruneSessions();
     const invitation = parseInvitation(pairingPackage);
     if (invitation.targetHubId !== this.identity.hubId)
       throw new Error("Pairing package targets another Hub");
@@ -359,6 +363,14 @@ export class PairingService {
       remoteUserName: session.remoteUser?.userName,
       error: session.error,
     };
+  }
+
+  private pruneSessions(): void {
+    for (const [sessionId, session] of this.sessions) {
+      if (Date.now() > session.expiresAt + PAIRING_RETENTION_MS) {
+        this.sessions.delete(sessionId);
+      }
+    }
   }
 
   private rememberEnvelope(id: string): void {
