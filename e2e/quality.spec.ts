@@ -118,6 +118,23 @@ function json(route: Route, body: unknown, status = 200) {
   return route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
 }
 
+// `now` is frozen when this module loads, but the sidebar renders each conversation's
+// `updatedAt` as a wall-clock relative time. date-fns only returns "不到 1 分钟前" while the
+// distance is under 30s; past that it becomes "1 分钟前". Across a full suite run the frozen
+// timestamps drift past that boundary, so locators keyed on the text (e.g. /^Fixture Group
+// 不到/) stop matching once enough time has elapsed — which is why the final test times out
+// on slow CI. Re-stamp conversations against the real clock at request time, preserving
+// their original offsets from `now`, so the relative time stays "不到 1 分钟前" regardless of
+// how long the suite has been running.
+function withFreshTimestamps<T extends { createdAt: number; updatedAt: number }>(entity: T): T {
+  const base = Date.now();
+  return {
+    ...entity,
+    createdAt: base - (now - entity.createdAt),
+    updatedAt: base - (now - entity.updatedAt),
+  };
+}
+
 async function installApiFixture(page: Page) {
   const fixtureState: FixtureState = {
     mode: "default",
@@ -221,9 +238,9 @@ async function installApiFixture(page: Page) {
         if (fixtureState.mode === "conversation-error") {
           return json(route, { error: "fixture unavailable" }, 503);
         }
-        return json(route, [dmConversation]);
+        return json(route, [withFreshTimestamps(dmConversation)]);
       }
-      if (type === "group") return json(route, [groupConversation]);
+      if (type === "group") return json(route, [withFreshTimestamps(groupConversation)]);
       return json(route, []);
     }
     if (path === "/messages/search") return json(route, []);
