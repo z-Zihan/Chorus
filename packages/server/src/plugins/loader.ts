@@ -22,11 +22,23 @@ export class PluginLoader {
     this.loadErrors.length = 0;
     if (!existsSync(pluginDir)) return [];
     const manifests = await findManifestFiles(resolve(pluginDir));
+    const loadedNames = new Set<string>();
     for (const manifestPath of manifests) {
       // A single broken plugin must not take the whole backend down: skip it,
       // record the failure, and keep loading the remaining plugins.
       try {
-        this.plugins.push(await this.loadPlugin(manifestPath));
+        const loaded = await this.loadPlugin(manifestPath);
+        const name = loaded.manifest.name.trim();
+        if (loadedNames.has(name)) {
+          // A later plugin claiming an already-loaded name would silently shadow
+          // the first: skip it and record the conflict so the UI can surface it.
+          const reason = `Duplicate plugin name: ${name}`;
+          this.loadErrors.push({ manifestPath, error: reason });
+          logger.warn({ manifestPath, name }, "Skipping duplicate plugin name");
+          continue;
+        }
+        loadedNames.add(name);
+        this.plugins.push(loaded);
       } catch (error) {
         const reason = error instanceof Error ? error.message : String(error);
         this.loadErrors.push({ manifestPath, error: reason });
