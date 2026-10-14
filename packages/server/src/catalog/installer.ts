@@ -1,6 +1,6 @@
 import { logger } from "../utils/logger.js";
 import { spawn } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { chmod, unlink, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { tmpdir } from "node:os";
@@ -226,9 +226,16 @@ export class InstallExecutor extends EventEmitter {
     }
     const response = await fetch(recipe.executable, { signal });
     if (!response.ok) throw new Error(`DOWNLOAD_FAILED_${response.status}`);
+    const buffer = Buffer.from(await response.arrayBuffer());
+    if (recipe.checksum) {
+      const actual = createHash("sha256").update(buffer).digest("hex");
+      if (actual !== recipe.checksum.trim().toLowerCase()) {
+        throw new Error("CHECKSUM_MISMATCH");
+      }
+    }
     const destination =
       recipe.args[0] || join(tmpdir(), basename(new URL(recipe.executable).pathname));
-    await writeFile(destination, Buffer.from(await response.arrayBuffer()));
+    await writeFile(destination, buffer);
     if (process.platform !== "win32") await chmod(destination, 0o755);
   }
 
