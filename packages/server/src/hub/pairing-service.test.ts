@@ -137,4 +137,25 @@ describe("PairingService", () => {
     await expect(c.service.acceptInvitation(expiring.pairingPackage)).rejects.toThrow("expired");
     expect(a.service.get(expiring.session.sessionId)?.status).toBe("expired");
   });
+
+  it("prunes sessions long past expiry on the next invitation create/accept", async () => {
+    const a = await side("Alice");
+    const b = await side("Bob");
+    const c = await side("Carol");
+
+    const stale = a.service.createInvitation(b.hubId);
+    expect(a.service.list()).toHaveLength(1);
+
+    vi.advanceTimersByTime(25 * 60 * 60 * 1000);
+
+    // Pruning is lazy: it only runs on the next createInvitation/acceptInvitation call.
+    const fresh = a.service.createInvitation(c.hubId);
+
+    expect(a.service.get(stale.session.sessionId)).toBeUndefined();
+    expect(a.service.list()).toHaveLength(1);
+    expect(a.service.get(fresh.session.sessionId)).toMatchObject({ status: "waiting_peer" });
+
+    const accepted = await c.service.acceptInvitation(fresh.pairingPackage);
+    expect(accepted.status).toBe("verifying");
+  });
 });
