@@ -246,7 +246,7 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
       setPairingPackage(result.pairingPackage);
       setPairingSession(result.session);
     } catch (error) {
-      setPairingError(error instanceof Error ? error.message : "发送配对请求失败");
+      setPairingError(error instanceof Error ? error.message : t("sidebar:pairingRequestFailed"));
     } finally {
       setIsPairing(false);
     }
