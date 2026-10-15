@@ -105,6 +105,8 @@ export interface InstallRecipe {
   executable: string;
   args: string[];
   requiresElevation: boolean;
+  /** Optional hex sha256 for download recipes; enforced after fetch. */
+  checksum?: string;
 }
 
 export interface CatalogEntry {

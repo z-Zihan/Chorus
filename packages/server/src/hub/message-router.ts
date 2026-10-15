@@ -80,6 +80,9 @@ export class HubMessageRouter {
   private removeRelayStateListener?: () => void;
   private removeRoomMembersListener?: () => void;
   private removeTransportStatusListener?: () => void;
+  private removeRelayMessageListener?: () => void;
+  private removeOfflineMessagesListener?: () => void;
+  private removePresenceListener?: () => void;
 
   constructor(
     private readonly identity: HubIdentity,
@@ -115,13 +118,13 @@ export class HubMessageRouter {
       if (prunedDedup > 0) logger.info({ prunedDedup }, "Pruned processed envelope dedup rows");
     }, OFFLINE_PURGE_INTERVAL_MS);
     this.offlinePurgeTimer.unref();
-    relayClient.onMessage((envelope) => {
+    this.removeRelayMessageListener = relayClient.onMessage((envelope) => {
       void this.processRelayEnvelope(envelope);
     });
-    relayClient.onOfflineMessages((envelopes) => {
+    this.removeOfflineMessagesListener = relayClient.onOfflineMessages((envelopes) => {
       void this.routeOfflineMessages(envelopes);
     });
-    relayClient.onPresence((hubId, status) => {
+    this.removePresenceListener = relayClient.onPresence((hubId, status) => {
       if (status === "offline") {
         this.offlineHubIds.add(hubId);
         return;
@@ -242,9 +245,16 @@ export class HubMessageRouter {
 
   destroy(): void {
     clearInterval(this.offlinePurgeTimer);
+    this.removeRelayMessageListener?.();
+    this.removeOfflineMessagesListener?.();
+    this.removePresenceListener?.();
     this.removeRelayStateListener?.();
     this.removeRoomMembersListener?.();
     this.removeTransportStatusListener?.();
+    this.removeP2PMessageListener?.();
+    // Destroy is terminal: no further callback can fire to settle these, so
+    // drop them here instead of leaking the entries forever.
+    this.outboundPayloadByEnvelope.clear();
   }
 
   setP2PListener(listener: P2PListener): void {

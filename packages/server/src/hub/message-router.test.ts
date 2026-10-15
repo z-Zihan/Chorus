@@ -115,6 +115,49 @@ describe("HubMessageRouter transport state", () => {
   });
 });
 
+describe("HubMessageRouter lifecycle", () => {
+  it("unsubscribes every Relay listener on destroy and tolerates a second call", () => {
+    const onMessage = vi.fn(() => vi.fn());
+    const onOfflineMessages = vi.fn(() => vi.fn());
+    const onPresence = vi.fn(() => vi.fn());
+    const onStateChange = vi.fn(() => vi.fn());
+    const onRoomMembers = vi.fn(() => vi.fn());
+    const onTransportStatus = vi.fn(() => vi.fn());
+    const relayClient = {
+      onMessage,
+      onOfflineMessages,
+      onPresence,
+      onStateChange,
+      onRoomMembers,
+      onTransportStatus,
+    } as unknown as RelayClient;
+    const router = new HubMessageRouter(
+      {} as HubIdentity,
+      {} as AgentRegistry,
+      {} as AgentRuntime,
+      relayClient,
+      {} as ConnectionManager,
+      { id: "local-user", name: "Local User" },
+      {} as DirectoryService,
+      new TrustStore(),
+      { listRoomIds: vi.fn(() => []) } as unknown as Repository,
+      undefined,
+      new OfflineStore(),
+    );
+
+    router.destroy();
+
+    expect(onMessage.mock.results[0]?.value).toHaveBeenCalledTimes(1);
+    expect(onOfflineMessages.mock.results[0]?.value).toHaveBeenCalledTimes(1);
+    expect(onPresence.mock.results[0]?.value).toHaveBeenCalledTimes(1);
+    expect(onStateChange.mock.results[0]?.value).toHaveBeenCalledTimes(1);
+    expect(onRoomMembers.mock.results[0]?.value).toHaveBeenCalledTimes(1);
+    expect(onTransportStatus.mock.results[0]?.value).toHaveBeenCalledTimes(1);
+
+    expect(() => router.destroy()).not.toThrow();
+  });
+});
+
 describe("HubMessageRouter execution acknowledgements", () => {
   it("emits accepted and done separately from the transport receipt", async () => {
     const sender = await generateHubKeypair();
