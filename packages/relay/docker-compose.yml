@@ -19,6 +19,12 @@ services:
       RELAY_LOG_LEVEL: info
       RELAY_CORS_ORIGINS: ${RELAY_CORS_ORIGINS:-}
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3211/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
 volumes:
   relay-data:
