@@ -158,10 +158,14 @@ Chorus 支持三种标准协议端点：
 docker build -t chorus/relay:local -f packages/relay/Dockerfile .
 docker run -d -p 3211:3211 \
   -e RELAY_HOST=0.0.0.0 \
-  -e RELAY_JWT_SECRET=replace-with-at-least-32-random-characters \
+  -e RELAY_JWT_SECRET=change-me \
   -v relay-data:/data \
   chorus/relay:local
 ```
+
+> 请将 `RELAY_JWT_SECRET` 替换为至少 32 个随机字符的强密钥；非本机地址下使用过短或缺省的密钥会被拒绝启动。
+
+> **English:** Replace `RELAY_JWT_SECRET` with a strong secret of at least 32 random characters; a non-loopback host refuses to start with a missing or too-short secret.
 
 仓库目前不承诺公开 registry 中存在 `chorus/relay:latest`；上述命令先从当前源码构建本地镜像。
 

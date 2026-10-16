@@ -62,6 +62,7 @@
   "waitingPeerApproval": "Waiting for the other device",
   "pairingTrusted": "Device paired successfully",
   "pairingFailed": "Pairing failed",
+  "pairingRequestFailed": "Failed to send the pairing request",
   "pairingStatus": {
     "verifying": "Verifying both device and User keys…",
     "awaiting_approval": "Both keys verified. Compare the code below.",

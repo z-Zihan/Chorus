@@ -62,6 +62,7 @@
   "waitingPeerApproval": "等待另一台设备批准",
   "pairingTrusted": "设备配对成功",
   "pairingFailed": "配对失败",
+  "pairingRequestFailed": "发送配对请求失败",
   "pairingStatus": {
     "verifying": "正在验证双方设备与用户密钥…",
     "awaiting_approval": "双方密钥已验证，请核对下方验证码。",
