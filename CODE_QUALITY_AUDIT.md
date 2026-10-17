@@ -346,15 +346,15 @@
 | P3-8 | Sidebar 首次会话引导绕过 store 重复实现 createConversation | Sidebar.tsx:183-213 | **Not Fixed**（行为微变（store 版多空会话去重），留待 UI 批次） |
 | P3-9 | message-router deliveryListeners 在超时/abort 路径泄漏（settlePending 不清理） | message-router.ts:412-418、:685-693 | **Fixed**（Batch 2） |
 | P3-10 | runtime a2aResults 在异常中断的 A2A 线程上泄漏（量级小无上界） | runtime.ts:774、:797-816、:603-609 | **Not Fixed**（需 parentMessageId→threadId 映射改造，收益低） |
-| P3-11 | destroy 退订不完整 + outboundPayloadByEnvelope/pairing sessions 慢泄漏 | message-router.ts:106-119、:230-235、pairing-service.ts:93 | **Not Fixed**（destroy 仅进程退出调用，实际影响有限） |
+| P3-11 | destroy 退订不完整 + outboundPayloadByEnvelope/pairing sessions 慢泄漏 | message-router.ts:106-119、:230-235、pairing-service.ts:93 | **Partially Fixed**（61ec81a：destroy 补齐全部 Relay 监听器退订并清空 outboundPayloadByEnvelope；acc0d8b：pairing sessions 到期 24h 后定期清理。outboundPayloadByEnvelope 未收到终态投递状态的条目在 destroy 前仍会累积，受在途消息量约束，非结构性无界泄漏） |
 | P3-12 | 本地 block 未同步 Relay（contact_block 已实现未发送）；P2P 审批不持久化；directory 版本重启回退 | routes/trust.ts:48-53、routes/hub.ts:39、hub/directory.ts:19 | **Fixed**（F2 批次：block 时发送 contact_block（relay 停存对端离线消息）；P2P 审批落 settings；directory 版本持久化防重启回退） |
 | P3-13 | relay 直达消息不验证收件人存在性（离线库可被伪造 to 填充，N×1000×256KB 存储放大） | relay/message-router.ts:44-48 | **Not Fixed**（会改变"发往未注册 hub 先排队"语义，需产品确认） |
 | P3-14 | relay db 迁移为 ad-hoc CREATE IF NOT EXISTS + 手工 ALTER（无 migration runner）；rooms/invitations 行永不删除 | relay/db/index.ts:15-79、room-manager.ts:236-245 | **Not Fixed（迁移机制重建，风险>收益）** |
 | P3-15 | FTS 每次启动全量 rebuild；userHubs 缺 (user_id,hub_id) unique；roomStateEvents 孤儿行 | db/index.ts:267、schema.ts:15-26 | **Not Fixed**（各有边界条件，收益低） |
-| P3-16 | probe/path-scanner 超时只 SIGTERM 无升级；catalog download recipe 无 checksum；插件 name 无重复检测/permissions 装饰性 | probe.ts:63-66、catalog/installer.ts:243-248、plugins/loader.ts:51-66 | **Not Fixed**（记录待办） |
+| P3-16 | probe/path-scanner 超时只 SIGTERM 无升级；catalog download recipe 无 checksum；插件 name 无重复检测/permissions 装饰性 | probe.ts:63-66、catalog/installer.ts:243-248、plugins/loader.ts:51-66 | **Partially Fixed**（338818f：probe.ts 与 path-scanner.ts 均补齐 SIGTERM→SIGKILL 升级；194e82e：catalog installer 对带 checksum 的 recipe 做 sha256 校验，不符即 CHECKSUM_MISMATCH 且不落盘；7170422：plugin loader 以 loadedNames 拒绝重名并记入 loadErrors。permissions 仍为纯 string[] 无强制执行，待产品语义确定后处理） |
 | P3-17 | WS token 走 URL query（会进日志/历史） | server/ws/handler.ts:116 | **Not Fixed**（本地场景影响小，协议变更） |
-| P3-18 | docker-compose 无 healthcheck；.env.example 占位符恰好 33 字符能通过 ≥32 检查 | docker-compose.yml、.env.example:3 | **Not Fixed**（部署文档项；compose 路径有强制覆盖安全） |
-| P3-19 | getWsUrl 生产漏配时静默指向 localhost；Sidebar 一处硬编码中文兜底绕过 i18n | web/services/env.ts:8、Sidebar.tsx:249 | **Not Fixed**（部署脚枪/文案项，留待 UI 批次） |
+| P3-18 | docker-compose 无 healthcheck；.env.example 占位符恰好 33 字符能通过 ≥32 检查 | docker-compose.yml、.env.example:3 | **Fixed**（a1b611e：packages/relay/docker-compose.yml 加 healthcheck 探测 /api/health；ea6cc34：.env.example 与 GUIDE 示例占位符改为 `change-me`（9 字符），不再满足 ≥32 字符检查，未改的拷贝会被拒绝启动） |
+| P3-19 | getWsUrl 生产漏配时静默指向 localhost；Sidebar 一处硬编码中文兜底绕过 i18n | web/services/env.ts:8、Sidebar.tsx:249 | **Partially Fixed**（eb62e45：Sidebar handlePairFriend 兜底文案改为 `t("sidebar:pairingRequestFailed")`，与同文件其余三处 catch 一致走 i18n。getWsUrl 对 `VITE_WS_BASE_URL` 缺失时仍静默回退 `ws://localhost:3210/ws`，涉及协议/配置变更，留待后续批次） |
 | P3-20 | shared/utils/env.ts 的 isTauri 等仅 web 使用 | shared/utils/env.ts:23-42 | **Not Fixed**（移动收益低） |
 | P3-21 | 跨包重复的表单 load/error 六件套与 ErrorRetry JSX（12+ 处） | SettingsPanel/PrivacySettings/GroupMemberList/Sidebar/MessageList | **Not Fixed**（纯 UI 去重收益中、触面广，留待 UI 批次） |
 | P3-22 | scheduler 无时区选项/停机不补跑/失败无 retry | scheduler/index.ts:88-101 | **Not Fixed**（语义设计，记录；重叠执行互斥已于 Batch 2 修复） |

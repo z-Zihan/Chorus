@@ -184,3 +184,13 @@
 - **功能问题类（按任务规则记录不修）**：群聊 @mention 绕过 a2aPolicy（P1-1）、带定时任务的会话删除 FK 500 + Scheduler 不注销（P1-8）、发送端离线队列内存态+短路绕过 Relay（P1-3）、Room CAS 未接线/keyEpoch 死代码（P1-4/5）、Windows shell 注入（P1-6，需 Windows 实机验证）、跨 Hub 取消/超时传播（P1-12）、Web UI 行为类问题组（P1-13 部分/P1-14/P2-15）等。
 - **风险>收益类**：迁移双轨 schema drift（P1-10）、Tauri 生命周期重构（P1-11）、Repository 拆分（P2-11）、adapters 执行器合并（P2-12）、入站串行化（P2-6）、scope 收紧（P2-10）等。
 - **Partially Fixed**：P1-2（持久化去重未做）、P2-9（file 回退盐化未做）、P2-14（进程组 kill 未做）。
+
+## 2026-10-18 — 审计状态同步（文档修正，无代码变更）
+
+- 背景：CODE_QUALITY_AUDIT.md 自 2026-08-27 后未随日常修复更新，多个 P3 条目实际已被 PR #1–#5 修复但仍标 Not Fixed，误导后续排查（2026-10-18 轮次曾据 P3-16 重复调研已修复项）。
+- 逐项核对代码与 git 历史后同步 4 行状态：
+  - P3-11 → Partially Fixed（61ec81a destroy 补齐退订；acc0d8b pairing sessions 定期清理；outbound 未回执条目受在途消息量约束）
+  - P3-16 → Partially Fixed（338818f probe/path-scanner SIGKILL 升级；194e82e catalog sha256 校验；7170422 插件重名拒绝；permissions 强制仍待产品语义）
+  - P3-18 → Fixed（a1b611e relay compose healthcheck；ea6cc34 示例 JWT secret 改为不满足 ≥32 检查，强制部署覆盖）
+  - P3-19 → Partially Fixed（eb62e45 配对兜底文案走 i18n；getWsUrl localhost 回退仍在，涉协议变更）
+- 备注：P3-18 行所写根目录 docker-compose.yml 实际位于 packages/relay/docker-compose.yml（位置单元格保留历史原文）。核对方式：git show 逐 commit 确认 + 现行代码 grep 复核；本节无任何代码行为变更。
