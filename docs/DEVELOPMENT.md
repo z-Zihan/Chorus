@@ -371,7 +371,7 @@ src-tauri/
 | `VITE_API_BASE_URL` | `/api` | 前端 API 基础路径 |
 | `VITE_WS_BASE_URL` | `ws://localhost:3210/ws` | WebSocket 地址 |
 | `VITE_DEFAULT_THEME` | `dark` | 默认主题 |
-| `VITE_DEFAULT_LANG` | `zh-CN` | 默认语言 |
+| `VITE_DEFAULT_LANG` | `en` | 默认语言 |
 | `SERVER_PORT` | `3210` | 后端端口 |
 | `SERVER_HOST` | `127.0.0.1` | 后端监听地址；非 loopback 地址必须同时启用认证 |
 | `SERVER_LOG_LEVEL` | `info` | 后端日志级别 |

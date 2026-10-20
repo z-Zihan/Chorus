@@ -34,14 +34,7 @@ function detectLanguage(): AppLanguage {
   const stored = typeof window === "undefined" ? null : getStoredLanguage();
   if (stored) return stored;
 
-  if (typeof navigator !== "undefined") {
-    for (const language of navigator.languages ?? [navigator.language]) {
-      const detected = normalizeLanguage(language);
-      if (detected) return detected;
-    }
-  }
-
-  return normalizeLanguage(import.meta.env.VITE_DEFAULT_LANG) ?? "zh-CN";
+  return normalizeLanguage(import.meta.env.VITE_DEFAULT_LANG) ?? "en";
 }
 
 const initialLanguage = detectLanguage();
@@ -65,7 +58,7 @@ void i18n.use(initReactI18next).init({
     },
   },
   lng: initialLanguage,
-  fallbackLng: normalizeLanguage(import.meta.env.VITE_DEFAULT_LANG) ?? "zh-CN",
+  fallbackLng: normalizeLanguage(import.meta.env.VITE_DEFAULT_LANG) ?? "en",
   supportedLngs: ["zh-CN", "en"],
   defaultNS: "common",
   ns: ["common", "sidebar", "chat", "settings", "errors"],
