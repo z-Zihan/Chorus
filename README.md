@@ -1,116 +1,122 @@
+<div align="right">
+
+**English** · [中文](README.zh-CN.md)
+
+</div>
+
 <picture>
   <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="./assets/readme-hero-mobile-dark.svg">
   <source media="(max-width: 600px)" srcset="./assets/readme-hero-mobile-light.svg">
   <source media="(prefers-color-scheme: dark)" srcset="./assets/readme-hero-dark.svg">
   <source media="(prefers-color-scheme: light)" srcset="./assets/readme-hero-light.svg">
-  <img alt="Chorus — 让 AI Agent 彼此协作" src="./assets/readme-hero-light.svg" width="100%">
+  <img alt="Chorus — Let AI Agents Collaborate" src="./assets/readme-hero-light.svg" width="100%">
 </picture>
 
 <div align="center">
 
 # Chorus
 
-> 让 AI Agent 像人一样交流——不止你和 Agent 聊，Agent 之间也能协作，一个本地优先的 Agent 通信工作台。
+> Let AI agents talk to each other the way people do. You chat with agents, and agents collaborate with each other, in one local-first agent communication workspace.
 
-**本地优先 · 多 Agent 协作 · 跨设备通信 · 自托管 Relay**
+**Local-first · Multi-agent collaboration · Cross-device messaging · Self-hosted Relay**
 
 ![Local-first](https://img.shields.io/badge/local--first-no%20cloud%20required-2ea44f?style=flat-square) ![multi-agent](https://img.shields.io/badge/multi--agent-A2A-8b5cf6?style=flat-square) ![CLIs](https://img.shields.io/badge/AI%20CLIs-14%20auto--detected-7c3aed?style=flat-square) ![Relay](https://img.shields.io/badge/relay-self--hosted%20%C2%B7%20E2EE-0ea5e9?style=flat-square) ![Tauri 2](https://img.shields.io/badge/Tauri-2-24C8DB?style=flat-square&logo=tauri&logoColor=white) ![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)
 
-[产品介绍](#产品介绍) · [核心功能](#核心功能) · [快速开始](#快速开始) · [工作原理](#工作原理) · [FAQ](#faq) · [使用指南](docs/GUIDE.md) · [开发文档](docs/DEVELOPMENT.md)
+[Introduction](#introduction) · [Core Features](#core-features) · [Quick Start](#quick-start) · [How It Works](#how-it-works) · [FAQ](#faq) · [User Guide](docs/GUIDE.md) · [Development Docs](docs/DEVELOPMENT.md)
 
 </div>
 
-## 产品速览
+## At a Glance
 
 | | |
 | :-- | :-- |
-| **它是什么** | 连接用户、本机 AI CLI、API Agent 与跨设备协作网络的本地优先通信工作台。 |
-| **为谁设计** | 同时使用多个 AI CLI 的独立开发者、Agent 工作流开发者，以及需要安全协作的团队。 |
-| **核心价值** | 一个入口管理 Agent，让 Agent 彼此调用，并把协作扩展到其他设备和其他人的 Agent。 |
-| **数据边界** | 会话默认保存在本机；跨网络协作使用自托管 Relay、端到端加密与显式信任关系。 |
-| **当前成熟度** | 本机 CLI 管理与 A2A 已实现；跨设备链路已有进程级实现，物理双设备与正式发布仍需验收。 |
+| **What it is** | A local-first communication workspace that connects you, your local AI CLIs, API agents, and a cross-device collaboration network. |
+| **Who it's for** | Independent developers who juggle several AI CLIs, agent-workflow builders, and teams that need to collaborate securely. |
+| **Core value** | Manage every agent from one place, let agents call each other, and extend collaboration to other devices and other people's agents. |
+| **Data boundary** | Conversations stay on your machine by default. Cross-network collaboration uses a self-hosted Relay, end-to-end encryption, and explicit trust relationships. |
+| **Current maturity** | Local CLI management and A2A are implemented. The cross-device link is implemented at the process level; two-physical-device validation and an official release are still pending. |
 
 ```text
-一个界面管理 Agent  →  Agent 彼此协作  →  跨设备、跨团队协作
-      已可用                  已实现                  待物理设备验收
+Manage agents from one UI  →  Agents collaborate with each other  →  Cross-device, cross-team collaboration
+        Available now                    Implemented                        Pending physical-device validation
 ```
 
-## 产品介绍
+## Introduction
 
-AI CLI 越来越强，但它们彼此隔离——切换工具靠开终端，协作靠复制粘贴，跨设备更是无从谈起。Chorus 想解决这个问题。
+AI CLIs keep getting more capable, but they live in silos. Switching tools means opening another terminal, collaboration means copy-and-paste, and working across devices is out of reach. Chorus sets out to fix that.
 
-**三层能力，层层递进：**
+**Three layers of capability, each building on the last:**
 
-**第一层：统一管理本机 AI CLI（已可用）**
-打开应用自动发现已安装的 AI CLI，一个界面管理和使用它们。不写配置、不记命令，像用即时通讯工具一样聊天、查历史、管理会话。
+**Layer 1: Manage your local AI CLIs in one place (available now)**
+Open the app and it discovers the AI CLIs you already have installed, then lets you manage and use them from a single interface. No config files, no commands to memorize. Chat, browse history, and manage sessions the way you would in a messaging app.
 
-**第二层：Agent 间通信（已实现）**
-这是 Chorus 的核心方向。三种 A2A 模式可切换：`@mention` 异步转发（Agent 回复中 @了其他 Agent → 自动转发）、`A2A_CALL` 同步调用（调用方拿到返回值继续推理）、`off` 关闭。也可以创建群聊，多个 Agent 在同一会话中协作。
+**Layer 2: Agent-to-agent communication (implemented)**
+This is the heart of Chorus. Three switchable A2A modes: `@mention` asynchronous forwarding (an agent @-mentions another agent in its reply → the message is forwarded automatically), `A2A_CALL` synchronous calls (the caller receives the return value and keeps reasoning), and `off`. You can also create group chats where several agents collaborate in one session.
 
-**第三层：跨设备、跨人的 Agent 协作（进程级已实现，物理设备待验收）**
-你的 Agent 不仅能和本机其他 Agent 协作，还能和**同事电脑上的 Agent** 直接通信。通过自托管 Relay 服务器中转，端到端加密，数据不经第三方。房间成员的并发变更由 Relay 权威计数器协调，离线消息在对方上线后可靠补投。
+**Layer 3: Agent collaboration across devices and people (implemented at the process level; physical devices pending validation)**
+Your agents can collaborate not only with other agents on the same machine, but also directly with **agents on a colleague's computer**. Messages are relayed through a self-hosted Relay server with end-to-end encryption, so no third party sees your data. Concurrent room-membership changes are coordinated by an authoritative counter on the Relay, and offline messages are reliably delivered once the other side comes back online.
 
-**管理 CLI 只是手段，让 Agent 之间能交流、能协作、能跨设备跨人协作，才是 Chorus 要做的事。**
+**Managing CLIs is just the means. Letting agents talk, collaborate, and work across devices and people is what Chorus is really about.**
 
-## 愿景
+## Vision
 
-Chorus 坚持 local-first：聊天记录默认保存在本机，CLI 在本机运行，用户可以自由选择模型供应商，并在需要远程协作时部署自己的 Relay。它不是一个新的模型，而是连接用户、AI CLI 与 Agent 工作流的通信层。
+Chorus is committed to local-first: chat history stays on your machine by default, CLIs run locally, you choose your own model providers, and you deploy your own Relay when you need remote collaboration. It is not a new model. It is the communication layer that connects you, your AI CLIs, and your agent workflows.
 
-最终目标：不只是管理 CLI，而是让 Agent 之间能交流、能协作、能跨设备跨人协作。
+The end goal is not just to manage CLIs, but to let agents communicate, collaborate, and work together across devices and people.
 
-## 核心功能
+## Core Features
 
-### 现在可用
+### Available now
 
-- 🔍 **自动发现 CLI**：扫描本机环境，识别已安装的 AI CLI 及其可用状态。
-- 💬 **统一流式聊天**：在一个界面中使用不同 Agent，支持 Markdown、代码块、停止生成和错误提示。
-- 🧩 **Agent 目录**：添加本机 CLI，或配置 OpenAI-compatible API Connector。
-- 🗂️ **本地会话历史**：使用 SQLite 保存聊天记录，支持创建、切换和删除会话。
-- 🖥️ **桌面端**：基于 Tauri；macOS arm64 本机未签名 `.app` 已验证，Windows、签名与干净机器安装仍是发布门禁。
-- 🏠 **可自托管 Relay**：提供 Hub 注册、消息转发、离线消息与房间管理能力。
-- 🔐 **系统级密钥存储**：使用操作系统钥匙串保护 API 凭据。
-- 🔎 **历史管理**：会话搜索、重命名、归档、导出与清理。
-- 📊 **Agent 健康检查**：60s 定时健康检查 + UI 状态指示器。
-- 🔌 **插件系统**：服务启动时加载并校验适配器/扩展 manifest，设置诊断页可只读核验版本、类型和权限；当前不提供安装管理 UI。
-- 🗓️ **定时任务**：在设置中用 cron 表达式创建、启停和删除 Agent 周期任务，并提供失败恢复。
+- 🔍 **Automatic CLI discovery**: Scans your local environment and detects installed AI CLIs and their availability.
+- 💬 **Unified streaming chat**: Use different agents from one interface, with Markdown, code blocks, stop-generation, and error reporting.
+- 🧩 **Agent directory**: Add local CLIs or configure OpenAI-compatible API Connectors.
+- 🗂️ **Local session history**: Chat history is stored in SQLite, with support for creating, switching, and deleting sessions.
+- 🖥️ **Desktop app**: Built on Tauri. The unsigned macOS arm64 `.app` has been verified locally; Windows, code signing, and clean-machine installs remain release gates.
+- 🏠 **Self-hostable Relay**: Hub registration, message forwarding, offline messages, and room management.
+- 🔐 **System-level secret storage**: API credentials are protected by the operating system keychain.
+- 🔎 **History management**: Search, rename, archive, export, and clean up sessions.
+- 📊 **Agent health checks**: Scheduled 60-second health checks with a status indicator in the UI.
+- 🔌 **Plugin system**: Adapter and extension manifests are loaded and validated at service startup. The Settings diagnostics page lets you verify version, type, and permissions read-only. There is no install-management UI yet.
+- 🗓️ **Scheduled tasks**: Create, start, stop, and delete recurring agent tasks with cron expressions in Settings, with failure recovery.
 
-### 已实现
+### Implemented
 
-- 🔗 **A2A 通信**：三种模式可切换——`@mention` 异步转发、`A2A_CALL` 同步调用、`off` 关闭。Agent 回复中 @了其他 Agent → 自动转发 → 目标 Agent 独立回复。
-- 👥 **多 Agent 群聊**：在同一会话中选择多个 Agent，通过 AgentSelector 指定接收者，@mention 触发 Agent 间协作。
-- 🛡️ **A2A 权限控制**：会话级 `mention / call / off` 三种模式控制 Agent 间通信。
-- 👤 **多用户身份体系**：User → Hub → Agent 三层身份模型。一个用户可拥有多个 Agent，不同用户的 Agent 通过 Relay 互相发现和通信。
-- 🔑 **信任管理**：Hub 间配对码认证、`pending/trusted/blocked` 信任状态、公钥变化自动重配对。
-- 🌐 **跨设备协作**：自托管 Relay + 局域网 P2P 直连 + 端到端加密 + 群组密钥管理。P2P 模式无需 Relay，同局域网自动发现（需用户确认连接）。
-- 📡 **P2P 直连**：mDNS 局域网设备发现，Ed25519 握手认证，消息签名验证，自动重连。
-- 📡 **签名目录发现**：Agent 默认 `private`；所有者仅向已配对联系人发布 `public` Agent，或向共同 Room 发布 `room/public` Agent，目录支持签名、版本、TTL 与撤销。
-- 🔀 **Room 并发协调**：成员变更经 Relay 权威 CAS 计数器仲裁（持久化、冲突自动重同步），避免多设备同时改群产生的覆盖丢失；成员移除即轮换授权纪元，旧授权立即失效。
-- 📮 **离线消息**：queued → delivered → accepted/denied → done/error 状态机，TTL 7 天，幂等投递。
-- 🔌 **标准协议适配**：Agent 能力映射到 Google A2A Agent Card、MCP Tool、ACP Service。
-- 🛠️ **外部 Agent 接入**：通过 `GET /api/skill` 发现 Chorus，REST API 完整接入，Scoped Client Token 认证。
-- 🛡️ **Relay 加固**：消息大小限制、频率限制、房间容量限制、保留策略，全部可配置。
+- 🔗 **A2A communication**: Three switchable modes: `@mention` asynchronous forwarding, `A2A_CALL` synchronous calls, and `off`. An agent @-mentions another agent in its reply → the message is forwarded automatically → the target agent replies independently.
+- 👥 **Multi-agent group chat**: Select several agents in one session, pick recipients with the AgentSelector, and trigger agent collaboration with @mentions.
+- 🛡️ **A2A permission control**: Session-level `mention / call / off` modes govern agent-to-agent communication.
+- 👤 **Multi-user identity model**: A three-tier User → Hub → Agent identity model. One user can own several agents, and agents belonging to different users discover and talk to each other through the Relay.
+- 🔑 **Trust management**: Pairing-code authentication between Hubs, `pending/trusted/blocked` trust states, and automatic re-pairing when a public key changes.
+- 🌐 **Cross-device collaboration**: Self-hosted Relay + LAN P2P direct connections + end-to-end encryption + group key management. P2P mode needs no Relay and auto-discovers peers on the same LAN (the user must confirm the connection).
+- 📡 **P2P direct connections**: mDNS LAN device discovery, Ed25519 handshake authentication, message signature verification, and automatic reconnection.
+- 📡 **Signed directory discovery**: Agents are `private` by default. Owners publish `public` agents only to paired contacts, or `room/public` agents to shared Rooms. The directory supports signatures, versioning, TTL, and revocation.
+- 🔀 **Room concurrency coordination**: Membership changes are arbitrated by an authoritative CAS counter on the Relay (persisted, with automatic resync on conflict), preventing lost updates when several devices edit a room at once. Removing a member rotates the authorization epoch so old grants are invalidated immediately.
+- 📮 **Offline messages**: A queued → delivered → accepted/denied → done/error state machine with a 7-day TTL and idempotent delivery.
+- 🔌 **Standard protocol adapters**: Agent capabilities map to Google A2A Agent Cards, MCP Tools, and ACP Services.
+- 🛠️ **External agent onboarding**: Discover Chorus via `GET /api/skill`, integrate fully through the REST API, and authenticate with Scoped Client Tokens.
+- 🛡️ **Relay hardening**: Message size limits, rate limits, room capacity limits, and retention policies, all configurable.
 
-## 产品预览
+## Screenshots
 
-一个入口管理所有 Agent，像即时通讯一样与它们对话：
+Manage all your agents from one place and talk to them like a messaging app:
 
-![Chorus 桌面总览](assets/readme/chorus-desktop-overview.png)
+![Chorus desktop overview](assets/readme/chorus-desktop-overview.png)
 
-Agent 之间真的在协作——群聊里 Claude Code 把子任务转发给 code-reviewer 与 security-checker，并汇总结论：
+Agents really do collaborate. In a group chat, Claude Code forwards subtasks to code-reviewer and security-checker, then summarizes the results:
 
-![Agent 间 A2A 协作](assets/readme/chorus-a2a-collaboration.png)
+![Agent-to-agent A2A collaboration](assets/readme/chorus-a2a-collaboration.png)
 
-内置 Agent 目录：自动发现本机已安装的 CLI，或接入 OpenAI-compatible API：
+Built-in agent directory: auto-discover installed CLIs or connect an OpenAI-compatible API:
 
-![Agent 目录](assets/readme/chorus-agent-management.png)
+![Agent directory](assets/readme/chorus-agent-management.png)
 
-定时任务：用 cron 让 Agent 周期性执行工作：
+Scheduled tasks: use cron to have agents run work on a schedule:
 
-![定时任务](assets/readme/chorus-scheduled-tasks.png)
+![Scheduled tasks](assets/readme/chorus-scheduled-tasks.png)
 
-## 快速开始
+## Quick Start
 
-准备 Node.js 22 LTS、pnpm 9，以及至少一个已安装并登录的受支持 AI CLI。
+You'll need Node.js 22 LTS, pnpm 9, and at least one supported AI CLI that is installed and signed in.
 
 ```bash
 git clone https://github.com/z-Zihan/Chorus.git
@@ -119,100 +125,100 @@ pnpm install
 pnpm tauri:dev
 ```
 
-Chorus 启动后会自动扫描本机 CLI。选择检测到的 Agent，即可开始对话，无需先编写配置文件。
+Chorus scans your local CLIs on startup. Pick a detected agent and start chatting. No config file is required first.
 
-也可以只启动 Web 界面与本地服务：
+You can also run just the web UI and local server:
 
 ```bash
 pnpm dev
 ```
 
-构建桌面应用需要 Rust 工具链：
+Building the desktop app requires the Rust toolchain:
 
 ```bash
 pnpm build
 pnpm tauri:build
 ```
 
-Windows 打包细节见 [Windows 构建指南](docs/WINDOWS_BUILD.md)。
+For Windows packaging details, see the [Windows build guide](docs/WINDOWS_BUILD.md).
 
-完整使用指南见 [docs/GUIDE.md](docs/GUIDE.md)，涵盖 Agent 管理、多 Agent 协作、跨设备通信等。
-开发者文档见 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)，涵盖项目结构、启动方式、开发注意事项。
+The full user guide is in [docs/GUIDE.md](docs/GUIDE.md), covering agent management, multi-agent collaboration, cross-device messaging, and more.
+Developer documentation is in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md), covering project structure, how to run it, and development notes.
 
-## 质量验证
+## Quality Gates
 
-仓库级质量门禁如下，Web E2E 与 Vitest 分开运行：
+The repository-level quality gates are listed below. Web E2E and Vitest run separately:
 
 ```bash
 pnpm format:check
 pnpm lint
 pnpm typecheck
-pnpm test       # Shared + Relay + Server 单元/集成测试
+pnpm test       # Shared + Relay + Server unit/integration tests
 pnpm test:e2e   # Playwright Chromium
 pnpm build
 cargo test --manifest-path src-tauri/Cargo.toml
 cargo check --manifest-path src-tauri/Cargo.toml
 ```
 
-自动测试和浏览器渲染不等于正式发布验收。当前仍需完成两台物理设备的配对/Room/重连、P2P receipt parity、人工屏幕阅读器、Windows 原生 UI、签名/公证以及干净机器安装升级。完整证据与未关闭项见 [自动化质量报告](docs/reviews/automated-quality-report.md)。
+Automated tests and browser rendering are not the same as release acceptance. Still outstanding: pairing/Room/reconnection across two physical devices, P2P receipt parity, manual screen-reader testing, Windows native UI, signing/notarization, and clean-machine install and upgrade. Full evidence and open items are in the [automated quality report](docs/reviews/automated-quality-report.md).
 
-## 工作原理
+## How It Works
 
 ```text
-            可选：跨设备协作
-          ┌──────────────┐
-          │ 自托管 Relay │
-          └──────▲───────┘
-                 │ 端到端加密
-    ┌──────────┼──────────┐
-    │ P2P 直连  │          │
-    │(局域网)  │          │
-┌────────┐       │       ┌──────────────────────┐
-│  用户  │ ────▶│────────│ Chorus 桌面端      │
-└────────┘       │       │  · 统一聊天界面        │
-                 │       │  · Agent 间 A2A 通信   │
-                 │       │  · 本地 SQLite 持久化  │
-                 │       └──────┬───────────────┘
-                 │              │
-     ┌───────────┼──────────────┼───────────┐
-     ▼           ▼              ▼           ▼
-  Claude Code  Codex        API Connector  其他 CLI
-  (本机 CLI)  (本机 CLI)    OpenAI / GLM   Aider / Gemini…
+          Optional: cross-device collaboration
+              ┌───────────────────┐
+              │ Self-hosted Relay │
+              └─────────▲─────────┘
+                        │ end-to-end encryption
+        ┌───────────────┼───────────────┐
+        │ P2P direct    │               │
+        │ (LAN)         │               │
+┌────────┐              │        ┌──────────────────────────┐
+│  User  │ ───────────▶ │ ────── │ Chorus desktop           │
+└────────┘              │        │  · Unified chat UI       │
+                        │        │  · A2A between agents    │
+                        │        │  · Local SQLite storage  │
+                        │        └────────────┬─────────────┘
+                        │                     │
+       ┌────────────────┼─────────────────────┼────────────────┐
+       ▼                ▼                     ▼                ▼
+  Claude Code         Codex            API Connector       Other CLIs
+  (local CLI)       (local CLI)        OpenAI / GLM       Aider / Gemini…
 ```
 
-Chorus 统一不同 Agent 的消息格式、流式输出与状态管理。CLI 以当前系统用户权限在本机执行；模型请求是否联网以及数据如何处理，取决于所选择的 CLI 或 API 服务商。
+Chorus unifies message formats, streaming output, and state management across agents. CLIs run locally with the permissions of the current system user. Whether a model request goes over the network, and how that data is handled, depends on the CLI or API provider you choose.
 
-## 支持的 AI CLI
+## Supported AI CLIs
 
-| 类型 | 名称 | 接入方式 |
-|------|------|----------|
-| CLI | Claude Code | 本机自动检测 |
-| CLI | Codex | 本机自动检测 |
-| CLI | GitHub Copilot CLI | 本机自动检测 |
-| CLI | Gemini CLI | 本机自动检测 |
-| CLI | Aider | 本机自动检测 |
-| CLI | Qwen Code | 本机自动检测 |
-| CLI | Cursor CLI | 本机自动检测 |
-| CLI | Kilo CLI | 本机自动检测 |
-| CLI | OpenCode | 本机自动检测 |
-| CLI | Hermes Agent | 本机自动检测 |
-| CLI | Cline | 本机自动检测 |
-| CLI | Codebuff | 本机自动检测 |
-| CLI | Trae Agent | 本机自动检测 |
-| CLI | iFlow CLI | 本机自动检测 |
+| Type | Name | Integration |
+|------|------|-------------|
+| CLI | Claude Code | Auto-detected locally |
+| CLI | Codex | Auto-detected locally |
+| CLI | GitHub Copilot CLI | Auto-detected locally |
+| CLI | Gemini CLI | Auto-detected locally |
+| CLI | Aider | Auto-detected locally |
+| CLI | Qwen Code | Auto-detected locally |
+| CLI | Cursor CLI | Auto-detected locally |
+| CLI | Kilo CLI | Auto-detected locally |
+| CLI | OpenCode | Auto-detected locally |
+| CLI | Hermes Agent | Auto-detected locally |
+| CLI | Cline | Auto-detected locally |
+| CLI | Codebuff | Auto-detected locally |
+| CLI | Trae Agent | Auto-detected locally |
+| CLI | iFlow CLI | Auto-detected locally |
 | API Connector | OpenAI API | OpenAI-compatible API |
 | API Connector | DeepSeek API | OpenAI-compatible API |
 | API Connector | GLM API | OpenAI-compatible API |
 
-Chorus 不包含上述工具或模型本身。使用前请根据对应服务商的要求完成安装、登录或 API 凭据配置。
+Chorus does not bundle any of these tools or models. Install, sign in, or configure API credentials according to each provider's requirements before use.
 
-## 自托管 Relay
+## Self-Hosted Relay
 
-Relay 用于跨网络消息转发、离线消息和房间管理。当前可独立部署 Relay 服务：
+The Relay handles cross-network message forwarding, offline messages, and room management. It can be deployed on its own today:
 
 ```bash
 cp packages/relay/.env.example packages/relay/.env
-# 编辑 .env，并设置安全的 RELAY_JWT_SECRET
+# Edit .env and set a secure RELAY_JWT_SECRET
 
 docker compose \
   --env-file packages/relay/.env \
@@ -222,11 +228,11 @@ docker compose \
 curl http://localhost:3211/api/health
 ```
 
-生产环境请持久化 `/data`、定期备份数据库，并通过 Nginx 或 Caddy 提供 HTTPS/WSS。不要使用示例密钥，也不要将 Relay 直接裸露在公网。
+In production, persist `/data`, back up the database regularly, and serve HTTPS/WSS through Nginx or Caddy. Do not use the example secret, and do not expose the Relay directly to the public internet.
 
-## 配置
+## Configuration
 
-自动发现可以满足大多数场景。需要手动指定命令或参数时，可在项目根目录使用 `chorus.config.ts`：
+Auto-discovery covers most scenarios. When you need to specify a command or arguments by hand, use `chorus.config.ts` in the project root:
 
 ```typescript
 import type { AppConfig } from "@chorus/shared";
@@ -250,42 +256,42 @@ export default {
 } satisfies AppConfig;
 ```
 
-不要将 API Key 或其他敏感信息提交到 Git。Chorus 使用系统级钥匙串（macOS Keychain / Windows Credential Manager / Linux libsecret）保护 API 凭据，不明文存入数据库。
+Never commit API keys or other secrets to Git. Chorus protects API credentials with the system keychain (macOS Keychain / Windows Credential Manager / Linux libsecret) and does not store them in plaintext in the database.
 
 ## FAQ
 
-### Chorus 会上传我的聊天记录吗？
+### Does Chorus upload my chat history?
 
-聊天记录默认保存在本机 SQLite，Chorus 不会因为本地使用而自动将记录上传到自己的云端。但你选择的 AI CLI 或 API 可能会把提示词发送给其服务商，请同时阅读对应服务的隐私政策。
+Chat history is stored in a local SQLite database by default, and Chorus does not automatically upload it to its own cloud as part of local use. However, the AI CLI or API you choose may send prompts to its provider, so please read that service's privacy policy too.
 
-### 可以完全离线使用吗？
+### Can I use it fully offline?
 
-Chorus 的界面、本地服务和历史记录可以离线运行。具体 Agent 能否离线工作取决于它自身；本地模型可以离线，云端 CLI 与 API 通常需要网络连接。
+The Chorus UI, local server, and history all work offline. Whether a given agent works offline depends on the agent itself: local models can, while cloud CLIs and APIs usually need a network connection.
 
-### Chorus 和 ChatGPT 有什么不同？
+### How is Chorus different from ChatGPT?
 
-ChatGPT 是模型与云端助手产品；Chorus 是本机 Agent 的管理和通信层。它不提供新的基础模型，而是统一已有 CLI、API Connector、会话和协作体验。
+ChatGPT is a model and a cloud assistant product. Chorus is a management and communication layer for agents on your machine. It does not provide a new foundation model; it unifies the CLIs, API Connectors, sessions, and collaboration experience you already have.
 
-### 使用 Chorus 还需要安装 AI CLI 吗？
+### Do I still need to install AI CLIs to use Chorus?
 
-需要。Chorus 会发现并连接本机已有的 CLI，但不包含这些工具本身。也可以不安装 CLI，直接配置支持的 API Connector。
+Yes. Chorus discovers and connects to the CLIs already on your machine, but does not include them. Alternatively, skip the CLIs and configure a supported API Connector directly.
 
-### CLI 能访问我的文件吗？
+### Can CLIs access my files?
 
-CLI 以当前系统用户权限运行，其文件与命令权限由 CLI 自身和系统环境决定。添加 Agent 前请确认来源可信，并了解它请求的权限。
+CLIs run with the permissions of the current system user. Their file and command access is determined by the CLI itself and your system environment. Make sure an agent comes from a trusted source and understand the permissions it requests before adding it.
 
-### 多 Agent 群聊和跨设备聊天可用吗？
+### Are multi-agent group chat and cross-device chat ready?
 
-多 Agent 群聊和 A2A 通信（@mention 转发 + A2A_CALL 同步调用）已实现。跨设备协作的 Relay/P2P、身份、信任和签名目录已有进程级实现与确定性测试，但两台物理设备的配对、Room 消息和断网重连仍是发布前验收项，不能仅凭浏览器或模拟测试视为真实设备闭环。
+Multi-agent group chat and A2A communication (@mention forwarding + A2A_CALL synchronous calls) are implemented. For cross-device collaboration, the Relay/P2P link, identity, trust, and signed directory are implemented at the process level with deterministic tests. Pairing, Room messaging, and reconnection after network loss across two physical devices are still pre-release acceptance items, and browser or simulated tests alone do not count as a real-device end-to-end loop.
 
-### 外部 Agent 怎么接入 Chorus？
+### How do external agents connect to Chorus?
 
-Chorus 启动后暴露 `GET /api/skill` 端点，返回完整的 Platform Skill 文档（Markdown 格式）。外部 Agent 读取该文档后即可通过 REST API 发送消息、创建会话、管理 Agent。非本机访问支持 Scoped Client Token 认证。
+Once running, Chorus exposes a `GET /api/skill` endpoint that returns the full Platform Skill document in Markdown. An external agent that reads it can send messages, create sessions, and manage agents through the REST API. Non-local access supports Scoped Client Token authentication.
 
-### Chorus 支持哪些标准协议？
+### Which standard protocols does Chorus support?
 
-Agent 能力可映射到 Google A2A Agent Card（`/.well-known/agent-card.json`，仅发布 `public` Agent）、MCP Tool 列表（`/api/mcp/tools`）、ACP 服务列表（`/api/acp/services`）。
+Agent capabilities map to Google A2A Agent Cards (`/.well-known/agent-card.json`, publishing `public` agents only), the MCP Tool list (`/api/mcp/tools`), and the ACP service list (`/api/acp/services`).
 
-## 反馈与贡献
+## Feedback & Contributing
 
-欢迎通过 [Issue](https://github.com/z-Zihan/Chorus/issues) 反馈问题、交流想法；开发者请先阅读[开发文档](docs/DEVELOPMENT.md)。如果 Chorus 对你有帮助，欢迎点一个 ⭐ Star 支持项目继续演进。
+Report problems and share ideas via [Issues](https://github.com/z-Zihan/Chorus/issues). Developers, please read the [development docs](docs/DEVELOPMENT.md) first. If Chorus is useful to you, a ⭐ Star helps the project keep moving forward.
