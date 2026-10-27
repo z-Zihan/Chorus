@@ -8,6 +8,13 @@ import { EventHub } from "../../ws/events";
 import { registerRoutes } from "../index";
 import { Scheduler } from "../../scheduler";
 
+export interface TestContext {
+  app: FastifyInstance;
+  repository: Repository;
+  registry: AgentRegistry;
+  scheduler: Scheduler;
+}
+
 const testConfig: AppConfig = {
   port: 0,
   dbPath: ":memory:",
@@ -30,7 +37,7 @@ const testConfig: AppConfig = {
   ],
 };
 
-export async function buildTestApp(): Promise<FastifyInstance> {
+export async function buildTestContext(): Promise<TestContext> {
   const database = createDatabase(":memory:");
   const repository = new Repository(database);
   await repository.getOrCreateLocalUser("Test User");
@@ -48,5 +55,9 @@ export async function buildTestApp(): Promise<FastifyInstance> {
     database.sqlite.close();
   });
   await app.ready();
-  return app;
+  return { app, repository, registry, scheduler };
+}
+
+export async function buildTestApp(): Promise<FastifyInstance> {
+  return (await buildTestContext()).app;
 }
