@@ -1,9 +1,10 @@
-import type { HubEnvelope } from "@chorus/shared";
+import { createHmac, randomUUID } from "node:crypto";
+import { canonicalize, type HubEnvelope } from "@chorus/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDatabase, type DatabaseContext } from "../db/index.js";
 import { Repository } from "../db/repository.js";
 import { generateUserKeyPair } from "../identity/user-keys.js";
-import { generateHubKeypair } from "./crypto.js";
+import { encryptPayload, generateHubKeypair, signEnvelope } from "./crypto.js";
 import { PairingService } from "./pairing-service.js";
 import { TrustStore } from "./trust-store.js";
 
@@ -14,6 +15,7 @@ interface TestSide {
   transport: TestTransport;
   service: PairingService;
   hubId: string;
+  hubKey: { publicKey: string; secretKey: string };
 }
 
 class TestTransport {
@@ -56,7 +58,15 @@ describe("PairingService", () => {
       () => name,
       generateUserKeyPair(),
     );
-    return { database, repository, trustStore, transport, service, hubId: hubKey.publicKey };
+    return {
+      database,
+      repository,
+      trustStore,
+      transport,
+      service,
+      hubId: hubKey.publicKey,
+      hubKey,
+    };
   }
 
   async function reachApproval(a: TestSide, b: TestSide) {
@@ -65,6 +75,59 @@ describe("PairingService", () => {
     await a.service.onEnvelope(b.transport.take());
     await b.service.onEnvelope(a.transport.take());
     return { created, accepted };
+  }
+
+  function decodeInvitation(pairingPackage: string): {
+    sessionId: string;
+    secret: string;
+    nonce: string;
+  } {
+    return JSON.parse(Buffer.from(pairingPackage, "base64url").toString("utf8")) as {
+      sessionId: string;
+      secret: string;
+      nonce: string;
+    };
+  }
+
+  function wireMac(secret: string, message: Record<string, unknown>): string {
+    return createHmac("sha256", Buffer.from(secret, "base64url"))
+      .update(canonicalize(message))
+      .digest("base64url");
+  }
+
+  function pairingWire(
+    invitation: { sessionId: string; secret: string; nonce: string },
+    fromHubId: string,
+    toHubId: string,
+    kind: string,
+  ): Record<string, unknown> {
+    const unsigned = {
+      version: 1,
+      sessionId: invitation.sessionId,
+      kind,
+      nonce: invitation.nonce,
+      fromHubId,
+      toHubId,
+    };
+    return { ...unsigned, mac: wireMac(invitation.secret, unsigned) };
+  }
+
+  async function craftEnvelope(
+    from: { hubId: string; secretKey: string },
+    recipientHubId: string,
+    wire: Record<string, unknown>,
+  ): Promise<HubEnvelope> {
+    const encrypted = await encryptPayload(wire, recipientHubId, from.secretKey);
+    const unsigned = {
+      id: randomUUID(),
+      from: from.hubId,
+      to: recipientHubId,
+      type: "pairing" as const,
+      timestamp: Date.now(),
+      nonce: encrypted.nonce,
+      ciphertext: encrypted.ciphertext,
+    };
+    return { ...unsigned, signature: await signEnvelope(unsigned, from.secretKey) };
   }
 
   it("requires two independent Hub proofs and explicit approval on both sides", async () => {
@@ -157,5 +220,185 @@ describe("PairingService", () => {
 
     const accepted = await c.service.acceptInvitation(fresh.pairingPackage);
     expect(accepted.status).toBe("verifying");
+  });
+  it("ignores envelopes that are not pairing or not addressed to this Hub", async () => {
+    const a = await side("Alice");
+    const b = await side("Bob");
+    const stranger = await generateHubKeypair();
+    const created = a.service.createInvitation(b.hubId);
+    const base = {
+      id: randomUUID(),
+      from: stranger.publicKey,
+      to: a.hubId,
+      type: "pairing" as const,
+      timestamp: Date.now(),
+      nonce: Buffer.alloc(24, 1).toString("base64"),
+      ciphertext: "garbage",
+      signature: "garbage",
+    };
+
+    await a.service.onEnvelope({ ...base, type: "direct" });
+    await a.service.onEnvelope({ ...base, to: stranger.publicKey });
+
+    expect(a.service.get(created.session.sessionId)).toMatchObject({ status: "waiting_peer" });
+    expect(a.transport.sent).toHaveLength(0);
+  });
+
+  it("rejects malformed pairing envelopes without changing session state", async () => {
+    const a = await side("Alice");
+    const b = await side("Bob");
+    const stranger = await generateHubKeypair();
+    const forger = await generateHubKeypair();
+    const created = a.service.createInvitation(b.hubId);
+    const sessionId = created.session.sessionId;
+    const makeUnsigned = () => ({
+      id: randomUUID(),
+      from: stranger.publicKey,
+      to: a.hubId,
+      type: "pairing" as const,
+      timestamp: Date.now(),
+      nonce: Buffer.alloc(24, 2).toString("base64"),
+      ciphertext: "garbage",
+    });
+
+    await expect(
+      a.service.onEnvelope({ ...makeUnsigned(), from: "not-hex", signature: "garbage" }),
+    ).rejects.toThrow("Invalid pairing sender Hub ID");
+    const forged = {
+      ...makeUnsigned(),
+      signature: await signEnvelope(makeUnsigned(), forger.secretKey),
+    };
+    await expect(a.service.onEnvelope(forged)).rejects.toThrow(
+      "Invalid pairing envelope signature",
+    );
+
+    const undecryptable = await craftEnvelope(
+      { hubId: stranger.publicKey, secretKey: stranger.secretKey },
+      a.hubId,
+      { junk: true },
+    );
+    await expect(a.service.onEnvelope(undecryptable)).rejects.toThrow("Unknown pairing session");
+
+    expect(a.service.get(sessionId)).toMatchObject({ status: "waiting_peer" });
+    expect(a.transport.sent).toHaveLength(0);
+  });
+
+  it("silently swallows a replayed envelope id even when the payload differs", async () => {
+    const a = await side("Alice");
+    const b = await side("Bob");
+    const stranger = await generateHubKeypair();
+    const created = a.service.createInvitation(b.hubId);
+    const first = await craftEnvelope(
+      { hubId: stranger.publicKey, secretKey: stranger.secretKey },
+      a.hubId,
+      { junk: 1 },
+    );
+    const replay = { ...first, ciphertext: "other" };
+
+    await expect(a.service.onEnvelope(first)).rejects.toThrow("Unknown pairing session");
+    await expect(a.service.onEnvelope(replay)).resolves.toBeUndefined();
+    expect(a.service.get(created.session.sessionId)).toMatchObject({ status: "waiting_peer" });
+    expect(a.transport.sent).toHaveLength(0);
+  });
+
+  it("treats unexpected pairing kinds as protocol errors without failing the session", async () => {
+    const a = await side("Alice");
+    const b = await side("Bob");
+    const created = a.service.createInvitation(b.hubId);
+    const invitation = decodeInvitation(created.pairingPackage);
+    const sender = { hubId: b.hubId, secretKey: b.hubKey.secretKey };
+
+    const prematureApprove = await craftEnvelope(
+      sender,
+      a.hubId,
+      pairingWire(invitation, b.hubId, a.hubId, "approve"),
+    );
+    await expect(a.service.onEnvelope(prematureApprove)).rejects.toThrow(
+      "Unexpected approve pairing message",
+    );
+
+    const unknownKind = await craftEnvelope(
+      sender,
+      a.hubId,
+      pairingWire(invitation, b.hubId, a.hubId, "bogus"),
+    );
+    await expect(a.service.onEnvelope(unknownKind)).rejects.toThrow(
+      "Unexpected bogus pairing message",
+    );
+
+    expect(a.service.get(invitation.sessionId)).toMatchObject({ status: "waiting_peer" });
+    expect(a.transport.sent).toHaveLength(0);
+  });
+
+  it("returns undefined for unknown sessions and rejects approve/cancel for them", async () => {
+    const a = await side("Alice");
+    expect(a.service.get("missing-session")).toBeUndefined();
+    await expect(a.service.approve("missing-session")).rejects.toThrow("Pairing session not found");
+    await expect(a.service.cancel("missing-session")).rejects.toThrow("Pairing session not found");
+    expect(a.transport.sent).toHaveLength(0);
+  });
+
+  it("rejects approve and repeated cancel once a session is cancelled", async () => {
+    const a = await side("Alice");
+    const b = await side("Bob");
+    const { created } = await reachApproval(a, b);
+    const sessionId = created.session.sessionId;
+
+    const cancelled = await a.service.cancel(sessionId);
+    expect(cancelled).toMatchObject({ status: "cancelled" });
+    await expect(a.service.cancel(sessionId)).rejects.toThrow("Pairing session is cancelled");
+    await expect(a.service.approve(sessionId)).rejects.toThrow("Pairing session is cancelled");
+    expect(a.service.get(sessionId)).toMatchObject({ status: "cancelled" });
+    expect(a.transport.sent).toHaveLength(1);
+  });
+
+  it("re-sends the approve envelope when approve is called twice before peer approval", async () => {
+    const a = await side("Alice");
+    const b = await side("Bob");
+    const { created, accepted } = await reachApproval(a, b);
+    const aSessionId = created.session.sessionId;
+    const bSessionId = accepted.sessionId;
+
+    await a.service.approve(aSessionId);
+    await a.service.approve(aSessionId);
+    expect(a.transport.sent).toHaveLength(2);
+    expect(a.service.get(aSessionId)).toMatchObject({
+      status: "awaiting_approval",
+      localApproved: true,
+      peerApproved: false,
+    });
+
+    await b.service.onEnvelope(a.transport.take());
+    expect(b.service.get(bSessionId)).toMatchObject({
+      status: "awaiting_approval",
+      peerApproved: true,
+    });
+
+    await b.service.onEnvelope(a.transport.take());
+    expect(b.service.get(bSessionId)).toMatchObject({
+      status: "awaiting_approval",
+      peerApproved: true,
+    });
+    expect(b.transport.sent).toHaveLength(0);
+  });
+
+  it("ignores a replayed response envelope without a second state transition", async () => {
+    const a = await side("Alice");
+    const b = await side("Bob");
+    const created = a.service.createInvitation(b.hubId);
+    await b.service.acceptInvitation(created.pairingPackage);
+    const response = b.transport.take();
+
+    await a.service.onEnvelope(response);
+    expect(a.service.get(created.session.sessionId)).toMatchObject({
+      status: "awaiting_approval",
+    });
+    expect(a.transport.sent).toHaveLength(1);
+
+    await a.service.onEnvelope(response);
+    expect(a.service.get(created.session.sessionId)).toMatchObject({
+      status: "awaiting_approval",
+    });
+    expect(a.transport.sent).toHaveLength(1);
   });
 });
