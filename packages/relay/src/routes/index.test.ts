@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { generateKeyPairSync, sign } from "node:crypto";
 import { canonicalize } from "@chorus/shared";
 import Fastify from "fastify";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createHubToken, RegistrationChallengeStore } from "../auth.js";
 import { createDatabase, type DatabaseContext } from "../db/index.js";
 import { HubRegistry } from "../hub-registry.js";
@@ -369,5 +369,182 @@ describe("Relay HTTP authorization and Room invitations", () => {
     expect(revoked.statusCode).toBe(200);
     expect(revoked.json()).toMatchObject({ invitation: { status: "revoked" } });
     expect(roomManager.isMember(secondRoom.id, "hub-b")).toBe(false);
+  });
+
+  it("discovers registered Hubs as offline without sockets and unknown Hubs as offline ids", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/hubs/discover",
+      headers: authorization("hub-a"),
+      payload: { hubIds: ["hub-b", "hub-missing"] },
+    });
+    expect(response.statusCode).toBe(200);
+    const body = response.json() as { hubs: Array<Record<string, unknown>> };
+    expect(body.hubs).toHaveLength(2);
+    expect(body.hubs[0]).toEqual({ ...registry.get("hub-b"), online: false });
+    expect(body.hubs[0]).toMatchObject({
+      hubId: "hub-b",
+      publicKey: "public-key-hub-b",
+      displayName: "HUB-B",
+    });
+    expect(body.hubs[1]).toEqual({ hubId: "hub-missing", online: false });
+  });
+
+  it("rejects unauthenticated discovery and malformed hubIds", async () => {
+    const unauthenticated = await app.inject({
+      method: "POST",
+      url: "/api/hubs/discover",
+      payload: { hubIds: ["hub-b"] },
+    });
+    expect(unauthenticated.statusCode).toBe(401);
+    expect(unauthenticated.json()).toEqual({ error: "Valid Hub authentication is required" });
+
+    for (const hubIds of ["hub-b", ["hub-b", 42], undefined]) {
+      const malformed = await app.inject({
+        method: "POST",
+        url: "/api/hubs/discover",
+        headers: authorization("hub-a"),
+        payload: { hubIds },
+      });
+      expect(malformed.statusCode).toBe(400);
+      expect(malformed.json()).toEqual({ error: "hubIds must be an array of strings" });
+    }
+  });
+
+  it("lets a Hub unregister itself", async () => {
+    const response = await app.inject({
+      method: "DELETE",
+      url: "/api/hubs/hub-a",
+      headers: authorization("hub-a"),
+    });
+    expect(response.statusCode).toBe(204);
+    expect(response.body).toBe("");
+    expect(registry.get("hub-a")).toBeNull();
+    expect(registry.get("hub-b")).not.toBeNull();
+  });
+
+  it("forbids unregistering another Hub and requires authentication", async () => {
+    const forbidden = await app.inject({
+      method: "DELETE",
+      url: "/api/hubs/hub-b",
+      headers: authorization("hub-a"),
+    });
+    expect(forbidden.statusCode).toBe(403);
+    expect(forbidden.json()).toEqual({ error: "A Hub can only unregister itself" });
+    expect(registry.get("hub-b")).not.toBeNull();
+
+    const unauthenticated = await app.inject({ method: "DELETE", url: "/api/hubs/hub-a" });
+    expect(unauthenticated.statusCode).toBe(401);
+    expect(registry.get("hub-a")).not.toBeNull();
+  });
+
+  it("returns 404 when the Hub record disappears before it can be unregistered", async () => {
+    // Authentication requires a registered Hub, so simulate a concurrent unregister
+    // that removes the record between the auth check and the delete.
+    const unregister = registry.unregister.bind(registry);
+    vi.spyOn(registry, "unregister").mockImplementationOnce((hubId) => {
+      unregister(hubId);
+      return unregister(hubId);
+    });
+    const response = await app.inject({
+      method: "DELETE",
+      url: "/api/hubs/hub-a",
+      headers: authorization("hub-a"),
+    });
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toEqual({ error: "Hub not found" });
+  });
+
+  it("lets a member leave a Room and returns the remaining members", async () => {
+    const room = (await createRoom()).json() as { id: string };
+    roomManager.inviteToRoom(room.id, "hub-b", "hub-a");
+    roomManager.respondToInvitation(room.id, "hub-b", "accepted");
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/rooms/${room.id}/leave`,
+      headers: authorization("hub-b"),
+    });
+    expect(response.statusCode).toBe(200);
+    const body = response.json() as { members: Array<{ hubId: string }> };
+    expect(body.members.map((member) => member.hubId)).toEqual(["hub-a"]);
+    expect(body.members[0]).toMatchObject({ hubId: "hub-a", displayName: "HUB-A" });
+    expect(roomManager.isMember(room.id, "hub-b")).toBe(false);
+  });
+
+  it("rejects leaving a Room for non-members, missing Rooms, and unauthenticated callers", async () => {
+    const room = (await createRoom()).json() as { id: string };
+
+    const nonMember = await app.inject({
+      method: "POST",
+      url: `/api/rooms/${room.id}/leave`,
+      headers: authorization("hub-b"),
+    });
+    expect(nonMember.statusCode).toBe(403);
+    expect(nonMember.json()).toEqual({ error: "Room membership required" });
+
+    const missing = await app.inject({
+      method: "POST",
+      url: "/api/rooms/missing-room/leave",
+      headers: authorization("hub-a"),
+    });
+    expect(missing.statusCode).toBe(404);
+    expect(missing.json()).toEqual({ error: "Room not found" });
+
+    const unauthenticated = await app.inject({
+      method: "POST",
+      url: `/api/rooms/${room.id}/leave`,
+    });
+    expect(unauthenticated.statusCode).toBe(401);
+    expect(roomManager.isMember(room.id, "hub-a")).toBe(true);
+  });
+
+  it("reports health with the registered Hub count without authentication", async () => {
+    const response = await app.inject({ method: "GET", url: "/api/health" });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ ok: true, hubs: 3 });
+
+    registry.register("hub-d", "public-key-hub-d", "HUB-D");
+    expect((await app.inject({ method: "GET", url: "/api/health" })).json()).toEqual({
+      ok: true,
+      hubs: 4,
+    });
+  });
+
+  it("rejects joining a Room without an invitation", async () => {
+    const room = (await createRoom()).json() as { id: string };
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/rooms/${room.id}/join`,
+      headers: authorization("hub-b"),
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({ error: "Pending Room invitation not found" });
+    expect(roomManager.isMember(room.id, "hub-b")).toBe(false);
+  });
+
+  it("lets the creator read the Room with its members", async () => {
+    const room = (await createRoom()).json() as { id: string };
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/rooms/${room.id}`,
+      headers: authorization("hub-a"),
+    });
+    expect(response.statusCode).toBe(200);
+    const body = response.json() as {
+      id: string;
+      name: string;
+      createdBy: string;
+      members: Array<{ hubId: string }>;
+    };
+    expect(body).toMatchObject({ id: room.id, name: "Design Room", createdBy: "hub-a" });
+    expect(Array.isArray(body.members)).toBe(true);
+    expect(body.members).toEqual([
+      expect.objectContaining({
+        hubId: "hub-a",
+        publicKey: "public-key-hub-a",
+        displayName: "HUB-A",
+      }),
+    ]);
   });
 });
