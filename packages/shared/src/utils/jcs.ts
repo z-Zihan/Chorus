@@ -75,7 +75,7 @@ function assertValidUnicode(value: string): void {
     const codeUnit = value.charCodeAt(index);
     if (codeUnit >= 0xd800 && codeUnit <= 0xdbff) {
       const trailing = value.charCodeAt(index + 1);
-      if (trailing < 0xdc00 || trailing > 0xdfff) {
+      if (!(trailing >= 0xdc00 && trailing <= 0xdfff)) {
         throw new TypeError("JCS cannot serialize lone Unicode surrogates");
       }
       index += 1;
