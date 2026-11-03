@@ -126,7 +126,8 @@ function collectMessageContentText(message: unknown): string[] {
     .filter(Boolean);
 }
 
-function formatJsonLine(rawEvent: unknown): string | null {
+/** Exported for testing: pure Claude Code stream-json event formatter. */
+export function formatJsonLine(rawEvent: unknown): string | null {
   if (!isRecord(rawEvent)) return JSON.stringify(rawEvent);
 
   const eventType = getStringRecordValue(rawEvent, ["type", "event", "kind", "sessionUpdate"]);
@@ -161,7 +162,8 @@ function formatJsonLine(rawEvent: unknown): string | null {
   return eventType ? `[${eventType}] ${text}` : text;
 }
 
-function parseCodexJson(raw: unknown): string {
+/** Exported for testing: pure Codex JSON event parser. */
+export function parseCodexJson(raw: unknown): string {
   if (!isRecord(raw)) return String(raw);
 
   const eventType = getStringRecordValue(raw, ["type"]);
