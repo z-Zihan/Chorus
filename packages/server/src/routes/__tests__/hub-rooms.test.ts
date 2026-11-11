@@ -2,20 +2,15 @@
 // POST/DELETE /api/hub/rooms/:id/agents[/:agentId]) — invitation routes are
 // covered separately in hub-invitations.test.ts.
 //
-// Force the encrypted-file credential backend before any credential-store call:
-// on macOS resolveBackend() would otherwise pick the native keychain and
-// getUserKey() would read the developer's real keychain, making the "user key
-// unavailable" (503) branch machine-dependent. resolveBackend() is lazy and each
-// test file gets a fresh module registry, so this reliably routes every read and
-// write (including the key deletion below) to the per-worker temp credential
-// file that vitest.setup.ts points CHORUS_CREDENTIAL_FILE at. This is the
-// documented opt-out in credential-store.ts, not a module mock.
-process.env.CHORUS_CREDENTIAL_BACKEND = "file";
+// The credential backend is pinned to the encrypted-file store globally by
+// vitest.setup.ts (CHORUS_CREDENTIAL_BACKEND=file), so the "user key
+// unavailable" (503) branch and the key deletion below run against the
+// per-worker temp credential file instead of the developer's keychain.
 
 import type { HubConfig, HubConnectionState, RoomInfo, RoomMember } from "@chorus/shared";
 import Fastify from "fastify";
 import request from "supertest";
-import { afterAll, afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import { AgentRegistry } from "../../agent/registry.js";
 import { deleteCredential, setUserKey } from "../../credential-store.js";
 import { createDatabase, type DatabaseContext } from "../../db/index.js";
@@ -204,10 +199,6 @@ beforeEach(async () => {
 afterEach(async () => {
   for (const app of apps.splice(0)) await app.close();
   database.sqlite.close();
-});
-
-afterAll(() => {
-  delete process.env.CHORUS_CREDENTIAL_BACKEND;
 });
 
 describe("POST /api/hub/rooms", () => {
