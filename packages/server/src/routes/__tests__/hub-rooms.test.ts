@@ -2,20 +2,15 @@
 // POST/DELETE /api/hub/rooms/:id/agents[/:agentId]) — invitation routes are
 // covered separately in hub-invitations.test.ts.
 //
-// Force the encrypted-file credential backend before any credential-store call:
-// on macOS resolveBackend() would otherwise pick the native keychain and
-// getUserKey() would read the developer's real keychain, making the "user key
-// unavailable" (503) branch machine-dependent. resolveBackend() is lazy and each
-// test file gets a fresh module registry, so this reliably routes every read and
-// write (including the key deletion below) to the per-worker temp credential
-// file that vitest.setup.ts points CHORUS_CREDENTIAL_FILE at. This is the
-// documented opt-out in credential-store.ts, not a module mock.
-process.env.CHORUS_CREDENTIAL_BACKEND = "file";
+// The credential backend is pinned to the encrypted-file store globally by
+// vitest.setup.ts (CHORUS_CREDENTIAL_BACKEND=file), so the "user key
+// unavailable" (503) branch and the key deletion below run against the
+// per-worker temp credential file instead of the developer's keychain.
 
 import type { HubConfig, HubConnectionState, RoomInfo, RoomMember } from "@chorus/shared";
 import Fastify from "fastify";
 import request from "supertest";
-import { afterAll, afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import { AgentRegistry } from "../../agent/registry.js";
 import { deleteCredential, setUserKey } from "../../credential-store.js";
 import { createDatabase, type DatabaseContext } from "../../db/index.js";
@@ -182,12 +177,17 @@ function seedAgents(repository: Repository): void {
 
 function createRoomConversation(
   repository: Repository,
-  options: { relayRoomId?: string; createdByHubId?: string } = {},
+  options: {
+    relayRoomId?: string;
+    createdByHubId?: string;
+    extraMetadata?: { [key: string]: unknown };
+  } = {},
 ) {
   const createdByHubId = options.createdByHubId ?? "hub-local";
   return repository.createConversation("Room X", "cross_hub", [], options.relayRoomId ?? "room-x", {
     createdByHubId,
     adminHubIds: [createdByHubId],
+    ...options.extraMetadata,
   });
 }
 
@@ -204,10 +204,6 @@ beforeEach(async () => {
 afterEach(async () => {
   for (const app of apps.splice(0)) await app.close();
   database.sqlite.close();
-});
-
-afterAll(() => {
-  delete process.env.CHORUS_CREDENTIAL_BACKEND;
 });
 
 describe("POST /api/hub/rooms", () => {
@@ -613,6 +609,46 @@ describe("DELETE /api/hub/rooms/:id/agents/:agentId", () => {
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual({ ok: true });
+    expect(hub.repository.getConversationMembers(conversation.id)).toEqual([]);
+  });
+
+  it("allows a hub listed in metadata.adminHubIds without the relay fallback", async () => {
+    const hub = await startRoomsHub(database, apps);
+    // Created elsewhere, but this hub is an explicit room administrator — the
+    // ladder must authorize locally instead of asking the relay.
+    const conversation = createRoomConversation(hub.repository, {
+      relayRoomId: "room-x",
+      createdByHubId: "hub-other",
+      extraMetadata: { adminHubIds: ["hub-other", "hub-local"] },
+    });
+    hub.repository.addAgentToConversation(conversation.id, ["remote-agent"]);
+
+    const response = await request(hub.app.server).delete(
+      "/api/hub/rooms/room-x/agents/remote-agent",
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ ok: true });
+    expect(hub.relayClient.getRoomRequest).not.toHaveBeenCalled();
+    expect(hub.repository.getConversationMembers(conversation.id)).toEqual([]);
+  });
+
+  it("allows the local protocol user listed in metadata.adminUserIds", async () => {
+    const hub = await startRoomsHub(database, apps);
+    const conversation = createRoomConversation(hub.repository, {
+      relayRoomId: "room-x",
+      createdByHubId: "hub-other",
+      extraMetadata: { adminUserIds: ["usr_local"] },
+    });
+    hub.repository.addAgentToConversation(conversation.id, ["remote-agent"]);
+
+    const response = await request(hub.app.server).delete(
+      "/api/hub/rooms/room-x/agents/remote-agent",
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ ok: true });
+    expect(hub.relayClient.getRoomRequest).not.toHaveBeenCalled();
     expect(hub.repository.getConversationMembers(conversation.id)).toEqual([]);
   });
 

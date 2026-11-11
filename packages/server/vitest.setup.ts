@@ -23,3 +23,11 @@ import { join } from "node:path";
 const workerId = process.env.VITEST_POOL_ID ?? "0";
 const isolatedDir = join(tmpdir(), `chorus-server-test-credentials-${process.pid}-${workerId}`);
 process.env.CHORUS_CREDENTIAL_FILE = join(isolatedDir, "credentials.enc");
+// Pin the backend too: on macOS (and other desktop platforms) resolveBackend()
+// would otherwise select the native keychain, letting tests that exercise
+// getOrCreateLocalUser read and write the developer's real keychain.
+// CHORUS_CREDENTIAL_BACKEND=file is the documented opt-out in
+// credential-store.ts and routes every read/write to the per-worker temp
+// file above. resolveBackend() resolves lazily per module registry, and
+// setupFiles run before each test file's imports, so this is set in time.
+process.env.CHORUS_CREDENTIAL_BACKEND = "file";
