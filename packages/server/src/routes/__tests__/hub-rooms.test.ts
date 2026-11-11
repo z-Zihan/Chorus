@@ -177,12 +177,17 @@ function seedAgents(repository: Repository): void {
 
 function createRoomConversation(
   repository: Repository,
-  options: { relayRoomId?: string; createdByHubId?: string } = {},
+  options: {
+    relayRoomId?: string;
+    createdByHubId?: string;
+    extraMetadata?: { [key: string]: unknown };
+  } = {},
 ) {
   const createdByHubId = options.createdByHubId ?? "hub-local";
   return repository.createConversation("Room X", "cross_hub", [], options.relayRoomId ?? "room-x", {
     createdByHubId,
     adminHubIds: [createdByHubId],
+    ...options.extraMetadata,
   });
 }
 
@@ -604,6 +609,46 @@ describe("DELETE /api/hub/rooms/:id/agents/:agentId", () => {
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual({ ok: true });
+    expect(hub.repository.getConversationMembers(conversation.id)).toEqual([]);
+  });
+
+  it("allows a hub listed in metadata.adminHubIds without the relay fallback", async () => {
+    const hub = await startRoomsHub(database, apps);
+    // Created elsewhere, but this hub is an explicit room administrator — the
+    // ladder must authorize locally instead of asking the relay.
+    const conversation = createRoomConversation(hub.repository, {
+      relayRoomId: "room-x",
+      createdByHubId: "hub-other",
+      extraMetadata: { adminHubIds: ["hub-other", "hub-local"] },
+    });
+    hub.repository.addAgentToConversation(conversation.id, ["remote-agent"]);
+
+    const response = await request(hub.app.server).delete(
+      "/api/hub/rooms/room-x/agents/remote-agent",
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ ok: true });
+    expect(hub.relayClient.getRoomRequest).not.toHaveBeenCalled();
+    expect(hub.repository.getConversationMembers(conversation.id)).toEqual([]);
+  });
+
+  it("allows the local protocol user listed in metadata.adminUserIds", async () => {
+    const hub = await startRoomsHub(database, apps);
+    const conversation = createRoomConversation(hub.repository, {
+      relayRoomId: "room-x",
+      createdByHubId: "hub-other",
+      extraMetadata: { adminUserIds: ["usr_local"] },
+    });
+    hub.repository.addAgentToConversation(conversation.id, ["remote-agent"]);
+
+    const response = await request(hub.app.server).delete(
+      "/api/hub/rooms/room-x/agents/remote-agent",
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ ok: true });
+    expect(hub.relayClient.getRoomRequest).not.toHaveBeenCalled();
     expect(hub.repository.getConversationMembers(conversation.id)).toEqual([]);
   });
 
