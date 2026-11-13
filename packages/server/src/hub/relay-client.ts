@@ -59,6 +59,8 @@ export class RelayClient {
   private reconnectTimer?: NodeJS.Timeout;
   private heartbeatTimer?: NodeJS.Timeout;
   private pongTimer?: NodeJS.Timeout;
+  private pingSentAt: number | null = null;
+  private lastRelayLatency: number | null = null;
   private shouldReconnect = false;
   private connectionGeneration = 0;
   private readonly messageListeners = new Set<MessageListener>();
@@ -78,6 +80,10 @@ export class RelayClient {
 
   get currentHubId(): string | undefined {
     return this.hubId;
+  }
+
+  get relayLatencyMs(): number | null {
+    return this.lastRelayLatency;
   }
 
   async connect(
@@ -466,6 +472,7 @@ export class RelayClient {
     this.heartbeatTimer = setInterval(() => {
       if (this.socket?.readyState !== WebSocket.OPEN) return;
       this.socket.send(JSON.stringify({ type: "ping" } satisfies RelayClientMessage));
+      this.pingSentAt = Date.now();
       if (this.pongTimer) clearTimeout(this.pongTimer);
       this.pongTimer = setTimeout(() => {
         logger.warn("Relay pong timeout; reconnecting");
@@ -479,6 +486,10 @@ export class RelayClient {
   private receivedPong(): void {
     if (this.pongTimer) clearTimeout(this.pongTimer);
     this.pongTimer = undefined;
+    if (this.pingSentAt !== null) {
+      this.lastRelayLatency = Date.now() - this.pingSentAt;
+      this.pingSentAt = null;
+    }
   }
 
   private stopHeartbeat(): void {
@@ -486,6 +497,8 @@ export class RelayClient {
     if (this.pongTimer) clearTimeout(this.pongTimer);
     this.heartbeatTimer = undefined;
     this.pongTimer = undefined;
+    this.pingSentAt = null;
+    this.lastRelayLatency = null;
   }
 
   private scheduleReconnect(): void {

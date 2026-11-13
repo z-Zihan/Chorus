@@ -17,6 +17,7 @@ function makeRelayClient(overrides: Partial<Record<string, unknown>> = {}) {
   return {
     state: "disconnected",
     sendEnvelope: vi.fn(),
+    relayLatencyMs: null,
     ...overrides,
   } as unknown as RelayClient;
 }
@@ -138,26 +139,46 @@ describe("ConnectionManager.sendEnvelope", () => {
 });
 
 describe("ConnectionManager.getConnectionInfo", () => {
-  it("reports the active path and P2P latency, with relayLatency always null (current implementation)", () => {
+  it("reports relayLatency measured from the relay client whenever the Relay is connected, even if the active path is 'p2p'", () => {
     const p2pListener = makeP2PListener({
       isConnected: vi.fn(() => true),
       getP2PLatency: vi.fn(() => 42),
     });
-    const relayClient = makeRelayClient({ state: "connected" });
+    const relayClient = makeRelayClient({ state: "connected", relayLatencyMs: 17 });
     const manager = new ConnectionManager(p2pListener, relayClient);
 
     const info = manager.getConnectionInfo("hub-b");
 
-    expect(info).toEqual({ path: "p2p", p2pLatency: 42, relayLatency: null });
+    expect(info).toEqual({ path: "p2p", p2pLatency: 42, relayLatency: 17 });
   });
 
-  it("reports relayLatency as null even when the path is 'relay' (not yet implemented)", () => {
+  it("reports the measured relayLatency when the path is 'relay'", () => {
     const p2pListener = makeP2PListener({ isConnected: vi.fn(() => false) });
-    const relayClient = makeRelayClient({ state: "connected" });
+    const relayClient = makeRelayClient({ state: "connected", relayLatencyMs: 23 });
+    const manager = new ConnectionManager(p2pListener, relayClient);
+
+    const info = manager.getConnectionInfo("hub-b");
+
+    expect(info).toEqual({ path: "relay", p2pLatency: null, relayLatency: 23 });
+  });
+
+  it("reports relayLatency as null when the Relay has not measured a round trip yet", () => {
+    const p2pListener = makeP2PListener({ isConnected: vi.fn(() => false) });
+    const relayClient = makeRelayClient({ state: "connected", relayLatencyMs: null });
     const manager = new ConnectionManager(p2pListener, relayClient);
 
     const info = manager.getConnectionInfo("hub-b");
 
     expect(info).toEqual({ path: "relay", p2pLatency: null, relayLatency: null });
+  });
+
+  it("reports relayLatency as null when the Relay is not connected, even if a stale measurement is cached", () => {
+    const p2pListener = makeP2PListener({ isConnected: vi.fn(() => false) });
+    const relayClient = makeRelayClient({ state: "disconnected", relayLatencyMs: 99 });
+    const manager = new ConnectionManager(p2pListener, relayClient);
+
+    const info = manager.getConnectionInfo("hub-b");
+
+    expect(info).toEqual({ path: "none", p2pLatency: null, relayLatency: null });
   });
 });
