@@ -37,7 +37,7 @@ export class ConnectionManager {
     return {
       path: this.getActivePath(hubId),
       p2pLatency: this.p2pListener.getP2PLatency(hubId),
-      relayLatency: null,
+      relayLatency: this.relayClient.state === "connected" ? this.relayClient.relayLatencyMs : null,
     };
   }
 }
