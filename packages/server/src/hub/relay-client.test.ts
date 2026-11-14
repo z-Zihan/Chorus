@@ -1,4 +1,5 @@
 import type { HubEnvelope, RelayServerMessage, RoomInfo, RoomMember } from "@chorus/shared";
+import { HEARTBEAT_INTERVAL_MS } from "@chorus/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import WebSocket from "ws";
 import { RelayClient } from "./relay-client.js";
@@ -470,6 +471,99 @@ describe("RelayClient message dispatch", () => {
       handleMessage({} as unknown as RelayServerMessage);
     }).not.toThrow();
     for (const listener of listeners) expect(listener).not.toHaveBeenCalled();
+  });
+});
+
+describe("RelayClient relay latency", () => {
+  type LatencyFields = {
+    pingSentAt: number | null;
+    lastRelayLatency: number | null;
+    pongTimer?: unknown;
+  };
+  const fields = (client: RelayClient): LatencyFields => client as unknown as LatencyFields;
+  const startHeartbeat = (client: RelayClient): void =>
+    (client as unknown as { startHeartbeat(): void }).startHeartbeat();
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("records latency from the outstanding ping and consumes it on pong", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(10_000);
+    const client = new RelayClient();
+    configure(client, { pingSentAt: Date.now() });
+
+    vi.advanceTimersByTime(42);
+    bindHandleMessage(client)({ type: "pong" });
+
+    expect(client.relayLatencyMs).toBe(42);
+    expect(fields(client).pingSentAt).toBeNull();
+  });
+
+  it("ignores unsolicited pongs when no ping is outstanding", () => {
+    vi.useFakeTimers();
+    const client = new RelayClient();
+    const handleMessage = bindHandleMessage(client);
+
+    handleMessage({ type: "pong" });
+    expect(client.relayLatencyMs).toBeNull();
+
+    configure(client, { pingSentAt: Date.now() });
+    vi.advanceTimersByTime(15);
+    handleMessage({ type: "pong" });
+    vi.advanceTimersByTime(1_000);
+    handleMessage({ type: "pong" });
+
+    expect(client.relayLatencyMs).toBe(15);
+    expect(fields(client).pingSentAt).toBeNull();
+  });
+
+  it("sends a ping and records pingSentAt on heartbeat ticks only while the socket is open", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(50_000);
+    const client = new RelayClient();
+    const send = vi.fn();
+    const socket: {
+      readyState: number;
+      send: typeof send;
+      terminate: () => void;
+      close: () => void;
+    } = {
+      readyState: WebSocket.CONNECTING,
+      send,
+      terminate: vi.fn(),
+      close: vi.fn(),
+    };
+    configure(client, { socket });
+    startHeartbeat(client);
+
+    vi.advanceTimersByTime(HEARTBEAT_INTERVAL_MS);
+    expect(send).not.toHaveBeenCalled();
+    expect(fields(client).pingSentAt).toBeNull();
+    expect(fields(client).pongTimer).toBeUndefined();
+
+    socket.readyState = WebSocket.OPEN;
+    vi.advanceTimersByTime(HEARTBEAT_INTERVAL_MS);
+    expect(send).toHaveBeenCalledOnce();
+    expect(JSON.parse(send.mock.calls[0]?.[0] as string)).toEqual({ type: "ping" });
+    expect(fields(client).pingSentAt).toBe(50_000 + 2 * HEARTBEAT_INTERVAL_MS);
+    expect(fields(client).pongTimer).toBeDefined();
+
+    client.disconnect();
+  });
+
+  it("resets the outstanding ping and last latency when the heartbeat stops", () => {
+    vi.useFakeTimers();
+    const client = new RelayClient();
+    configure(client, { pingSentAt: Date.now(), lastRelayLatency: 37 });
+    expect(client.relayLatencyMs).toBe(37);
+
+    client.disconnect();
+
+    expect(client.relayLatencyMs).toBeNull();
+    expect(fields(client).pingSentAt).toBeNull();
+    expect(fields(client).lastRelayLatency).toBeNull();
   });
 });
 
