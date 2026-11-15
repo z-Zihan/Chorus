@@ -118,6 +118,17 @@ describe("Hub room invitation routes", () => {
       expect(response.body).toEqual({ ok: true, invitation });
       expect(relayClient.inviteToRoomRequest).toHaveBeenCalledWith(RELAY_URL, "room-1", "hub-peer");
     });
+
+    it("returns 502 RELAY_UNAVAILABLE when the Relay request fails", async () => {
+      relayClient.inviteToRoomRequest.mockRejectedValue(new Error("boom"));
+
+      const response = await request(app.server)
+        .post("/api/hub/rooms/room-1/invite")
+        .send({ hubId: "hub-peer" });
+
+      expect(response.status).toBe(502);
+      expect(response.body.error).toBe("RELAY_UNAVAILABLE");
+    });
   });
 
   describe("GET /api/hub/room-invitations", () => {
@@ -146,6 +157,15 @@ describe("Hub room invitation routes", () => {
       expect(response.status).toBe(200);
       expect(response.body).toEqual({ invitations: [pending, acceptedOrphan] });
       expect(relayClient.listRoomInvitationsRequest).toHaveBeenCalledWith(RELAY_URL);
+    });
+
+    it("returns 502 RELAY_UNAVAILABLE when the Relay request fails", async () => {
+      relayClient.listRoomInvitationsRequest.mockRejectedValue(new Error("boom"));
+
+      const response = await request(app.server).get("/api/hub/room-invitations");
+
+      expect(response.status).toBe(502);
+      expect(response.body.error).toBe("RELAY_UNAVAILABLE");
     });
   });
 
@@ -207,6 +227,16 @@ describe("Hub room invitation routes", () => {
       expect(repository.listConversations({ type: "cross_hub" })).toHaveLength(1);
       expect(relayClient.joinRoom).toHaveBeenCalledWith("room-1");
     });
+
+    it("returns 502 RELAY_UNAVAILABLE when the Relay request fails", async () => {
+      relayClient.respondToRoomInvitationRequest.mockRejectedValue(new Error("boom"));
+
+      const response = await request(app.server).post("/api/hub/room-invitations/room-1/accept");
+
+      expect(response.status).toBe(502);
+      expect(response.body.error).toBe("RELAY_UNAVAILABLE");
+      expect(relayClient.joinRoom).not.toHaveBeenCalled();
+    });
   });
 
   describe("POST /api/hub/room-invitations/:id/decline", () => {
@@ -228,6 +258,16 @@ describe("Hub room invitation routes", () => {
       );
       expect(relayClient.joinRoom).not.toHaveBeenCalled();
       expect(repository.listConversations({ type: "cross_hub" })).toEqual([]);
+    });
+
+    it("returns 502 RELAY_UNAVAILABLE when the Relay request fails", async () => {
+      relayClient.respondToRoomInvitationRequest.mockRejectedValue(new Error("boom"));
+
+      const response = await request(app.server).post("/api/hub/room-invitations/room-1/decline");
+
+      expect(response.status).toBe(502);
+      expect(response.body.error).toBe("RELAY_UNAVAILABLE");
+      expect(relayClient.joinRoom).not.toHaveBeenCalled();
     });
   });
 });

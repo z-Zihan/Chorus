@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import type { HubConfig, P2PDiscoveredHub } from "@chorus/shared";
+import type { HubConfig, P2PDiscoveredHub, RoomInfo, RoomInvitation } from "@chorus/shared";
 import type { AgentRegistry } from "../agent/registry.js";
 import { getUserKey } from "../credential-store.js";
 import type { Repository } from "../db/repository.js";
@@ -398,30 +398,55 @@ export function registerHubRoutes(app: FastifyInstance, dependencies: HubRouteDe
     if (typeof body.hubId !== "string" || !body.hubId.trim()) {
       return reply.code(400).send({ error: "hubId must be a non-empty string" });
     }
-    const invitation = await relayClient.inviteToRoomRequest(
-      hubConfig.relay.url,
-      request.params.id,
-      body.hubId.trim(),
-    );
-    return { ok: true, invitation };
+    try {
+      const invitation = await relayClient.inviteToRoomRequest(
+        hubConfig.relay.url,
+        request.params.id,
+        body.hubId.trim(),
+      );
+      return { ok: true, invitation };
+    } catch (error) {
+      return reply.code(502).send({
+        error: "RELAY_UNAVAILABLE",
+        detail: error instanceof Error ? error.message : String(error),
+      });
+    }
   });
 
-  app.get("/api/hub/room-invitations", async () => ({
-    invitations: (await relayClient.listRoomInvitationsRequest(hubConfig.relay.url)).filter(
-      (invitation) =>
-        invitation.status === "pending" ||
-        (invitation.status === "accepted" && !findRoomConversation(invitation.roomId)),
-    ),
-  }));
+  app.get("/api/hub/room-invitations", async (_request, reply) => {
+    try {
+      const invitations = await relayClient.listRoomInvitationsRequest(hubConfig.relay.url);
+      return reply.send({
+        invitations: invitations.filter(
+          (invitation) =>
+            invitation.status === "pending" ||
+            (invitation.status === "accepted" && !findRoomConversation(invitation.roomId)),
+        ),
+      });
+    } catch (error) {
+      return reply.code(502).send({
+        error: "RELAY_UNAVAILABLE",
+        detail: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
 
   app.post<{ Params: { id: string } }>(
     "/api/hub/room-invitations/:id/accept",
     async (request, reply) => {
-      const result = await relayClient.respondToRoomInvitationRequest(
-        hubConfig.relay.url,
-        request.params.id,
-        "accepted",
-      );
+      let result: { invitation: RoomInvitation; room?: RoomInfo };
+      try {
+        result = await relayClient.respondToRoomInvitationRequest(
+          hubConfig.relay.url,
+          request.params.id,
+          "accepted",
+        );
+      } catch (error) {
+        return reply.code(502).send({
+          error: "RELAY_UNAVAILABLE",
+          detail: error instanceof Error ? error.message : String(error),
+        });
+      }
       let conversation = findRoomConversation(request.params.id);
       if (!conversation) {
         const room = result.room;
@@ -438,15 +463,21 @@ export function registerHubRoutes(app: FastifyInstance, dependencies: HubRouteDe
 
   app.post<{ Params: { id: string } }>(
     "/api/hub/room-invitations/:id/decline",
-    async (request) => ({
-      invitation: (
-        await relayClient.respondToRoomInvitationRequest(
+    async (request, reply) => {
+      try {
+        const { invitation } = await relayClient.respondToRoomInvitationRequest(
           hubConfig.relay.url,
           request.params.id,
           "declined",
-        )
-      ).invitation,
-    }),
+        );
+        return { invitation };
+      } catch (error) {
+        return reply.code(502).send({
+          error: "RELAY_UNAVAILABLE",
+          detail: error instanceof Error ? error.message : String(error),
+        });
+      }
+    },
   );
 
   app.get("/api/hub/status", async () => ({
