@@ -203,7 +203,15 @@ export function registerHubRoutes(app: FastifyInstance, dependencies: HubRouteDe
     if (typeof body.name !== "string" || !body.name.trim()) {
       return reply.code(400).send({ error: "name must be a non-empty string" });
     }
-    const room = await relayClient.createRoomRequest(hubConfig.relay.url, body.name.trim());
+    let room: Awaited<ReturnType<typeof relayClient.createRoomRequest>>;
+    try {
+      room = await relayClient.createRoomRequest(hubConfig.relay.url, body.name.trim());
+    } catch (error) {
+      return reply.code(502).send({
+        error: "RELAY_UNAVAILABLE",
+        detail: error instanceof Error ? error.message : String(error),
+      });
+    }
     repository.createConversation(room.name, "cross_hub", [], room.id, {
       createdByHubId: identity.hubId,
       adminHubIds: [identity.hubId],
@@ -227,10 +235,18 @@ export function registerHubRoutes(app: FastifyInstance, dependencies: HubRouteDe
     if (!conversation?.relayRoomId) {
       return reply.code(404).send({ error: "Room not found" });
     }
-    const members = await relayClient.getRoomMembersRequest(
-      hubConfig.relay.url,
-      conversation.relayRoomId,
-    );
+    let members: Awaited<ReturnType<typeof relayClient.getRoomMembersRequest>>;
+    try {
+      members = await relayClient.getRoomMembersRequest(
+        hubConfig.relay.url,
+        conversation.relayRoomId,
+      );
+    } catch (error) {
+      return reply.code(502).send({
+        error: "RELAY_UNAVAILABLE",
+        detail: error instanceof Error ? error.message : String(error),
+      });
+    }
     const agents = repository.getConversationMembers(conversation.id);
     return {
       ...conversation,
@@ -284,11 +300,19 @@ export function registerHubRoutes(app: FastifyInstance, dependencies: HubRouteDe
     // that is what prevents split-brain when two Hubs mutate one Room.
     const casState = repository.getRoomState(conversation.id);
     if (relayClient.state === "connected" && casState) {
-      const result = await relayClient.roomCas(
-        conversation.relayRoomId,
-        { revision: casState.revision, keyEpoch: casState.keyEpoch },
-        { revision: casState.revision + 1, keyEpoch: casState.keyEpoch },
-      );
+      let result: Awaited<ReturnType<typeof relayClient.roomCas>>;
+      try {
+        result = await relayClient.roomCas(
+          conversation.relayRoomId,
+          { revision: casState.revision, keyEpoch: casState.keyEpoch },
+          { revision: casState.revision + 1, keyEpoch: casState.keyEpoch },
+        );
+      } catch (error) {
+        return reply.code(502).send({
+          error: "RELAY_UNAVAILABLE",
+          detail: error instanceof Error ? error.message : String(error),
+        });
+      }
       if (!result.accepted) {
         void relayClient.joinRoom(conversation.relayRoomId);
         return reply.code(409).send({
@@ -346,11 +370,17 @@ export function registerHubRoutes(app: FastifyInstance, dependencies: HubRouteDe
         localUser?.id,
       );
       if (!isOwner && !isAdministrator) {
-        const room = await relayClient.getRoomRequest?.(
-          hubConfig.relay.url,
-          conversation.relayRoomId,
-        );
-        isAdministrator = room?.createdBy === identity.hubId;
+        // The relay lookup is only an administrator fallback: if the relay is
+        // unreachable we cannot prove admin rights, so deny (403 below).
+        try {
+          const room = await relayClient.getRoomRequest?.(
+            hubConfig.relay.url,
+            conversation.relayRoomId,
+          );
+          isAdministrator = room?.createdBy === identity.hubId;
+        } catch {
+          isAdministrator = false;
+        }
       }
       if (!isOwner && !isAdministrator) {
         return reply.code(403).send({ error: "ROOM_ADMIN_REQUIRED" });
@@ -360,11 +390,19 @@ export function registerHubRoutes(app: FastifyInstance, dependencies: HubRouteDe
       // epoch so OwnerProofs minted for the old epoch cannot be replayed.
       const casState = repository.getRoomState(conversation.id);
       if (relayClient.state === "connected" && casState) {
-        const result = await relayClient.roomCas(
-          conversation.relayRoomId,
-          { revision: casState.revision, keyEpoch: casState.keyEpoch },
-          { revision: casState.revision + 1, keyEpoch: casState.keyEpoch + 1 },
-        );
+        let result: Awaited<ReturnType<typeof relayClient.roomCas>>;
+        try {
+          result = await relayClient.roomCas(
+            conversation.relayRoomId,
+            { revision: casState.revision, keyEpoch: casState.keyEpoch },
+            { revision: casState.revision + 1, keyEpoch: casState.keyEpoch + 1 },
+          );
+        } catch (error) {
+          return reply.code(502).send({
+            error: "RELAY_UNAVAILABLE",
+            detail: error instanceof Error ? error.message : String(error),
+          });
+        }
         if (!result.accepted) {
           void relayClient.joinRoom(conversation.relayRoomId);
           return reply.code(409).send({
