@@ -252,6 +252,19 @@ describe("POST /api/hub/rooms", () => {
       metadata: { createdByHubId: "hub-local", adminHubIds: ["hub-local"] },
     });
   });
+
+  it("returns 502 RELAY_UNAVAILABLE without persisting or joining when the relay call fails", async () => {
+    const hub = await startRoomsHub(database, apps, {
+      createRoomRequest: vi.fn().mockRejectedValue(new Error("boom")),
+    });
+
+    const response = await request(hub.app.server).post("/api/hub/rooms").send({ name: "Room" });
+
+    expect(response.status).toBe(502);
+    expect(response.body).toEqual({ error: "RELAY_UNAVAILABLE", detail: "boom" });
+    expect(hub.relayClient.joinRoom).not.toHaveBeenCalled();
+    expect(hub.repository.listConversations({ type: "cross_hub" })).toEqual([]);
+  });
 });
 
 describe("GET /api/hub/rooms", () => {
@@ -313,6 +326,18 @@ describe("GET /api/hub/rooms/:id", () => {
     expect(response.body.agents).toHaveLength(1);
     expect(response.body.agents[0]).toMatchObject({ id: "room-agent", name: "Room Agent" });
     expect(response.body.members[0].hubId).toBe("hub-peer");
+  });
+
+  it("returns 502 RELAY_UNAVAILABLE when the relay member lookup fails", async () => {
+    const hub = await startRoomsHub(database, apps, {
+      getRoomMembersRequest: vi.fn().mockRejectedValue(new Error("boom")),
+    });
+    createRoomConversation(hub.repository, { relayRoomId: "room-x" });
+
+    const response = await request(hub.app.server).get("/api/hub/rooms/room-x");
+
+    expect(response.status).toBe(502);
+    expect(response.body).toEqual({ error: "RELAY_UNAVAILABLE", detail: "boom" });
   });
 });
 
@@ -529,6 +554,29 @@ describe("POST /api/hub/rooms/:id/agents", () => {
     expect(hub.repository.getConversationMembers(conversation.id)).toEqual([]);
   });
 
+  it("returns 502 RELAY_UNAVAILABLE without touching local state when the CAS call fails", async () => {
+    const hub = await startRoomsHub(database, apps, {
+      state: "connected",
+      roomCas: vi.fn().mockRejectedValue(new Error("Room CAS timed out")),
+    });
+    const conversation = createRoomConversation(hub.repository, { relayRoomId: "room-x" });
+
+    const response = await request(hub.app.server)
+      .post("/api/hub/rooms/room-x/agents")
+      .send({ agentId: "room-agent" });
+
+    expect(response.status).toBe(502);
+    expect(response.body).toEqual({ error: "RELAY_UNAVAILABLE", detail: "Room CAS timed out" });
+    expect(hub.relayClient.roomCas).toHaveBeenCalledTimes(1);
+    expect(hub.relayClient.joinRoom).not.toHaveBeenCalled();
+    expect(hub.repository.getConversationMembers(conversation.id)).toEqual([]);
+    expect(hub.repository.getRoomState("room-x")).toEqual({
+      revision: 1,
+      keyEpoch: 1,
+      managementState: "managed",
+    });
+  });
+
   it("adds the Agent locally without CAS while the relay is disconnected", async () => {
     const hub = await startRoomsHub(database, apps);
     const conversation = createRoomConversation(hub.repository, { relayRoomId: "room-x" });
@@ -717,6 +765,54 @@ describe("DELETE /api/hub/rooms/:id/agents/:agentId", () => {
     expect(response.status).toBe(403);
     expect(response.body).toEqual({ error: "ROOM_ADMIN_REQUIRED" });
     expect(hub.repository.getConversationMembers(conversation.id)).toHaveLength(1);
+  });
+
+  it("rejects with ROOM_ADMIN_REQUIRED when the relay admin fallback lookup fails", async () => {
+    const hub = await startRoomsHub(database, apps, {
+      state: "connected",
+      getRoomRequest: vi.fn().mockRejectedValue(new Error("boom")),
+    });
+    const conversation = createRoomConversation(hub.repository, {
+      relayRoomId: "room-x",
+      createdByHubId: "hub-other",
+    });
+    hub.repository.addAgentToConversation(conversation.id, ["remote-agent"]);
+
+    const response = await request(hub.app.server).delete(
+      "/api/hub/rooms/room-x/agents/remote-agent",
+    );
+
+    expect(response.status).toBe(403);
+    expect(response.body).toEqual({ error: "ROOM_ADMIN_REQUIRED" });
+    expect(hub.relayClient.roomCas).not.toHaveBeenCalled();
+    expect(
+      hub.repository.getConversationMembers(conversation.id).map((member) => member.id),
+    ).toEqual(["remote-agent"]);
+  });
+
+  it("returns 502 RELAY_UNAVAILABLE without touching local state when the CAS call fails", async () => {
+    const hub = await startRoomsHub(database, apps, {
+      state: "connected",
+      roomCas: vi.fn().mockRejectedValue(new Error("Room CAS timed out")),
+    });
+    const conversation = createRoomConversation(hub.repository, { relayRoomId: "room-x" });
+    hub.repository.addAgentToConversation(conversation.id, ["room-agent"]);
+
+    const response = await request(hub.app.server).delete(
+      "/api/hub/rooms/room-x/agents/room-agent",
+    );
+
+    expect(response.status).toBe(502);
+    expect(response.body).toEqual({ error: "RELAY_UNAVAILABLE", detail: "Room CAS timed out" });
+    expect(hub.relayClient.joinRoom).not.toHaveBeenCalled();
+    expect(
+      hub.repository.getConversationMembers(conversation.id).map((member) => member.id),
+    ).toEqual(["room-agent"]);
+    expect(hub.repository.getRoomState("room-x")).toEqual({
+      revision: 1,
+      keyEpoch: 1,
+      managementState: "managed",
+    });
   });
 
   it("rotates the key epoch through an accepted CAS on removal", async () => {
