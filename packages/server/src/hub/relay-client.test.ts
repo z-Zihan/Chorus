@@ -1,5 +1,5 @@
 import type { HubEnvelope, RelayServerMessage, RoomInfo, RoomMember } from "@chorus/shared";
-import { HEARTBEAT_INTERVAL_MS } from "@chorus/shared";
+import { HEARTBEAT_INTERVAL_MS, PONG_TIMEOUT_MS } from "@chorus/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import WebSocket from "ws";
 import { RelayClient } from "./relay-client.js";
@@ -605,5 +605,238 @@ describe("RelayClient subscriptions", () => {
     unsubscribe();
     handleMessage({ type: "room:event", roomId: "room-1", event: "leave", hubId: "hub-b" });
     expect(listener).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("RelayClient reconnect backoff", () => {
+  type ReconnectFields = {
+    reconnectAttempts: number;
+    reconnectTimer?: unknown;
+  };
+  const fields = (client: RelayClient): ReconnectFields => client as unknown as ReconnectFields;
+  const scheduleReconnect = (client: RelayClient): void =>
+    (client as unknown as { scheduleReconnect(): void }).scheduleReconnect();
+
+  function reconnectingClient(openSocket = vi.fn().mockResolvedValue(undefined)): {
+    client: RelayClient;
+    openSocket: ReturnType<typeof vi.fn>;
+  } {
+    const client = new RelayClient();
+    configure(client, {
+      url: "ws://relay.example/ws",
+      hubId: "hub-a",
+      token: "token",
+      shouldReconnect: true,
+      openSocket,
+    });
+    return { client, openSocket };
+  }
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("switches to reconnecting and schedules a reconnecting openSocket", () => {
+    vi.useFakeTimers();
+    const { client, openSocket } = reconnectingClient();
+    const states: string[] = [];
+    client.onStateChange((state) => states.push(state));
+
+    scheduleReconnect(client);
+
+    expect(states).toEqual(["reconnecting"]);
+    expect(fields(client).reconnectAttempts).toBe(1);
+    expect(fields(client).reconnectTimer).toBeDefined();
+    vi.runOnlyPendingTimers();
+    expect(openSocket).toHaveBeenCalledOnce();
+    expect(openSocket).toHaveBeenCalledWith(true);
+
+    client.disconnect();
+  });
+
+  it("waits 1000ms before the first reconnect attempt", () => {
+    vi.useFakeTimers();
+    const { client, openSocket } = reconnectingClient();
+
+    scheduleReconnect(client);
+    vi.advanceTimersByTime(999);
+    expect(openSocket).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(openSocket).toHaveBeenCalledOnce();
+    expect(openSocket).toHaveBeenCalledWith(true);
+
+    client.disconnect();
+  });
+
+  it("doubles the delay for each previous attempt", () => {
+    vi.useFakeTimers();
+    const { client, openSocket } = reconnectingClient();
+    configure(client, { reconnectAttempts: 2 });
+
+    scheduleReconnect(client);
+    vi.advanceTimersByTime(3_999);
+    expect(openSocket).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(openSocket).toHaveBeenCalledOnce();
+    expect(fields(client).reconnectAttempts).toBe(3);
+
+    client.disconnect();
+  });
+
+  it("caps the reconnect delay at 30000ms", () => {
+    vi.useFakeTimers();
+    const { client, openSocket } = reconnectingClient();
+    configure(client, { reconnectAttempts: 10 });
+
+    scheduleReconnect(client);
+    vi.advanceTimersByTime(29_999);
+    expect(openSocket).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(openSocket).toHaveBeenCalledOnce();
+
+    client.disconnect();
+  });
+
+  it("reschedules with a doubled delay when a reconnect attempt fails", async () => {
+    vi.useFakeTimers();
+    const { client, openSocket } = reconnectingClient(
+      vi.fn().mockRejectedValue(new Error("relay down")),
+    );
+
+    scheduleReconnect(client);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(openSocket).toHaveBeenCalledOnce();
+    expect(fields(client).reconnectAttempts).toBe(2);
+
+    await vi.advanceTimersByTimeAsync(1_999);
+    expect(openSocket).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(openSocket).toHaveBeenCalledTimes(2);
+    expect(openSocket).toHaveBeenNthCalledWith(2, true);
+
+    client.disconnect();
+  });
+
+  it("stops the reconnect chain on disconnect", async () => {
+    vi.useFakeTimers();
+    const { client, openSocket } = reconnectingClient(
+      vi.fn().mockRejectedValue(new Error("relay down")),
+    );
+
+    scheduleReconnect(client);
+    client.disconnect();
+    await vi.advanceTimersByTimeAsync(120_000);
+
+    expect(openSocket).not.toHaveBeenCalled();
+    expect(fields(client).reconnectTimer).toBeUndefined();
+    expect(client.state).toBe("disconnected");
+  });
+
+  it("resets attempts and clears a pending reconnect timer on connect", async () => {
+    vi.useFakeTimers();
+    const { client, openSocket } = reconnectingClient();
+    configure(client, { reconnectAttempts: 3 });
+
+    scheduleReconnect(client);
+    expect(fields(client).reconnectAttempts).toBe(4);
+    await client.connect("ws://relay.example/ws", "hub-a", "token");
+
+    expect(fields(client).reconnectAttempts).toBe(0);
+    expect(fields(client).reconnectTimer).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(openSocket).toHaveBeenCalledOnce();
+    expect(openSocket).toHaveBeenCalledWith(false);
+    expect(openSocket).not.toHaveBeenCalledWith(true);
+
+    client.disconnect();
+  });
+});
+
+describe("RelayClient heartbeat pong timeout", () => {
+  type HeartbeatFields = { pingSentAt: number | null };
+  const fields = (client: RelayClient): HeartbeatFields => client as unknown as HeartbeatFields;
+  const startHeartbeat = (client: RelayClient): void =>
+    (client as unknown as { startHeartbeat(): void }).startHeartbeat();
+  const receivedPong = (client: RelayClient): void =>
+    (client as unknown as { receivedPong(): void }).receivedPong();
+
+  function fakeSocket(readyState: number = WebSocket.OPEN): {
+    readyState: number;
+    send: ReturnType<typeof vi.fn>;
+    terminate: ReturnType<typeof vi.fn>;
+    close: ReturnType<typeof vi.fn>;
+  } {
+    return { readyState, send: vi.fn(), terminate: vi.fn(), close: vi.fn() };
+  }
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("sends a ping and records pingSentAt after one heartbeat interval", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(100_000);
+    const client = new RelayClient();
+    const socket = fakeSocket();
+    configure(client, { socket });
+    startHeartbeat(client);
+
+    vi.advanceTimersByTime(HEARTBEAT_INTERVAL_MS);
+
+    expect(socket.send).toHaveBeenCalledOnce();
+    expect(socket.send).toHaveBeenCalledWith(JSON.stringify({ type: "ping" }));
+    expect(fields(client).pingSentAt).toBe(100_000 + HEARTBEAT_INTERVAL_MS);
+
+    client.disconnect();
+  });
+
+  it("terminates the socket when no pong arrives before the timeout", () => {
+    vi.useFakeTimers();
+    const client = new RelayClient();
+    const socket = fakeSocket();
+    configure(client, { socket });
+    startHeartbeat(client);
+
+    vi.advanceTimersByTime(HEARTBEAT_INTERVAL_MS);
+    vi.advanceTimersByTime(PONG_TIMEOUT_MS - 1);
+    expect(socket.terminate).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(socket.terminate).toHaveBeenCalledOnce();
+
+    client.disconnect();
+  });
+
+  it("does not terminate the socket when a pong arrives in time", () => {
+    vi.useFakeTimers();
+    const client = new RelayClient();
+    const socket = fakeSocket();
+    configure(client, { socket });
+    startHeartbeat(client);
+
+    vi.advanceTimersByTime(HEARTBEAT_INTERVAL_MS);
+    vi.advanceTimersByTime(PONG_TIMEOUT_MS - 1);
+    receivedPong(client);
+    vi.advanceTimersByTime(PONG_TIMEOUT_MS + 1);
+
+    expect(socket.terminate).not.toHaveBeenCalled();
+    expect(fields(client).pingSentAt).toBeNull();
+
+    client.disconnect();
+  });
+
+  it("skips the ping while the socket is not open", () => {
+    vi.useFakeTimers();
+    const client = new RelayClient();
+    const socket = fakeSocket(WebSocket.CONNECTING);
+    configure(client, { socket });
+    startHeartbeat(client);
+
+    vi.advanceTimersByTime(HEARTBEAT_INTERVAL_MS + PONG_TIMEOUT_MS);
+
+    expect(socket.send).not.toHaveBeenCalled();
+    expect(socket.terminate).not.toHaveBeenCalled();
+    expect(fields(client).pingSentAt).toBeNull();
+
+    client.disconnect();
   });
 });
