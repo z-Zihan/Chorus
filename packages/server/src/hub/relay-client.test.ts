@@ -2,7 +2,7 @@ import type { HubEnvelope, RelayServerMessage, RoomInfo, RoomMember } from "@cho
 import { HEARTBEAT_INTERVAL_MS, PONG_TIMEOUT_MS } from "@chorus/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import WebSocket from "ws";
-import { RelayClient } from "./relay-client.js";
+import { RelayClient, ROOM_REQUEST_TIMEOUT_MS } from "./relay-client.js";
 
 function configure(client: RelayClient, fields: Record<string, unknown>): void {
   Object.assign(client as unknown as Record<string, unknown>, fields);
@@ -264,6 +264,122 @@ describe("RelayClient room requests", () => {
     expect(client.getOnlineRoomMembers("room/1")).toEqual([member("hub-b", true)]);
     expect(client.getPeerPublicKey("hub-b")).toBe("hub-b-key");
     expect(client.getPeerPublicKey("hub-c")).toBe("hub-c-key");
+  });
+});
+
+describe("RelayClient room request timeout", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  function hangingFetch(): ReturnType<typeof vi.fn> {
+    return vi.fn((_url: URL, _init?: RequestInit) => new Promise<Response>(() => {}));
+  }
+
+  it("rejects with a timeout error when the relay never responds", async () => {
+    vi.useFakeTimers();
+    const fetchMock = hangingFetch();
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new RelayClient();
+    configure(client, { hubId: "hub-a", token: "token-a" });
+
+    const request = client.listRoomInvitationsRequest("ws://relay.example/ws");
+    const assertion = expect(request).rejects.toThrow(
+      `Relay room request to /api/room-invitations timed out after ${ROOM_REQUEST_TIMEOUT_MS}ms`,
+    );
+    await vi.advanceTimersByTimeAsync(ROOM_REQUEST_TIMEOUT_MS - 1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    await assertion;
+
+    const signal = (fetchMock.mock.calls[0]?.[1] as RequestInit).signal;
+    expect(signal?.aborted).toBe(true);
+  });
+
+  it("does not surface an unhandled rejection when fetch rejects after the timeout", async () => {
+    vi.useFakeTimers();
+    const unhandled = vi.fn();
+    process.on("unhandledRejection", unhandled);
+    try {
+      const fetchMock = vi.fn(
+        (_url: URL, init?: RequestInit) =>
+          new Promise<Response>((_, reject) => {
+            init?.signal?.addEventListener("abort", () => {
+              setTimeout(() => reject(new Error("late abort")), 10);
+            });
+          }),
+      );
+      vi.stubGlobal("fetch", fetchMock);
+      const client = new RelayClient();
+      configure(client, { hubId: "hub-a", token: "token-a" });
+
+      const request = client.listRoomInvitationsRequest("ws://relay.example/ws");
+      const assertion = expect(request).rejects.toThrow("timed out after");
+      await vi.advanceTimersByTimeAsync(ROOM_REQUEST_TIMEOUT_MS);
+      await assertion;
+      await vi.advanceTimersByTimeAsync(10);
+      vi.useRealTimers();
+      // Give Node a macrotask turn to emit any pending unhandledRejection events.
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      process.off("unhandledRejection", unhandled);
+    }
+  });
+
+  it("does not leave a pending timer after a fast response", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ invitations: [] })));
+    const client = new RelayClient();
+    configure(client, { hubId: "hub-a", token: "token-a" });
+
+    await expect(client.listRoomInvitationsRequest("ws://relay.example/ws")).resolves.toEqual([]);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("applies the timeout to the retry after a 401 token refresh", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("expired", { status: 401 }))
+      .mockImplementationOnce(() => new Promise<Response>(() => {}));
+    vi.stubGlobal("fetch", fetchMock);
+    const tokenProvider = vi.fn().mockResolvedValue("renewed-token");
+    const client = new RelayClient();
+    configure(client, { hubId: "hub-a", token: "expired-token", tokenProvider });
+
+    const request = client.listRoomInvitationsRequest("ws://relay.example/ws");
+    const assertion = expect(request).rejects.toThrow("timed out after");
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    await vi.advanceTimersByTimeAsync(ROOM_REQUEST_TIMEOUT_MS);
+    await assertion;
+    expect(tokenProvider).toHaveBeenCalledTimes(1);
+  });
+
+  it("still aborts on a caller-provided signal", async () => {
+    const fetchMock = vi.fn(
+      (_url: URL, init?: RequestInit) =>
+        new Promise<Response>((_, reject) => {
+          init?.signal?.addEventListener("abort", () => reject(init.signal?.reason));
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new RelayClient();
+    configure(client, { hubId: "hub-a", token: "token-a" });
+    const callerController = new AbortController();
+    const roomRequest = (
+      client as unknown as {
+        roomRequest(relayUrl: string, path: string, init?: RequestInit): Promise<unknown>;
+      }
+    ).roomRequest.bind(client);
+
+    const request = roomRequest("ws://relay.example/ws", "/api/room-invitations", {
+      signal: callerController.signal,
+    });
+    const assertion = expect(request).rejects.toThrow("caller cancelled");
+    callerController.abort(new Error("caller cancelled"));
+    await assertion;
   });
 });
 

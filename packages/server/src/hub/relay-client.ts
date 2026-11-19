@@ -40,6 +40,7 @@ const HEARTBEAT_INTERVAL_MS = SHARED_HEARTBEAT_INTERVAL_MS;
 const PONG_TIMEOUT_MS = SHARED_PONG_TIMEOUT_MS;
 const MAX_RECONNECT_DELAY_MS = 30_000;
 const ROOM_CAS_TIMEOUT_MS = 10_000;
+export const ROOM_REQUEST_TIMEOUT_MS = 10_000;
 
 interface PendingRoomCas {
   resolve: (result: RoomCasResult) => void;
@@ -453,7 +454,29 @@ export class RelayClient {
       const headers = new Headers(init.headers);
       if (init.body !== undefined) headers.set("content-type", "application/json");
       headers.set("authorization", `Bearer ${this.token}`);
-      return fetch(url, { ...init, headers });
+      const controller = new AbortController();
+      // Honour a caller-provided signal too: whichever fires first aborts the fetch.
+      const signal = init.signal
+        ? AbortSignal.any([init.signal, controller.signal])
+        : controller.signal;
+      let timer: NodeJS.Timeout | undefined;
+      // Racing against the timer guarantees rejection even if fetch ignores the abort.
+      const timeout = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          reject(
+            new Error(`Relay room request to ${path} timed out after ${ROOM_REQUEST_TIMEOUT_MS}ms`),
+          );
+          controller.abort();
+        }, ROOM_REQUEST_TIMEOUT_MS);
+      });
+      const request = fetch(url, { ...init, headers, signal });
+      // Swallow the late abort rejection once the timeout has already won the race.
+      request.catch(() => {});
+      try {
+        return await Promise.race([request, timeout]);
+      } finally {
+        clearTimeout(timer);
+      }
     };
     let response = await send();
     if (response.status === 401 && this.tokenProvider) {
