@@ -149,6 +149,56 @@ describe("Hub authorization", () => {
         }),
       ).toEqual({ allowed: true });
     });
+
+    it("checks resync_response membership against resyncResponse.roomId only", async () => {
+      const { service, repository } = await setupAuthorization(memberRegistry);
+      repository.createConversation("Shared Room", "cross_hub", [], "room-wire-id");
+      repository.createConversation("Other Room", "cross_hub", [], "room-other-id");
+
+      expect(
+        service.authorize("hub-remote", {
+          ...resyncResponse("room-other-id"),
+          resyncRequest: { roomId: "room-wire-id", lastKnownRevision: 0, lastKnownKeyEpoch: 0 },
+        }),
+      ).toEqual({ allowed: false, reason: "Sender Hub is not a member of the resync Room" });
+      expect(
+        service.authorize("hub-remote", {
+          ...basePayload("resync_response", "resync-response-1"),
+          resyncRequest: { roomId: "room-wire-id", lastKnownRevision: 0, lastKnownKeyEpoch: 0 },
+        }),
+      ).toEqual({ allowed: false, reason: "Resync message has no Room id" });
+      expect(
+        service.authorize("hub-remote", {
+          ...resyncResponse("room-wire-id"),
+          resyncRequest: { roomId: "room-other-id", lastKnownRevision: 0, lastKnownKeyEpoch: 0 },
+        }),
+      ).toEqual({ allowed: true });
+    });
+
+    it("checks resync_request membership against resyncRequest.roomId only", async () => {
+      const { service, repository } = await setupAuthorization(memberRegistry);
+      repository.createConversation("Shared Room", "cross_hub", [], "room-wire-id");
+      repository.createConversation("Other Room", "cross_hub", [], "room-other-id");
+
+      expect(
+        service.authorize("hub-remote", {
+          ...resyncRequest("room-other-id"),
+          resyncResponse: resyncResponse("room-wire-id").resyncResponse,
+        }),
+      ).toEqual({ allowed: false, reason: "Sender Hub is not a member of the resync Room" });
+      expect(
+        service.authorize("hub-remote", {
+          ...basePayload("resync_request", "resync-request-1"),
+          resyncResponse: resyncResponse("room-wire-id").resyncResponse,
+        }),
+      ).toEqual({ allowed: false, reason: "Resync message has no Room id" });
+      expect(
+        service.authorize("hub-remote", {
+          ...resyncRequest("room-wire-id"),
+          resyncResponse: resyncResponse("room-other-id").resyncResponse,
+        }),
+      ).toEqual({ allowed: true });
+    });
   });
 
   describe("target agent", () => {
@@ -327,6 +377,19 @@ function resyncRequest(roomId: string): HubPayload {
   return {
     ...basePayload("resync_request", "resync-request-1"),
     resyncRequest: { roomId, lastKnownRevision: 0, lastKnownKeyEpoch: 0 },
+  };
+}
+
+function resyncResponse(roomId: string): HubPayload {
+  return {
+    ...basePayload("resync_response", "resync-response-1"),
+    resyncResponse: {
+      roomId,
+      currentRevision: 1,
+      currentKeyEpoch: 1,
+      missedEvents: [],
+      snapshot: { revision: 1, keyEpoch: 1, managementState: "managed" },
+    },
   };
 }
 
