@@ -77,4 +77,50 @@ describe("Hub authorization", () => {
     const member = new AuthorizationService(trustStore, repository, memberRegistry);
     expect(member.authorize("hub-remote", payload)).toEqual({ allowed: true });
   });
+
+  it("treats an empty toAgentId as absent and falls back to metadata.targetAgentId", async () => {
+    const database = createDatabase(":memory:");
+    databases.push(database);
+    const repository = new Repository(database);
+    await repository.getOrCreateLocalUser("Local User");
+    const trustStore = new TrustStore(repository);
+    trustStore.completePairing("hub-remote", {
+      userId: "usr_remote",
+      userName: "Remote User",
+      userPublicKey: "remote-user-key",
+    });
+    repository.upsertAgent({
+      id: "agent-room",
+      name: "Room Agent",
+      type: "mock",
+      config: {},
+      visibility: "room",
+    });
+    repository.createConversation("Shared Room", "cross_hub", ["agent-room"], "room-wire-id");
+    const registry = {
+      isHubInRoom: (roomId: string, hubId: string) =>
+        roomId === "room-wire-id" && hubId === "hub-remote",
+    } as unknown as AgentRegistry;
+    const service = new AuthorizationService(trustStore, repository, registry);
+    const payload = (metadata?: Record<string, unknown>): HubPayload => ({
+      protocolVersion: 2,
+      messageType: "chat",
+      conversationId: "room-wire-id",
+      messageId: "chat-empty-target",
+      fromUserId: "usr_remote",
+      fromUserName: "Remote User",
+      content: "Hello",
+      toAgentId: "",
+      metadata,
+    });
+
+    expect(service.authorize("hub-remote", payload({ targetAgentId: "agent-room" }))).toEqual({
+      allowed: true,
+    });
+    expect(service.authorize("hub-remote", payload({ targetAgentId: "agent-missing" }))).toEqual({
+      allowed: false,
+      reason: "Target agent not found",
+    });
+    expect(service.authorize("hub-remote", payload())).toEqual({ allowed: true });
+  });
 });
