@@ -282,6 +282,26 @@ describe("Relay Hub tokens", () => {
     }
   });
 
+  it("rejects non-canonical encodings of a valid signature", () => {
+    const token = createHubToken("hub-a", SECRET, 60, 1_000);
+    const [header, payload, signature] = token.split(".") as [string, string, string];
+    expect(authenticatedHubId(token, SECRET, 1_000)).toBe("hub-a");
+    const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    const last = alphabet.indexOf(signature.slice(-1));
+    // A 32-byte HMAC leaves 2 unused bits in the final character.
+    const trailingVariants = [1, 2, 3].map(
+      (bits) => `${signature.slice(0, -1)}${alphabet[last ^ bits]}`,
+    );
+    for (const variant of [...trailingVariants, `${signature}==`, `${signature}!!`]) {
+      expect(Buffer.from(variant, "base64url").equals(Buffer.from(signature, "base64url"))).toBe(
+        true,
+      );
+      expect(authenticatedHubId(`${header}.${payload}.${variant}`, SECRET, 1_000), variant).toBe(
+        null,
+      );
+    }
+  });
+
   it("rejects correctly signed payloads with invalid claims", () => {
     const valid = { sub: "hub-a", iat: 1_000, exp: 2_000, ver: 1 };
     expect(authenticatedHubId(signedToken(JSON.stringify(valid)), SECRET, 1_000)).toBe("hub-a");
