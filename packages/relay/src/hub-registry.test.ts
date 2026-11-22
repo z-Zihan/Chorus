@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createHubToken, verifyHubToken } from "./auth.js";
 import { createDatabase, type DatabaseContext } from "./db/index.js";
 import { HubRegistry } from "./hub-registry.js";
 import type { RelaySocket } from "./socket.js";
@@ -223,6 +224,25 @@ describe("HubRegistry", () => {
     expect(registry.isBlocked("hub-b", "hub-a")).toBe(false);
     expect(registry.isBlocked("hub-b", "hub-c")).toBe(true);
     expect(registry.list().map((hub) => hub.hubId)).toEqual(["hub-b", "hub-c"]);
+  });
+
+  it("never reuses an auth version after unregister and re-registration", () => {
+    const { registry, database: first, dbPath } = openRegistry();
+    registry.register("hub-a", "key-a", "Hub A");
+    registry.register("hub-a", "key-a", "Hub A");
+    const oldToken = createHubToken("hub-a", "secret", 60, 1_000, 2);
+
+    expect(registry.unregister("hub-a")).toBe(true);
+    const reregistered = registry.register("hub-a", "key-a", "Hub A");
+    expect(reregistered.authVersion).toBe(3);
+    expect(verifyHubToken(oldToken, "hub-a", "secret", 1_000, reregistered.authVersion)).toBe(
+      false,
+    );
+
+    expect(registry.unregister("hub-a")).toBe(true);
+    first.sqlite.close();
+    database = createDatabase(dbPath);
+    expect(new HubRegistry(database).register("hub-a", "key-a", "Hub A").authVersion).toBe(4);
   });
 
   it("reports false when unregistering an unknown Hub", () => {

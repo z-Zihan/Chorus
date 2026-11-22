@@ -1,6 +1,6 @@
 import { and, eq, or } from "drizzle-orm";
 import type { DatabaseContext } from "./db/index.js";
-import { hubBlocks, hubs } from "./db/schema.js";
+import { hubAuthVersions, hubBlocks, hubs } from "./db/schema.js";
 import type { RelaySocket } from "./socket.js";
 
 export type HubRecord = typeof hubs.$inferSelect;
@@ -15,23 +15,32 @@ export class HubRegistry {
 
   register(hubId: string, publicKey: string, displayName: string): HubRecord {
     const now = Date.now();
-    const authVersion = (this.get(hubId)?.authVersion ?? 0) + 1;
-    this.database.db
-      .insert(hubs)
-      .values({
-        hubId,
-        publicKey,
-        displayName,
-        online: false,
-        authVersion,
-        createdAt: now,
-        updatedAt: now,
-      })
-      .onConflictDoUpdate({
-        target: hubs.hubId,
-        set: { publicKey, displayName, authVersion, updatedAt: now },
-      })
-      .run();
+    this.database.db.transaction((tx) => {
+      const retired = tx
+        .select({ authVersion: hubAuthVersions.authVersion })
+        .from(hubAuthVersions)
+        .where(eq(hubAuthVersions.hubId, hubId))
+        .get();
+      // Continue past a previous registration's version so its tokens stay revoked.
+      const authVersion =
+        Math.max(this.get(hubId)?.authVersion ?? 0, retired?.authVersion ?? 0) + 1;
+      tx.insert(hubs)
+        .values({
+          hubId,
+          publicKey,
+          displayName,
+          online: false,
+          authVersion,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .onConflictDoUpdate({
+          target: hubs.hubId,
+          set: { publicKey, displayName, authVersion, updatedAt: now },
+        })
+        .run();
+      tx.delete(hubAuthVersions).where(eq(hubAuthVersions.hubId, hubId)).run();
+    });
     const hub = this.get(hubId);
     if (!hub) throw new Error("Hub registration failed");
     return hub;
@@ -122,6 +131,17 @@ export class HubRegistry {
     socket?.close(1000, "Hub deregistered");
     this.sockets.delete(hubId);
     this.unblockHub(hubId);
-    return this.database.db.delete(hubs).where(eq(hubs.hubId, hubId)).run().changes > 0;
+    return this.database.db.transaction((tx) => {
+      const hub = this.get(hubId);
+      if (!hub) return false;
+      tx.insert(hubAuthVersions)
+        .values({ hubId, authVersion: hub.authVersion })
+        .onConflictDoUpdate({
+          target: hubAuthVersions.hubId,
+          set: { authVersion: hub.authVersion },
+        })
+        .run();
+      return tx.delete(hubs).where(eq(hubs.hubId, hubId)).run().changes > 0;
+    });
   }
 }
