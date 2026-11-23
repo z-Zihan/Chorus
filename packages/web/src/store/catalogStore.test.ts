@@ -193,6 +193,59 @@ describe("useCatalogStore.installAgent", () => {
     expect(useCatalogStore.getState().installation).toBeNull();
     expect(vi.getTimerCount()).toBe(0);
   });
+
+  it("keeps polling after a transient poll failure", async () => {
+    api.installCatalogEntry.mockResolvedValue(installation());
+    api.getInstallation
+      .mockRejectedValueOnce(new Error("network"))
+      .mockResolvedValueOnce(installation({ stage: "done", agentId: "agent-9" }));
+
+    await useCatalogStore.getState().installAgent("entry-1");
+    await vi.advanceTimersByTimeAsync(300);
+    expect(api.getInstallation).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(500);
+
+    expect(api.getInstallation).toHaveBeenCalledTimes(2);
+    expect(useCatalogStore.getState().installation).toMatchObject({ stage: "done" });
+    expect(addToast).toHaveBeenCalledWith("catalog.success", "success");
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("gives up and toasts after repeated poll failures", async () => {
+    api.installCatalogEntry.mockResolvedValue(installation());
+    api.getInstallation.mockRejectedValue(new Error("network"));
+
+    await useCatalogStore.getState().installAgent("entry-1");
+    await vi.advanceTimersByTimeAsync(300 + 500 * 5);
+
+    expect(api.getInstallation).toHaveBeenCalledTimes(3);
+    expect(addToast).toHaveBeenCalledWith("catalog.failed", "error");
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("reports success even when refreshing agents fails after an immediate install", async () => {
+    api.installCatalogEntry.mockResolvedValue(installation({ stage: "done", agentId: "agent-9" }));
+    fetchAgents.mockRejectedValue(new Error("agents offline"));
+
+    await useCatalogStore.getState().installAgent("entry-1");
+
+    expect(useCatalogStore.getState().installation).toMatchObject({ stage: "done" });
+    expect(selectAgent).toHaveBeenCalledWith("agent-9");
+    expect(addToast).toHaveBeenCalledWith("catalog.success", "success");
+  });
+
+  it("reports success even when refreshing agents fails after polling completes", async () => {
+    api.installCatalogEntry.mockResolvedValue(installation());
+    api.getInstallation.mockResolvedValue(installation({ stage: "done", agentId: "agent-9" }));
+    fetchAgents.mockRejectedValue(new Error("agents offline"));
+
+    await useCatalogStore.getState().installAgent("entry-1");
+    await vi.advanceTimersByTimeAsync(300);
+
+    expect(useCatalogStore.getState().installation).toMatchObject({ stage: "done" });
+    expect(selectAgent).toHaveBeenCalledWith("agent-9");
+    expect(addToast).toHaveBeenCalledWith("catalog.success", "success");
+  });
 });
 
 describe("useCatalogStore.cancelInstall", () => {
@@ -218,6 +271,29 @@ describe("useCatalogStore.cancelInstall", () => {
     expect(api.cancelInstallation).toHaveBeenCalledWith("inst-1");
     expect(api.getInstallation).not.toHaveBeenCalled();
     expect(useCatalogStore.getState().installation).toMatchObject({ cancelled: true });
+  });
+
+  it("ignores an in-flight poll response that lands after cancellation", async () => {
+    let resolvePoll: (value: InstallationStatus) => void = () => {};
+    api.installCatalogEntry.mockResolvedValue(installation());
+    api.getInstallation.mockReturnValueOnce(
+      new Promise<InstallationStatus>((resolve) => {
+        resolvePoll = resolve;
+      }),
+    );
+    api.cancelInstallation.mockResolvedValue(installation({ stage: "error", cancelled: true }));
+
+    await useCatalogStore.getState().installAgent("entry-1");
+    await vi.advanceTimersByTimeAsync(300);
+    expect(api.getInstallation).toHaveBeenCalledTimes(1);
+
+    await useCatalogStore.getState().cancelInstall();
+    resolvePoll(installation({ stage: "installing", progress: 60 }));
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    expect(useCatalogStore.getState().installation).toMatchObject({ cancelled: true });
+    expect(api.getInstallation).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
   });
 });
 

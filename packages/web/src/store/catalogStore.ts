@@ -24,6 +24,16 @@ interface CatalogState {
 }
 
 let pollTimer: ReturnType<typeof setTimeout> | undefined;
+/** Bumped on every install/cancel so in-flight poll responses from an older run are dropped. */
+let pollGeneration = 0;
+/** Consecutive getInstallation failures tolerated before polling gives up. */
+const MAX_POLL_FAILURES = 3;
+
+function stopPolling(): void {
+  if (pollTimer) clearTimeout(pollTimer);
+  pollTimer = undefined;
+  pollGeneration += 1;
+}
 
 export const useCatalogStore = create<CatalogState>((set, get) => ({
   entries: [],
@@ -53,39 +63,69 @@ export const useCatalogStore = create<CatalogState>((set, get) => ({
   selectEntry: (selectedEntry) => set({ selectedEntry, installation: null }),
 
   installAgent: async (entryId, options = {}) => {
-    if (pollTimer) clearTimeout(pollTimer);
-    try {
-      const installation = await api.installCatalogEntry(entryId, options);
-      set({ installation });
+    stopPolling();
+    const generation = pollGeneration;
 
-      const poll = async (): Promise<void> => {
-        const current = get().installation;
-        if (!current || current.id !== installation.id) return;
-        const next = await api.getInstallation(installation.id);
-        set({ installation: next });
-        if (next.stage === "done") {
-          await Promise.all([get().fetchCatalog(), useAgentStore.getState().fetchAgents()]);
-          if (next.agentId) useAgentStore.getState().selectAgent(next.agentId);
-          useUIStore.getState().addToast(i18n.t("catalog.success"), "success");
-          return;
-        }
-        if (next.stage === "error") {
+    // A failed post-install refresh must not turn a successful install into a failure.
+    const finishInstall = async (agentId: string | undefined): Promise<void> => {
+      try {
+        await Promise.all([get().fetchCatalog(), useAgentStore.getState().fetchAgents()]);
+      } catch (error) {
+        logger.error("Failed to refresh after catalog install", error);
+      }
+      if (agentId) useAgentStore.getState().selectAgent(agentId);
+      useUIStore.getState().addToast(i18n.t("catalog.success"), "success");
+    };
+
+    let installation: InstallationStatus;
+    try {
+      installation = await api.installCatalogEntry(entryId, options);
+    } catch (error) {
+      logger.error("Failed to install catalog entry", error);
+      if (generation === pollGeneration) set({ installation: null });
+      return;
+    }
+    if (generation !== pollGeneration) return;
+    set({ installation });
+
+    const isCurrent = (): boolean =>
+      generation === pollGeneration && get().installation?.id === installation.id;
+
+    let failures = 0;
+    const poll = async (): Promise<void> => {
+      if (!isCurrent()) return;
+      let next: InstallationStatus;
+      try {
+        next = await api.getInstallation(installation.id);
+      } catch (error) {
+        if (!isCurrent()) return;
+        failures += 1;
+        logger.error("Failed to poll catalog installation", error);
+        if (failures >= MAX_POLL_FAILURES) {
           useUIStore.getState().addToast(i18n.t("catalog.failed"), "error");
           return;
         }
         pollTimer = setTimeout(() => void poll(), 500);
-      };
-
-      if (installation.stage === "done") {
-        await Promise.all([get().fetchCatalog(), useAgentStore.getState().fetchAgents()]);
-        if (installation.agentId) useAgentStore.getState().selectAgent(installation.agentId);
-        useUIStore.getState().addToast(i18n.t("catalog.success"), "success");
-      } else {
-        pollTimer = setTimeout(() => void poll(), 300);
+        return;
       }
-    } catch (error) {
-      logger.error("Failed to install catalog entry", error);
-      set({ installation: null });
+      if (!isCurrent()) return;
+      failures = 0;
+      set({ installation: next });
+      if (next.stage === "done") {
+        await finishInstall(next.agentId);
+        return;
+      }
+      if (next.stage === "error") {
+        useUIStore.getState().addToast(i18n.t("catalog.failed"), "error");
+        return;
+      }
+      pollTimer = setTimeout(() => void poll(), 500);
+    };
+
+    if (installation.stage === "done") {
+      await finishInstall(installation.agentId);
+    } else {
+      pollTimer = setTimeout(() => void poll(), 300);
     }
   },
 
@@ -119,7 +159,7 @@ export const useCatalogStore = create<CatalogState>((set, get) => ({
   cancelInstall: async () => {
     const installation = get().installation;
     if (!installation || installation.stage === "done" || installation.stage === "error") return;
-    if (pollTimer) clearTimeout(pollTimer);
+    stopPolling();
     const cancelled = await api.cancelInstallation(installation.id);
     set({ installation: cancelled });
   },
