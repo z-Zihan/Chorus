@@ -178,9 +178,7 @@ describe("fetchConversations", () => {
     expect(api.getMessages).not.toHaveBeenCalled();
   });
 
-  // Known bug: the lists are overwritten before purgeConversation runs, so its
-  // "known" guard never matches and the reconcile is a no-op.
-  it.fails("purges the open conversation when the server no longer returns it", async () => {
+  it("purges the open conversation when the server no longer returns it", async () => {
     useChatStore.setState({
       conversations: [conversation("gone"), conversation("c1")],
       currentConversationId: "gone",
@@ -242,6 +240,44 @@ describe("conversation navigation", () => {
       messagesError: null,
     });
     expect(api.getMessages).toHaveBeenCalledWith("c2", true);
+  });
+
+  it("setCurrentConversation stops the previous conversation's stream", async () => {
+    useChatStore.setState({ conversations: [conversation("c1")], currentConversationId: "c1" });
+    const send = vi.fn(() => true);
+    store().setWebSocketSend(send);
+    await store().sendMessage("hello");
+    store().addMessage(message("a1", { status: "streaming" }));
+    expect(store().isStreaming).toBe(true);
+
+    store().setCurrentConversation("c2");
+    expect(store()).toMatchObject({ isStreaming: false, streamingMessageId: null });
+
+    // The old stream timer must not fire into the new conversation.
+    await vi.advanceTimersByTimeAsync(STREAM_TIMEOUT_MS);
+    expect(addToast).not.toHaveBeenCalled();
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(store().isStreaming).toBe(false);
+  });
+
+  it("setCurrentConversation aborts an in-flight REST send", async () => {
+    useChatStore.setState({ conversations: [conversation("c1")], currentConversationId: "c1" });
+    let signal: AbortSignal | undefined;
+    api.sendMessage.mockImplementation(
+      (_id: string, _content: string, s: AbortSignal) =>
+        new Promise((_resolve, reject) => {
+          signal = s;
+          s.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+        }),
+    );
+
+    const sending = store().sendMessage("hello");
+    await flush();
+    store().setCurrentConversation("c2");
+    await sending;
+
+    expect(signal?.aborted).toBe(true);
+    expect(store()).toMatchObject({ currentConversationId: "c2", isStreaming: false });
   });
 
   it("setCurrentConversation is a no-op for the already open conversation", () => {
@@ -544,10 +580,7 @@ describe("sendMessage", () => {
     expect(addToast).not.toHaveBeenCalled();
   });
 
-  // Known bug: the REST body carries no clientMessageId, so the stored user
-  // message gets a server id and the "sending" optimistic copy survives the
-  // refetch as a transient duplicate.
-  it.fails("does not duplicate the user message after a REST send", async () => {
+  it("does not duplicate the user message after a REST send", async () => {
     openConversation(conversation("c1"));
     api.sendMessage.mockResolvedValue(message("server"));
     api.getMessages.mockResolvedValue([
@@ -556,7 +589,28 @@ describe("sendMessage", () => {
 
     await store().sendMessage("hello");
 
-    expect(store().messages.filter((m) => m.fromType === "user")).toHaveLength(1);
+    expect(
+      store()
+        .messages.filter((m) => m.fromType === "user")
+        .map((m) => m.id),
+    ).toEqual(["server-user"]);
+  });
+
+  it("keeps the optimistic copy when the server list has no new matching message", async () => {
+    // An identical message already in history must not count as the stored copy.
+    useChatStore.setState({
+      conversations: [conversation("c1")],
+      currentConversationId: "c1",
+      messages: [message("old-user", { fromType: "user", content: "hello" })],
+    });
+    api.sendMessage.mockResolvedValue(message("server"));
+    api.getMessages.mockResolvedValue([
+      message("old-user", { fromType: "user", content: "hello" }),
+    ]);
+
+    await store().sendMessage("hello");
+
+    expect(store().messages.filter((m) => m.fromType === "user")).toHaveLength(2);
   });
 
   it("falls back to REST when the socket refuses the event", async () => {
@@ -746,6 +800,35 @@ describe("createConversation", () => {
       messages: [],
       isLoadingMessages: false,
     });
+  });
+
+  it("resets stream and per-conversation state for the new conversation", async () => {
+    useChatStore.setState({
+      conversations: [conversation("c1")],
+      currentConversationId: "c1",
+      messages: [message("a1", { status: "streaming" })],
+      isStreaming: true,
+      streamingMessageId: "a1",
+      messagesError: "boom",
+      a2aThreads: { t1: thread("t1") },
+      a2aConfirmations: [{ threadId: "t1", from: "a", to: "b", message: "", expiresAt: 0 }],
+    });
+    store().noteStreamActivity("a1");
+    api.createConversation.mockResolvedValue(conversation("c2"));
+
+    await store().createConversation("t", "agent-1");
+
+    expect(store()).toMatchObject({
+      currentConversationId: "c2",
+      messages: [],
+      isStreaming: false,
+      streamingMessageId: null,
+      messagesError: null,
+      a2aThreads: {},
+      a2aConfirmations: [],
+    });
+    await vi.advanceTimersByTimeAsync(STREAM_TIMEOUT_MS);
+    expect(addToast).not.toHaveBeenCalled();
   });
 
   it("defaults to the selected agent and files non-DM types as groups", async () => {
@@ -939,6 +1022,26 @@ describe("conversation mutations", () => {
       });
       expect(api.getMessages).toHaveBeenCalledWith("c2", true);
       expect(store().messages.map((m) => m.id)).toEqual(["m2"]);
+    });
+
+    it("stops the stream when archiving the open conversation", async () => {
+      useChatStore.setState({
+        messages: [message("a1", { status: "streaming" })],
+        isStreaming: true,
+        streamingMessageId: "a1",
+      });
+      store().noteStreamActivity("a1");
+      api.updateConversation.mockResolvedValue(conversation("c1", { archived: true }));
+
+      await store().toggleArchive("c1");
+
+      expect(store()).toMatchObject({
+        currentConversationId: "c2",
+        isStreaming: false,
+        streamingMessageId: null,
+      });
+      await vi.advanceTimersByTimeAsync(STREAM_TIMEOUT_MS);
+      expect(addToast).not.toHaveBeenCalled();
     });
 
     it("clears the selection when archiving the last active conversation", async () => {
