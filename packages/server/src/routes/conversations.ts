@@ -28,6 +28,7 @@ const createConversationSchema = z.object({
   relayRoomId: z.string().trim().min(1).optional(),
 });
 const messageSchema = z.object({
+  clientMessageId: z.string().min(1).max(128).optional(),
   content: z.string().trim().min(1).max(MAX_MESSAGE_CONTENT_LENGTH),
   agentId: z.string().trim().min(1).optional(),
   mentionedAgents: z.array(z.string().min(1)).max(20).optional(),
@@ -298,6 +299,7 @@ export function registerConversationRoutes(
         parsed.data.content,
         parsed.data.mentionedAgents,
         parsed.data.agentId,
+        parsed.data.clientMessageId,
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to send message";

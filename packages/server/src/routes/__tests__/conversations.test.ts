@@ -100,6 +100,78 @@ describe("conversation routes", () => {
     expect(agentMessages[0].fromId).toBe("test-agent");
   });
 
+  it("stores the user message under the provided clientMessageId", async () => {
+    const created = await request(app.server)
+      .post("/api/conversations")
+      .send({ title: "Client id", agentId: "test-agent" });
+    const path = `/api/conversations/${created.body.id}/messages`;
+
+    const response = await request(app.server)
+      .post(path)
+      .send({ content: "hello", clientMessageId: "client-msg-1" });
+
+    expect(response.status).toBe(201);
+    const messages = await request(app.server).get(path);
+    const userMessages = messages.body.filter(
+      (message: { fromType: string }) => message.fromType === "user",
+    );
+    expect(userMessages).toHaveLength(1);
+    expect(userMessages[0]).toMatchObject({ id: "client-msg-1", content: "hello" });
+  });
+
+  it("ignores a retried REST send with the same clientMessageId", async () => {
+    const created = await request(app.server)
+      .post("/api/conversations")
+      .send({ title: "Retry", agentId: "test-agent" });
+    const path = `/api/conversations/${created.body.id}/messages`;
+
+    await request(app.server).post(path).send({ content: "hello", clientMessageId: "retry-1" });
+    const retried = await request(app.server)
+      .post(path)
+      .send({ content: "hello", clientMessageId: "retry-1" });
+
+    expect(retried.status).toBe(201);
+    const messages = await request(app.server).get(path);
+    const counts = messages.body.reduce(
+      (acc: Record<string, number>, message: { fromType: string }) => {
+        acc[message.fromType] = (acc[message.fromType] ?? 0) + 1;
+        return acc;
+      },
+      {},
+    );
+    expect(counts).toEqual({ user: 1, agent: 1 });
+  });
+
+  it("generates a server id when clientMessageId is omitted", async () => {
+    const created = await request(app.server)
+      .post("/api/conversations")
+      .send({ title: "No client id", agentId: "test-agent" });
+    const path = `/api/conversations/${created.body.id}/messages`;
+
+    await request(app.server).post(path).send({ content: "hello" });
+    await request(app.server).post(path).send({ content: "hello" });
+
+    const messages = await request(app.server).get(path);
+    const userMessages = messages.body.filter(
+      (message: { fromType: string }) => message.fromType === "user",
+    );
+    expect(userMessages).toHaveLength(2);
+    expect(userMessages[0].id).toEqual(expect.any(String));
+    expect(userMessages[0].id).not.toBe(userMessages[1].id);
+  });
+
+  it.each(["", "x".repeat(129)])("rejects an invalid clientMessageId: %#", async (id) => {
+    const created = await request(app.server)
+      .post("/api/conversations")
+      .send({ title: "Bad client id", agentId: "test-agent" });
+
+    const response = await request(app.server)
+      .post(`/api/conversations/${created.body.id}/messages`)
+      .send({ content: "hello", clientMessageId: id });
+
+    expect(response.status).toBe(400);
+  });
+
   it("routes to explicitly selected agent, not @mentions (A2A hints)", async () => {
     const created = await request(app.server)
       .post("/api/conversations")

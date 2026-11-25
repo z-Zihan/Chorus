@@ -419,23 +419,28 @@ export const useChatStore = create<ChatState>((set, get) => {
           controller.signal,
           activeAgentId,
           mentionedAgents,
+          userMsg.id,
         );
         streamManager.clearStreamTimer();
-        // The REST route does not accept a clientMessageId, so the stored copy
-        // gets a server id and fetchMessages keeps the "sending" optimistic
-        // message as transient. Drop it once a new user message with the same
-        // content arrives from the server.
+        // The server stores the message under clientMessageId, so fetchMessages
+        // replaces the optimistic copy by id. As a fallback (e.g. a server that
+        // ignored the id), drop the optimistic copy once a new user message with
+        // the same content arrives.
         const knownIds = new Set(get().messages.map((message) => message.id));
         await get().fetchMessages(convId);
         set((state) => ({
-          messages: state.messages.some(
-            (message) =>
-              !knownIds.has(message.id) &&
-              message.fromType === "user" &&
-              message.content === trimmedContent,
-          )
-            ? state.messages.filter((message) => message.id !== userMsg.id)
-            : state.messages,
+          messages:
+            !state.messages.some(
+              (message) => message.id === userMsg.id && message.status !== "sending",
+            ) &&
+            state.messages.some(
+              (message) =>
+                !knownIds.has(message.id) &&
+                message.fromType === "user" &&
+                message.content === trimmedContent,
+            )
+              ? state.messages.filter((message) => message.id !== userMsg.id)
+              : state.messages,
           isStreaming: false,
           streamingMessageId: null,
         }));

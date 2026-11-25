@@ -571,6 +571,11 @@ describe("sendMessage", () => {
       expect.any(AbortSignal),
       "agent-1",
       undefined,
+      expect.any(String),
+    );
+    // REST carries the optimistic message id, same as the socket path.
+    expect(api.sendMessage.mock.calls[0][5]).toBe(
+      store().messages.find((m) => m.fromType === "user" && m.status === "sending")?.id,
     );
     expect(api.getMessages).toHaveBeenCalledWith("c1", true);
     expect(store()).toMatchObject({ isStreaming: false, streamingMessageId: null });
@@ -580,7 +585,37 @@ describe("sendMessage", () => {
     expect(addToast).not.toHaveBeenCalled();
   });
 
-  it("does not duplicate the user message after a REST send", async () => {
+  it("replaces the optimistic copy with the server copy stored under clientMessageId", async () => {
+    openConversation(conversation("c1"));
+    let clientMessageId = "";
+    api.sendMessage.mockImplementation(
+      async (
+        _id: string,
+        _content: string,
+        _signal: AbortSignal,
+        _agentId: string,
+        _mentions: string[] | undefined,
+        cid: string,
+      ) => {
+        clientMessageId = cid;
+        return message("server");
+      },
+    );
+    api.getMessages.mockImplementation(async () => [
+      message(clientMessageId, { fromType: "user", fromId: "user", content: "hello" }),
+      // Same content sent from elsewhere must not cause the id-matched copy to be dropped.
+      message("other-user", { fromType: "user", fromId: "user", content: "hello" }),
+    ]);
+
+    await store().sendMessage("hello");
+
+    const userMessages = store().messages.filter((m) => m.fromType === "user");
+    expect(clientMessageId).not.toBe("");
+    expect(userMessages.map((m) => m.id).sort()).toEqual([clientMessageId, "other-user"].sort());
+    expect(userMessages.every((m) => m.status === "done")).toBe(true);
+  });
+
+  it("falls back to content matching when the server ignores clientMessageId", async () => {
     openConversation(conversation("c1"));
     api.sendMessage.mockResolvedValue(message("server"));
     api.getMessages.mockResolvedValue([
