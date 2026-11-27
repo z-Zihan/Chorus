@@ -64,7 +64,9 @@ export class AuthorizationService {
       if (!this.registry?.isHubInRoom(room.relayRoomId, fromHubId)) {
         return { allowed: false, reason: "Sender Hub is not a current Room member" };
       }
-      const targetAgentId = payload.toAgentId ?? stringMetadata(payload.metadata, "targetAgentId");
+      // An empty toAgentId counts as absent, matching how stringMetadata treats "".
+      const targetAgentId =
+        nonEmptyString(payload.toAgentId) ?? stringMetadata(payload.metadata, "targetAgentId");
       if (targetAgentId) {
         const agent = this.repository.getAgentRow(targetAgentId);
         if (!agent) {
@@ -96,6 +98,9 @@ function stringMetadata(
   metadata: Record<string, unknown> | undefined,
   key: string,
 ): string | undefined {
-  const value = metadata?.[key];
+  return nonEmptyString(metadata?.[key]);
+}
+
+function nonEmptyString(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }

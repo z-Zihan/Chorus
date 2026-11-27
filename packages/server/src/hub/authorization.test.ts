@@ -314,6 +314,35 @@ describe("Hub authorization", () => {
         service.authorize("hub-remote", a2aCall(undefined, { targetAgentId: "agent-missing" })),
       ).toEqual({ allowed: false, reason: "Target agent not found" });
     });
+    it("treats an empty toAgentId as absent and falls back to metadata.targetAgentId", async () => {
+      const { service, repository } = await setupAuthorization(memberRegistry);
+      addAgent(repository, "agent-room", { visibility: "room" });
+      repository.createConversation("Shared Room", "cross_hub", ["agent-room"], "room-wire-id");
+
+      const emptyTarget = (messageId: string, metadata?: Record<string, unknown>): HubPayload => ({
+        ...basePayload("chat", messageId),
+        conversationId: "room-wire-id",
+        toAgentId: "",
+        content: "Hello",
+        metadata,
+      });
+
+      expect(
+        service.authorize(
+          "hub-remote",
+          emptyTarget("chat-empty-1", { targetAgentId: "agent-room" }),
+        ),
+      ).toEqual({ allowed: true });
+      expect(
+        service.authorize(
+          "hub-remote",
+          emptyTarget("chat-empty-2", { targetAgentId: "agent-missing" }),
+        ),
+      ).toEqual({ allowed: false, reason: "Target agent not found" });
+      expect(service.authorize("hub-remote", emptyTarget("chat-empty-3"))).toEqual({
+        allowed: true,
+      });
+    });
   });
 });
 
