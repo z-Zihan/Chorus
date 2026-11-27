@@ -10,6 +10,12 @@ export const hubs = sqliteTable("hubs", {
   updatedAt: integer("updated_at").notNull(),
 });
 
+/** Last auth version of unregistered Hubs, kept so re-registration never reuses one. */
+export const hubAuthVersions = sqliteTable("hub_auth_versions", {
+  hubId: text("hub_id").primaryKey(),
+  authVersion: integer("auth_version").notNull(),
+});
+
 export const offlineMessages = sqliteTable("offline_messages", {
   id: text("id").primaryKey(),
   toHubId: text("to_hub_id").notNull(),
