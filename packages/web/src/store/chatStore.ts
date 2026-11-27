@@ -127,6 +127,25 @@ export const useChatStore = create<ChatState>((set, get) => {
     }));
   };
   /**
+   * Stop any local stream bound to the open conversation and return the state
+   * reset shared by every path that leaves it (switch/create/archive/delete).
+   * Stale message requests are invalidated; the agent run itself is not
+   * cancelled, so its result is still loaded when the user comes back.
+   */
+  const leaveConversation = () => {
+    streamManager.clearStreamTimer();
+    streamManager.abortFallback();
+    messagesRequestId += 1;
+    return {
+      messages: [],
+      a2aThreads: {},
+      a2aConfirmations: [],
+      messagesError: null,
+      isStreaming: false,
+      streamingMessageId: null,
+    };
+  };
+  /**
    * Shared removal path for delete/purge: drop the conversation from every
    * list, and when the currently open conversation is the one removed, reset
    * stream/navigate state and return its replacement (null if none). The
@@ -152,9 +171,7 @@ export const useChatStore = create<ChatState>((set, get) => {
       return null;
     }
 
-    streamManager.clearStreamTimer();
-    streamManager.abortFallback();
-    messagesRequestId += 1;
+    const reset = leaveConversation();
     const activeConversations = [...conversations, ...groupConversations];
     const nextConversation =
       activeConversations[deletedIndex] ??
@@ -166,12 +183,9 @@ export const useChatStore = create<ChatState>((set, get) => {
       conversations,
       groupConversations,
       archivedConversations,
+      ...reset,
       currentConversationId: nextConversation?.id ?? null,
-      messages: [],
-      a2aThreads: {},
       isLoadingMessages: Boolean(nextConversation),
-      isStreaming: false,
-      streamingMessageId: null,
       targetMessageId: null,
     });
     return nextConversation;
@@ -206,26 +220,32 @@ export const useChatStore = create<ChatState>((set, get) => {
           includeArchived ? api.getConversations(true, undefined, true) : Promise.resolve([]),
         ]);
         const allGroups = [...groups, ...crossHubGroups];
+        // Reconcile before overwriting the lists: the open conversation may have
+        // been deleted outside this client (e.g. another session using the REST
+        // API). Leave it so auto-select below picks a live replacement.
+        const currentId = get().currentConversationId;
+        const currentGone =
+          currentId !== null &&
+          ![...data, ...allGroups, ...archived].some((item) => item.id === currentId);
         set({
           conversations: sortConversations(data),
           groupConversations: sortConversations(allGroups),
           archivedConversations: sortConversations(archived),
           hasLoadedConversations: true,
           conversationsError: null,
+          ...(currentGone
+            ? {
+                ...leaveConversation(),
+                currentConversationId: null,
+                isLoadingMessages: false,
+                targetMessageId: null,
+              }
+            : {}),
         });
         // Auto-select first conversation if none selected
         const firstConversation = data[0] ?? allGroups[0];
         if (!get().currentConversationId && firstConversation) {
           get().setCurrentConversation(firstConversation.id);
-        }
-        // Reconcile: the open conversation may have been deleted outside this
-        // client (e.g. another session using the REST API).
-        const currentId = get().currentConversationId;
-        if (
-          currentId &&
-          ![...data, ...allGroups, ...archived].some((item) => item.id === currentId)
-        ) {
-          get().purgeConversation(currentId);
         }
       } catch (e) {
         logger.error("Failed to fetch conversations", e);
@@ -238,14 +258,7 @@ export const useChatStore = create<ChatState>((set, get) => {
 
     setCurrentConversation: (id) => {
       if (get().currentConversationId === id) return;
-      set({
-        currentConversationId: id,
-        messages: [],
-        a2aThreads: {},
-        a2aConfirmations: [],
-        isLoadingMessages: true,
-        messagesError: null,
-      });
+      set({ ...leaveConversation(), currentConversationId: id, isLoadingMessages: true });
       get().fetchMessages(id);
     },
 
@@ -406,10 +419,31 @@ export const useChatStore = create<ChatState>((set, get) => {
           controller.signal,
           activeAgentId,
           mentionedAgents,
+          userMsg.id,
         );
         streamManager.clearStreamTimer();
+        // The server stores the message under clientMessageId, so fetchMessages
+        // replaces the optimistic copy by id. As a fallback (e.g. a server that
+        // ignored the id), drop the optimistic copy once a new user message with
+        // the same content arrives.
+        const knownIds = new Set(get().messages.map((message) => message.id));
         await get().fetchMessages(convId);
-        set({ isStreaming: false, streamingMessageId: null });
+        set((state) => ({
+          messages:
+            !state.messages.some(
+              (message) => message.id === userMsg.id && message.status !== "sending",
+            ) &&
+            state.messages.some(
+              (message) =>
+                !knownIds.has(message.id) &&
+                message.fromType === "user" &&
+                message.content === trimmedContent,
+            )
+              ? state.messages.filter((message) => message.id !== userMsg.id)
+              : state.messages,
+          isStreaming: false,
+          streamingMessageId: null,
+        }));
       } catch (error) {
         if (!(error instanceof DOMException && error.name === "AbortError")) {
           logger.error("Failed to send message", error);
@@ -538,8 +572,8 @@ export const useChatStore = create<ChatState>((set, get) => {
             conv.type === "dm"
               ? state.groupConversations
               : sortConversations([conv, ...state.groupConversations]),
+          ...leaveConversation(),
           currentConversationId: conv.id,
-          messages: [],
           isLoadingMessages: false,
         }));
         return conv;
@@ -558,8 +592,8 @@ export const useChatStore = create<ChatState>((set, get) => {
         const conv = await api.createConversation(title, agentIds, type, true);
         set((state) => ({
           groupConversations: sortConversations([conv, ...state.groupConversations]),
+          ...leaveConversation(),
           currentConversationId: conv.id,
-          messages: [],
           isLoadingMessages: false,
         }));
         return conv;
@@ -688,13 +722,12 @@ export const useChatStore = create<ChatState>((set, get) => {
         ]);
         if (updated.archived && current.currentConversationId === id) {
           const nextConversation = conversations[0] ?? groupConversations[0] ?? null;
-          messagesRequestId += 1;
           set({
             conversations,
             groupConversations,
             archivedConversations,
+            ...leaveConversation(),
             currentConversationId: nextConversation?.id ?? null,
-            messages: [],
             isLoadingMessages: Boolean(nextConversation),
             targetMessageId: null,
           });

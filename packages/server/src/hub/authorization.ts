@@ -29,7 +29,12 @@ export class AuthorizationService {
     if (payload.messageType === "resync_request" || payload.messageType === "resync_response") {
       // Resync exposes (and can rewrite) Room state, so it needs the same Room
       // membership gate as a2a_call/chat — trust alone must not be enough.
-      const resyncRoomId = payload.resyncRequest?.roomId ?? payload.resyncResponse?.roomId;
+      // Only read the Room id from the field the router will actually act on,
+      // so a member of Room A cannot smuggle a resync for Room B.
+      const resyncRoomId =
+        payload.messageType === "resync_request"
+          ? payload.resyncRequest?.roomId
+          : payload.resyncResponse?.roomId;
       if (typeof resyncRoomId !== "string" || resyncRoomId.length === 0) {
         return { allowed: false, reason: "Resync message has no Room id" };
       }

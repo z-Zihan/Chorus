@@ -438,6 +438,22 @@ describe("Relay HTTP authorization and Room invitations", () => {
     expect(registry.get("hub-a")).not.toBeNull();
   });
 
+  it("rejects a token issued before unregister after the Hub re-registers", async () => {
+    const oldAuthorization = authorization("hub-a");
+    expect(
+      (await app.inject({ method: "DELETE", url: "/api/hubs/hub-a", headers: oldAuthorization }))
+        .statusCode,
+    ).toBe(204);
+    registry.register("hub-a", "public-key-hub-a", "HUB-A");
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/hubs/hub-b",
+      headers: oldAuthorization,
+    });
+    expect(response.statusCode).toBe(401);
+  });
+
   it("returns 404 when the Hub record disappears before it can be unregistered", async () => {
     // Authentication requires a registered Hub, so simulate a concurrent unregister
     // that removes the record between the auth check and the delete.

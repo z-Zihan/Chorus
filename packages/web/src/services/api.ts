@@ -361,10 +361,11 @@ export const api = {
     signal?: AbortSignal,
     agentId?: string,
     mentionedAgents?: string[],
+    clientMessageId?: string,
   ) =>
     request<Message>(`/conversations/${conversationId}/messages`, {
       method: "POST",
-      body: JSON.stringify({ content, agentId, mentionedAgents }),
+      body: JSON.stringify({ content, agentId, mentionedAgents, clientMessageId }),
       signal,
     }),
   searchMessages: (query: string, filters: SearchFilters = {}, silent = false) => {

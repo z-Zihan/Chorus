@@ -3,6 +3,8 @@ name: Build Desktop App
 on:
   pull_request:
   push:
+    branches:
+      - main
     tags: ["v*"]
   workflow_dispatch:
     inputs:
@@ -12,8 +14,11 @@ on:
         default: "all"
 
 jobs:
+  # The full JS gate (format/lint/typecheck/unit/e2e/build) runs for every PR
+  # and again on every push to main, so a merge-only breakage is caught even
+  # though the release builds below stay tag-only.
   lint:
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -36,9 +41,36 @@ jobs:
           PLAYWRIGHT_CHANNEL: chromium
         run: pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm test:e2e && pnpm build
 
+  # ─── Rust (Tauri crate) ─────────────────────────────────
+  # The lint job never compiles src-tauri; before this job existed the Rust
+  # side was only built by the tag-triggered release jobs below. `cargo test`
+  # needs the built server/web bundles (tauri.conf.json resources and
+  # frontendDist) plus the gitignored Node sidecar, so prepare them the same
+  # way `tauri build` does.
+  rust:
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref_type == 'branch')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Linux system libraries (Tauri/GTK)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm tauri:prepare-sidecar
+      - name: Rust tests (Tauri crate)
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
   # ─── Windows ──────────────────────────────────────────────
   build-windows:
-    if: github.event_name == 'push' || inputs.platform == 'all' || inputs.platform == 'windows'
+    if: (github.event_name == 'push' && github.ref_type == 'tag') || inputs.platform == 'all' || inputs.platform == 'windows'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -76,7 +108,7 @@ jobs:
 
   # ─── macOS ────────────────────────────────────────────────
   build-macos:
-    if: github.event_name == 'push' || inputs.platform == 'all' || inputs.platform == 'macos'
+    if: (github.event_name == 'push' && github.ref_type == 'tag') || inputs.platform == 'all' || inputs.platform == 'macos'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4

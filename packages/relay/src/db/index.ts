@@ -23,6 +23,12 @@ export function createDatabase(dbPath: string) {
       updated_at INTEGER NOT NULL
     );
 
+    -- No FK to hubs: rows must outlive the Hub so auth versions stay monotonic.
+    CREATE TABLE IF NOT EXISTS hub_auth_versions (
+      hub_id TEXT PRIMARY KEY,
+      auth_version INTEGER NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS offline_messages (
       id TEXT PRIMARY KEY,
       to_hub_id TEXT NOT NULL,

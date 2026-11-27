@@ -127,15 +127,13 @@ export function authenticatedHubClaims(
   if (parts[0] !== TOKEN_HEADER) return null;
   const unsigned = `${parts[0]}.${parts[1]}`;
   const expected = createHmac("sha256", secret).update(unsigned).digest();
-  let supplied: Buffer;
-  try {
-    supplied = Buffer.from(parts[2], "base64url");
-  } catch {
+  const supplied = decodeCanonicalBase64Url(parts[2]);
+  if (!supplied || supplied.length !== expected.length || !timingSafeEqual(supplied, expected))
     return null;
-  }
-  if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) return null;
+  const payloadBytes = decodeCanonicalBase64Url(parts[1]);
+  if (!payloadBytes) return null;
   try {
-    const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8")) as {
+    const payload = JSON.parse(payloadBytes.toString("utf8")) as {
       sub?: unknown;
       iat?: unknown;
       exp?: unknown;
@@ -155,6 +153,15 @@ export function authenticatedHubClaims(
   } catch {
     return null;
   }
+}
+
+/**
+ * Node's base64url decoder skips invalid characters and ignores unused trailing bits, so
+ * several strings decode to the same bytes. Accept only the one canonical encoding.
+ */
+function decodeCanonicalBase64Url(segment: string): Buffer | null {
+  const decoded = Buffer.from(segment, "base64url");
+  return decoded.toString("base64url") === segment ? decoded : null;
 }
 
 function verifyRegistrationSignature(
