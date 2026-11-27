@@ -385,7 +385,13 @@ describe("Chorus SKILL.md contract", () => {
     });
 
     it("removes a trusted Hub", async () => {
-      await request(app.server).post("/api/trust/block").send({ hubId: "hub-remove" });
+      // Assert the precondition too: this test failed intermittently with the
+      // DELETE returning 404, which can only mean the block never landed. A
+      // bare await hid whether the POST itself had failed.
+      const blocked = await request(app.server)
+        .post("/api/trust/block")
+        .send({ hubId: "hub-remove" });
+      expect(blocked.status).toBe(200);
 
       const response = await request(app.server).delete("/api/trust/hub-remove");
 
